@@ -34,37 +34,37 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="lb-auth-page">
-      <div className="lb-auth-card">
-        <div className="lb-auth-header">
-          <Link href="/" className="lb-logo" style={{ justifyContent: "center", marginBottom: 24 }}>
-            <div className="lb-logo-icon">蓝</div>
-            <div className="lb-logo-text">
-              <span className="lb-logo-title">蓝本</span>
-              <span className="lb-logo-sub">Fantasy 决策平台</span>
-            </div>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-header">
+          <Link href="/" style={{ display: "inline-block", marginBottom: 24 }}>
+            <svg viewBox="0 0 40 40" fill="none" style={{ width: 50, height: 50, color: "#f59e0b" }}>
+              <circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="2.5"/>
+              <path d="M20 4 C20 4, 8 16, 20 20 C32 24, 20 36, 20 36" stroke="currentColor" strokeWidth="2.5" fill="none"/>
+              <path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/>
+            </svg>
           </Link>
-          <h1>创建账号</h1>
-          <p>开始记录你的 Fantasy 判断</p>
+          <h1>Create Account</h1>
+          <p>Join Blueprint Fantasy today</p>
         </div>
 
-        <form className="lb-form" onSubmit={handleSubmit}>
-          <div className="lb-form-group">
-            <label className="lb-form-label">昵称</label>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Name</label>
             <input
-              className="lb-form-input"
+              className="form-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="你的昵称"
+              placeholder="Your name"
               autoComplete="name"
             />
           </div>
 
-          <div className="lb-form-group">
-            <label className="lb-form-label">邮箱</label>
+          <div className="form-group">
+            <label className="form-label">Email</label>
             <input
-              className="lb-form-input"
+              className="form-input"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -73,31 +73,32 @@ export default function SignupPage() {
             />
           </div>
 
-          <div className="lb-form-group">
-            <label className="lb-form-label">密码</label>
+          <div className="form-group">
+            <label className="form-label">Password</label>
             <input
-              className="lb-form-input"
+              className="form-input"
               type="password"
               value={pw}
               onChange={(e) => setPw(e.target.value)}
-              placeholder="至少6位字符"
+              placeholder="At least 6 characters"
               autoComplete="new-password"
             />
           </div>
 
-          {err && <div className="lb-form-error">{err}</div>}
+          {err && <div className="form-error">{err}</div>}
 
           <button
-            className="lb-form-submit"
+            className="form-submit"
             type="submit"
             disabled={!canSubmit || loading}
+            style={{ marginTop: 8 }}
           >
-            {loading ? "创建中..." : "创建账号"}
+            {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
 
-        <div className="lb-auth-footer">
-          已有账号？ <Link href="/auth/login">立即登录</Link>
+        <div className="auth-footer">
+          Already have an account? <Link href="/auth/login">Sign in</Link>
         </div>
       </div>
     </div>
