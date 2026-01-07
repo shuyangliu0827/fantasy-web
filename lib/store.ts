@@ -562,3 +562,8 @@ export function removePlayerFromTeam(teamId: string, playerId: string) {
   localStorage.setItem(KEYS.myTeams, JSON.stringify(all));
   return { ok: true as const };
 }
+
+export function getLeagueBySlug(slug: string): League | null {
+  const leagues = listLeagues();
+  return leagues.find(l => l.slug === slug) ?? null;
+}
