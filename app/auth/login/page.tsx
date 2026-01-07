@@ -1,35 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLang } from "@/lib/lang";
 import { login } from "@/lib/store";
 
 export default function LoginPage() {
+  const { t } = useLang();
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = email.trim() && pw.trim();
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || loading) return;
-
+    setError(null);
     setLoading(true);
-    setErr(null);
 
-    const res = login(email, pw);
+    const res = login(email, password);
+    
     if (!res.ok) {
-      setErr(res.error);
+      setError(res.error || t("登录失败", "Login failed"));
       setLoading(false);
       return;
     }
 
     router.push("/");
-    router.refresh();
   };
 
   return (
@@ -43,49 +41,44 @@ export default function LoginPage() {
               <path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/>
             </svg>
           </Link>
-          <h1>Welcome Back</h1>
-          <p>Sign in to continue to Blueprint Fantasy</p>
+          <h1>{t("登录", "Login")}</h1>
+          <p>{t("登录你的蓝本账号", "Sign in to your Blueprint account")}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">{t("邮箱", "Email")}</label>
             <input
               className="form-input"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              autoComplete="email"
+              required
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label">{t("密码", "Password")}</label>
             <input
               className="form-input"
               type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              placeholder="Enter your password"
-              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
             />
           </div>
 
-          {err && <div className="form-error">{err}</div>}
+          {error && <div className="form-error">{error}</div>}
 
-          <button
-            className="form-submit"
-            type="submit"
-            disabled={!canSubmit || loading}
-            style={{ marginTop: 8 }}
-          >
-            {loading ? "Signing in..." : "Sign In"}
+          <button className="form-submit" type="submit" disabled={loading}>
+            {loading ? t("登录中...", "Signing in...") : t("登录", "Login")}
           </button>
         </form>
 
         <div className="auth-footer">
-          Don&apos;t have an account? <Link href="/auth/signup">Sign up</Link>
+          {t("还没有账号？", "Don't have an account?")} <Link href="/auth/signup">{t("注册", "Sign up")}</Link>
         </div>
       </div>
     </div>

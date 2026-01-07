@@ -1,36 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useLang } from "@/lib/lang";
 import { signup } from "@/lib/store";
 
 export default function SignupPage() {
+  const { t } = useLang();
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = name.trim().length >= 2 && email.includes("@") && pw.length >= 6;
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit || loading) return;
-
+    setError(null);
     setLoading(true);
-    setErr(null);
 
-    const res = signup(name, email, pw);
+    const res = signup(name, email, password);
+    
     if (!res.ok) {
-      setErr(res.error);
+      setError(res.error || t("注册失败", "Signup failed"));
       setLoading(false);
       return;
     }
 
     router.push("/");
-    router.refresh();
   };
 
   return (
@@ -44,61 +42,56 @@ export default function SignupPage() {
               <path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/>
             </svg>
           </Link>
-          <h1>Create Account</h1>
-          <p>Join Blueprint Fantasy today</p>
+          <h1>{t("注册", "Sign Up")}</h1>
+          <p>{t("创建你的蓝本账号", "Create your Blueprint account")}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Name</label>
+            <label className="form-label">{t("用户名", "Name")}</label>
             <input
               className="form-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              autoComplete="name"
+              placeholder={t("你的名字", "Your name")}
+              required
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">{t("邮箱", "Email")}</label>
             <input
               className="form-input"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              autoComplete="email"
+              required
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label">{t("密码", "Password")}</label>
             <input
               className="form-input"
               type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              placeholder="At least 6 characters"
-              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
             />
           </div>
 
-          {err && <div className="form-error">{err}</div>}
+          {error && <div className="form-error">{error}</div>}
 
-          <button
-            className="form-submit"
-            type="submit"
-            disabled={!canSubmit || loading}
-            style={{ marginTop: 8 }}
-          >
-            {loading ? "Creating account..." : "Create Account"}
+          <button className="form-submit" type="submit" disabled={loading}>
+            {loading ? t("注册中...", "Creating account...") : t("注册", "Sign Up")}
           </button>
         </form>
 
         <div className="auth-footer">
-          Already have an account? <Link href="/auth/login">Sign in</Link>
+          {t("已有账号？", "Already have an account?")} <Link href="/auth/login">{t("登录", "Login")}</Link>
         </div>
       </div>
     </div>

@@ -2,123 +2,96 @@
 
 import Link from "next/link";
 import { useState } from "react";
-
-const steps = [
-  {
-    id: 1,
-    title: "创建或加入联赛",
-    titleEn: "Create or Join a League",
-    icon: "🏀",
-    content: `第一步是找到一个联赛加入，或者创建你自己的联赛。
-
-**公共联赛**: 在"加入公共联赛"页面可以找到开放的联赛
-**私人联赛**: 创建私人联赛，邀请你的朋友一起玩
-**联赛设置**: 选择联赛人数（8-14人）、计分方式、选秀日期等`,
-    tips: ["新手建议先加入 10-12 人的联赛", "H2H Categories 是最常见的计分方式", "选秀日期最好选在 NBA 赛季开始前 1-2 周"]
-  },
-  {
-    id: 2,
-    title: "选秀准备",
-    titleEn: "Prepare for Draft",
-    icon: "📋",
-    content: `选秀是 Fantasy 篮球最重要的环节！在选秀前做好准备：
-
-**研究球员排名**: 查看我们的球员排名页面，了解每个球员的价值
-**建立关注列表**: 标记你喜欢的球员，选秀时更容易找到
-**学习策略**: 阅读选秀指南，了解不同轮次的选人策略
-**模拟选秀**: 在正式选秀前多做几次模拟选秀练习`,
-    tips: ["至少做 3-5 次模拟选秀", "准备一份 Cheat Sheet（备忘单）", "了解你的选秀位置，制定相应策略"]
-  },
-  {
-    id: 3,
-    title: "参加选秀",
-    titleEn: "Join the Draft",
-    icon: "🎯",
-    content: `选秀当天，按照你的准备来选择球员：
-
-**蛇形选秀**: 按顺序轮流选人，选秀顺序每轮反转
-**拍卖选秀**: 用虚拟货币竞拍球员，需要预算管理
-**选秀时间**: 每轮通常有 60-90 秒选人时间
-
-**选人优先级**:
-1. 前三轮选稳定的球星
-2. 中间轮次找价值洼地
-3. 后轮补充位置需求`,
-    tips: ["不要慌，60秒够用了", "如果你喜欢的球员被选走，看下一个", "注意平衡各个位置"]
-  },
-  {
-    id: 4,
-    title: "管理阵容",
-    titleEn: "Manage Your Roster",
-    icon: "📊",
-    content: `赛季开始后，每天/每周管理你的阵容：
-
-**设置首发**: 每天把要比赛的球员放到首发位置
-**关注伤病**: 受伤球员放到 IR 位，从弃用区找替补
-**弃用区淘金**: 关注近期表现好的弃用区球员
-**交易**: 与其他玩家交易，补强你的弱项`,
-    tips: ["养成每天看阵容的习惯", "关注streaming策略", "不要因为一两周的表现就放弃球员"]
-  },
-  {
-    id: 5,
-    title: "每周对决",
-    titleEn: "Weekly Matchups",
-    icon: "⚔️",
-    content: `大多数联赛采用每周对决制：
-
-**H2H Categories**: 每周比拼各项数据类别，赢的类别多的人获胜
-**H2H Points**: 每周比总得分
-**Rotisserie**: 全赛季累计排名
-
-**获胜技巧**:
-- 关注对手的阵容构成
-- 在自己的强项类别巩固优势
-- 在接近的类别尝试反超`,
-    tips: ["每周初期就设置好阵容", "周末多场比赛，确保首发满的", "关注对手的 streaming 策略"]
-  }
-];
+import Header from "@/components/Header";
+import { useLang } from "@/lib/lang";
 
 export default function HowToPlayPage() {
+  const { t } = useLang();
   const [activeStep, setActiveStep] = useState(1);
+
+  const steps = [
+    {
+      id: 1,
+      icon: "🏀",
+      title: t("创建或加入联赛", "Create or Join a League"),
+      content: t(
+        "第一步是找到一个联赛加入，或者创建你自己的联赛。公共联赛可以在「加入公共联赛」页面找到；私人联赛需要邀请朋友一起玩；联赛设置包括人数（8-14人）、计分方式、选秀日期等。",
+        "First, find a league to join or create your own. Public leagues can be found on the 'Join Public League' page; Private leagues require inviting friends; League settings include team count (8-14), scoring type, draft date, etc."
+      ),
+      tips: [
+        t("新手建议先加入 10-12 人的联赛", "Beginners should start with 10-12 team leagues"),
+        t("H2H Categories 是最常见的计分方式", "H2H Categories is the most common format"),
+        t("选秀日期最好选在 NBA 赛季开始前 1-2 周", "Draft date should be 1-2 weeks before NBA season")
+      ]
+    },
+    {
+      id: 2,
+      icon: "📋",
+      title: t("选秀准备", "Prepare for Draft"),
+      content: t(
+        "选秀是 Fantasy 篮球最重要的环节！研究球员排名，了解每个球员的价值；建立关注列表，标记你喜欢的球员；学习策略，阅读选秀指南；在正式选秀前多做几次模拟选秀练习。",
+        "The draft is the most important part! Study player rankings to understand each player's value; Build a watchlist of players you like; Learn strategies by reading the draft guide; Practice with mock drafts before your real draft."
+      ),
+      tips: [
+        t("至少做 3-5 次模拟选秀", "Do at least 3-5 mock drafts"),
+        t("准备一份 Cheat Sheet（备忘单）", "Prepare a Cheat Sheet"),
+        t("了解你的选秀位置，制定相应策略", "Know your draft position and plan accordingly")
+      ]
+    },
+    {
+      id: 3,
+      icon: "🎯",
+      title: t("参加选秀", "Join the Draft"),
+      content: t(
+        "选秀当天，按照你的准备来选择球员。蛇形选秀按顺序轮流选人，选秀顺序每轮反转；拍卖选秀用虚拟货币竞拍球员；每轮通常有 60-90 秒选人时间。选人优先级：前三轮选稳定的球星，中间轮次找价值洼地，后轮补充位置需求。",
+        "On draft day, follow your preparation. Snake drafts alternate picks with order reversing each round; Auction drafts use virtual currency to bid; Each pick usually has 60-90 seconds. Priority: Draft stable stars in rounds 1-3, find value in middle rounds, fill roster needs late."
+      ),
+      tips: [
+        t("不要慌，60秒够用了", "Don't panic, 60 seconds is enough"),
+        t("如果你喜欢的球员被选走，看下一个", "If your target is taken, move to the next"),
+        t("注意平衡各个位置", "Balance all positions")
+      ]
+    },
+    {
+      id: 4,
+      icon: "📊",
+      title: t("管理阵容", "Manage Your Roster"),
+      content: t(
+        "赛季开始后，每天/每周管理你的阵容。设置首发：每天把要比赛的球员放到首发位置；关注伤病：受伤球员放到 IR 位，从弃用区找替补；弃用区淘金：关注近期表现好的弃用区球员；交易：与其他玩家交易，补强你的弱项。",
+        "After the season starts, manage your roster daily/weekly. Set lineups: Put playing players in starting slots each day; Monitor injuries: Move injured players to IR, find replacements; Waiver wire: Watch for hot free agents; Trading: Trade with others to improve weaknesses."
+      ),
+      tips: [
+        t("养成每天看阵容的习惯", "Make checking lineups a daily habit"),
+        t("关注 streaming 策略", "Learn streaming strategies"),
+        t("不要因为一两周的表现就放弃球员", "Don't drop players after 1-2 bad weeks")
+      ]
+    },
+    {
+      id: 5,
+      icon: "⚔️",
+      title: t("每周对决", "Weekly Matchups"),
+      content: t(
+        "大多数联赛采用每周对决制。H2H Categories 每周比拼各项数据类别，赢的类别多的人获胜；H2H Points 每周比总得分；Rotisserie 全赛季累计排名。获胜技巧：关注对手的阵容构成，在自己的强项类别巩固优势，在接近的类别尝试反超。",
+        "Most leagues use weekly matchups. H2H Categories: Compare stats category by category, most wins takes the week; H2H Points: Compare total points; Rotisserie: Season-long cumulative rankings. Tips: Study opponent's roster, strengthen your dominant categories, push close categories."
+      ),
+      tips: [
+        t("每周初期就设置好阵容", "Set lineups early each week"),
+        t("周末多场比赛，确保首发满的", "Weekends have more games, ensure full lineups"),
+        t("关注对手的 streaming 策略", "Watch opponent's streaming moves")
+      ]
+    }
+  ];
+
   const currentStep = steps.find(s => s.id === activeStep) || steps[0];
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-inner">
-          <Link href="/" className="logo">
-            <div className="logo-icon">
-              <svg viewBox="0 0 40 40" fill="none">
-                <circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="2.5"/>
-                <path d="M20 4 C20 4, 8 16, 20 20 C32 24, 20 36, 20 36" stroke="currentColor" strokeWidth="2.5" fill="none"/>
-                <path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/>
-              </svg>
-            </div>
-            <div className="logo-text">
-              <span className="logo-title">蓝本</span>
-              <span className="logo-sub">Fantasy 篮球决策平台</span>
-            </div>
-          </Link>
-          <Link href="/" className="btn btn-ghost">← 返回首页</Link>
-        </div>
-      </header>
-
-      <nav className="main-nav">
-        <div className="nav-inner">
-          <Link href="/" className="nav-link">首页</Link>
-          <Link href="/rankings" className="nav-link">球员排名</Link>
-          <Link href="/draft-guide" className="nav-link">选秀指南</Link>
-          <Link href="/cheat-sheet" className="nav-link">备忘单</Link>
-          <Link href="/how-to-play" className="nav-link active">新手入门</Link>
-          <Link href="/my-team" className="nav-link">我的球队</Link>
-          <Link href="/mock-draft" className="nav-link">模拟选秀</Link>
-        </div>
-      </nav>
+      <Header />
 
       <main className="page-content">
         <div className="page-header">
-          <h1 className="page-title">新手入门 How To Play</h1>
-          <p className="page-desc">5 步带你玩转 Fantasy 篮球</p>
+          <h1 className="page-title">{t("新手入门", "How To Play")}</h1>
+          <p className="page-desc">{t("5 步带你玩转 Fantasy 篮球", "5 steps to master Fantasy basketball")}</p>
         </div>
 
         <div className="steps-progress">
@@ -141,19 +114,14 @@ export default function HowToPlayPage() {
           <div className="step-header">
             <span className="step-badge">Step {currentStep.id}</span>
             <h2 className="step-title">{currentStep.title}</h2>
-            <p className="step-subtitle">{currentStep.titleEn}</p>
           </div>
 
           <div className="step-body">
-            {currentStep.content.split('\n\n').map((para, i) => (
-              <p key={i} dangerouslySetInnerHTML={{ 
-                __html: para.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>')
-              }} />
-            ))}
+            <p>{currentStep.content}</p>
           </div>
 
           <div className="step-tips">
-            <h4>💡 小贴士</h4>
+            <h4>💡 {t("小贴士", "Tips")}</h4>
             <ul>
               {currentStep.tips.map((tip, i) => (
                 <li key={i}>{tip}</li>
@@ -167,45 +135,45 @@ export default function HowToPlayPage() {
               onClick={() => setActiveStep(Math.max(1, activeStep - 1))}
               disabled={activeStep === 1}
             >
-              ← 上一步
+              ← {t("上一步", "Previous")}
             </button>
             {activeStep < 5 ? (
               <button 
                 className="btn btn-primary"
                 onClick={() => setActiveStep(activeStep + 1)}
               >
-                下一步 →
+                {t("下一步", "Next")} →
               </button>
             ) : (
               <Link href="/mock-draft" className="btn btn-primary">
-                开始模拟选秀 →
+                {t("开始模拟选秀", "Start Mock Draft")} →
               </Link>
             )}
           </div>
         </div>
 
         <div className="quick-links">
-          <h3>相关页面</h3>
+          <h3>{t("相关页面", "Related Pages")}</h3>
           <div className="links-grid">
             <Link href="/rankings" className="quick-link-card">
               <span className="quick-link-icon">📊</span>
-              <span className="quick-link-title">球员排名</span>
-              <span className="quick-link-desc">查看完整球员排名</span>
+              <span className="quick-link-title">{t("球员排名", "Rankings")}</span>
+              <span className="quick-link-desc">{t("查看完整球员排名", "View full player rankings")}</span>
             </Link>
             <Link href="/draft-guide" className="quick-link-card">
               <span className="quick-link-icon">📖</span>
-              <span className="quick-link-title">选秀指南</span>
-              <span className="quick-link-desc">深入了解选秀策略</span>
+              <span className="quick-link-title">{t("选秀指南", "Draft Guide")}</span>
+              <span className="quick-link-desc">{t("深入了解选秀策略", "Learn draft strategies")}</span>
             </Link>
             <Link href="/mock-draft" className="quick-link-card">
               <span className="quick-link-icon">🎯</span>
-              <span className="quick-link-title">模拟选秀</span>
-              <span className="quick-link-desc">练习你的选秀技巧</span>
+              <span className="quick-link-title">{t("模拟选秀", "Mock Draft")}</span>
+              <span className="quick-link-desc">{t("练习你的选秀技巧", "Practice your draft skills")}</span>
             </Link>
             <Link href="/cheat-sheet" className="quick-link-card">
               <span className="quick-link-icon">📋</span>
-              <span className="quick-link-title">选秀备忘单</span>
-              <span className="quick-link-desc">选秀时的快速参考</span>
+              <span className="quick-link-title">{t("选秀备忘单", "Cheat Sheet")}</span>
+              <span className="quick-link-desc">{t("选秀时的快速参考", "Quick reference for drafts")}</span>
             </Link>
           </div>
         </div>

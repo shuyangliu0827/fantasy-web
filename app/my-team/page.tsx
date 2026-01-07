@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import Header from "@/components/Header";
+import { useLang } from "@/lib/lang";
 import { getSessionUser, getMyTeams, createMyTeam, getPlayers, addPlayerToTeam, removePlayerFromTeam, getPlayerById, MyTeam, Player } from "@/lib/store";
 
 export default function MyTeamPage() {
+  const { t } = useLang();
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [teams, setTeams] = useState<MyTeam[]>([]);
   const [activeTeam, setActiveTeam] = useState<MyTeam | null>(null);
@@ -67,11 +70,11 @@ export default function MyTeamPage() {
   if (!user) {
     return (
       <div className="app">
-        <header className="header"><div className="header-inner"><Link href="/" className="logo"><div className="logo-icon"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="2.5"/></svg></div><div className="logo-text"><span className="logo-title">蓝本</span></div></Link></div></header>
+        <Header />
         <main className="page-content" style={{ textAlign: "center", paddingTop: 100 }}>
-          <h1 className="page-title">请先登录</h1>
-          <p style={{ color: "#64748b", marginBottom: 24 }}>登录后可以管理你的 Fantasy 球队</p>
-          <Link href="/auth/login" className="btn btn-primary">登录</Link>
+          <h1 className="page-title">{t("请先登录", "Please Login")}</h1>
+          <p style={{ color: "#64748b", marginBottom: 24 }}>{t("登录后可以管理你的 Fantasy 球队", "Login to manage your Fantasy teams")}</p>
+          <Link href="/auth/login" className="btn btn-primary">{t("登录", "Login")}</Link>
         </main>
       </div>
     );
@@ -79,49 +82,29 @@ export default function MyTeamPage() {
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-inner">
-          <Link href="/" className="logo">
-            <div className="logo-icon"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="2.5"/><path d="M20 4 C20 4, 8 16, 20 20 C32 24, 20 36, 20 36" stroke="currentColor" strokeWidth="2.5" fill="none"/><path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/></svg></div>
-            <div className="logo-text"><span className="logo-title">蓝本</span><span className="logo-sub">Fantasy 篮球决策平台</span></div>
-          </Link>
-          <Link href="/" className="btn btn-ghost">← 返回首页</Link>
-        </div>
-      </header>
-
-      <nav className="main-nav">
-        <div className="nav-inner">
-          <Link href="/" className="nav-link">首页</Link>
-          <Link href="/rankings" className="nav-link">球员排名</Link>
-          <Link href="/draft-guide" className="nav-link">选秀指南</Link>
-          <Link href="/cheat-sheet" className="nav-link">备忘单</Link>
-          <Link href="/how-to-play" className="nav-link">新手入门</Link>
-          <Link href="/my-team" className="nav-link active">我的球队</Link>
-          <Link href="/mock-draft" className="nav-link">模拟选秀</Link>
-        </div>
-      </nav>
+      <Header />
 
       <main className="page-content">
         <div className="page-header">
-          <h1 className="page-title">我的球队 My Team</h1>
-          <p className="page-desc">管理你的 Fantasy 篮球阵容，数据自动保存</p>
+          <h1 className="page-title">{t("我的球队", "My Team")}</h1>
+          <p className="page-desc">{t("管理你的 Fantasy 篮球阵容，数据自动保存", "Manage your Fantasy basketball roster. Data saves automatically")}</p>
         </div>
 
         <div className="team-selector">
           {teams.map(team => (
             <button key={team.id} className={`team-tab ${activeTeam?.id === team.id ? "active" : ""}`} onClick={() => { setActiveTeam(team); loadTeamPlayers(team); }}>{team.name}</button>
           ))}
-          <button className="team-tab add" onClick={() => setShowCreateTeam(true)}>+ 新建球队</button>
+          <button className="team-tab add" onClick={() => setShowCreateTeam(true)}>+ {t("新建球队", "New Team")}</button>
         </div>
 
         {showCreateTeam && (
           <div className="modal-overlay" onClick={() => setShowCreateTeam(false)}>
             <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <h3>创建新球队</h3>
-              <input className="form-input" placeholder="球队名称" value={newTeamName} onChange={e => setNewTeamName(e.target.value)} style={{ marginBottom: 16 }} />
+              <h3>{t("创建新球队", "Create New Team")}</h3>
+              <input className="form-input" placeholder={t("球队名称", "Team Name")} value={newTeamName} onChange={e => setNewTeamName(e.target.value)} style={{ marginBottom: 16 }} />
               <div style={{ display: "flex", gap: 12 }}>
-                <button className="btn btn-ghost" onClick={() => setShowCreateTeam(false)}>取消</button>
-                <button className="btn btn-primary" onClick={handleCreateTeam}>创建</button>
+                <button className="btn btn-ghost" onClick={() => setShowCreateTeam(false)}>{t("取消", "Cancel")}</button>
+                <button className="btn btn-primary" onClick={handleCreateTeam}>{t("创建", "Create")}</button>
               </div>
             </div>
           </div>
@@ -131,15 +114,15 @@ export default function MyTeamPage() {
           <>
             <div className="team-header-bar">
               <h2>{activeTeam.name}</h2>
-              <span>{teamPlayers.length} 名球员</span>
-              <button className="btn btn-primary" onClick={() => setShowAddPlayer(true)}>+ 添加球员</button>
+              <span>{teamPlayers.length} {t("名球员", "players")}</span>
+              <button className="btn btn-primary" onClick={() => setShowAddPlayer(true)}>+ {t("添加球员", "Add Player")}</button>
             </div>
 
             {showAddPlayer && (
               <div className="modal-overlay" onClick={() => setShowAddPlayer(false)}>
                 <div className="modal-content large" onClick={e => e.stopPropagation()}>
-                  <h3>添加球员</h3>
-                  <input className="form-input" placeholder="搜索球员..." value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} style={{ marginBottom: 16 }} />
+                  <h3>{t("添加球员", "Add Player")}</h3>
+                  <input className="form-input" placeholder={t("搜索球员...", "Search players...")} value={playerSearch} onChange={e => setPlayerSearch(e.target.value)} style={{ marginBottom: 16 }} />
                   <div className="player-list">
                     {availablePlayers.slice(0, 20).map(p => (
                       <div key={p.id} className="player-list-item" onClick={() => handleAddPlayer(p)}>
@@ -156,22 +139,22 @@ export default function MyTeamPage() {
 
             {teamPlayers.length === 0 ? (
               <div className="empty-team">
-                <p>球队还没有球员</p>
-                <button className="btn btn-primary" onClick={() => setShowAddPlayer(true)}>添加第一个球员</button>
+                <p>{t("球队还没有球员", "No players on this team yet")}</p>
+                <button className="btn btn-primary" onClick={() => setShowAddPlayer(true)}>{t("添加第一个球员", "Add First Player")}</button>
               </div>
             ) : (
               <div className="roster-table">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>排名</th>
-                      <th>球员</th>
-                      <th>位置</th>
-                      <th>球队</th>
+                      <th>{t("排名", "Rank")}</th>
+                      <th>{t("球员", "Player")}</th>
+                      <th>{t("位置", "Pos")}</th>
+                      <th>{t("球队", "Team")}</th>
                       <th>PPG</th>
                       <th>RPG</th>
                       <th>APG</th>
-                      <th>操作</th>
+                      <th>{t("操作", "Action")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -184,7 +167,7 @@ export default function MyTeamPage() {
                         <td className="stat-highlight">{p.ppg}</td>
                         <td>{p.rpg}</td>
                         <td>{p.apg}</td>
-                        <td><button className="btn btn-ghost btn-sm" onClick={() => handleRemovePlayer(p.id)}>移除</button></td>
+                        <td><button className="btn btn-ghost btn-sm" onClick={() => handleRemovePlayer(p.id)}>{t("移除", "Remove")}</button></td>
                       </tr>
                     ))}
                   </tbody>
@@ -194,8 +177,8 @@ export default function MyTeamPage() {
           </>
         ) : (
           <div className="empty-team">
-            <p>你还没有球队，创建一个开始吧！</p>
-            <button className="btn btn-primary" onClick={() => setShowCreateTeam(true)}>创建球队</button>
+            <p>{t("你还没有球队，创建一个开始吧！", "You don't have any teams yet. Create one to get started!")}</p>
+            <button className="btn btn-primary" onClick={() => setShowCreateTeam(true)}>{t("创建球队", "Create Team")}</button>
           </div>
         )}
       </main>

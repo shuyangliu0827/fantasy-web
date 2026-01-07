@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useLang } from "@/lib/lang";
 import { getSessionUser, createLeague } from "@/lib/store";
 
 export default function CreateLeaguePage() {
+  const { t } = useLang();
   const router = useRouter();
-  const user = getSessionUser();
-  
+  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [name, setName] = useState("");
   const [teams, setTeams] = useState("12");
   const [format, setFormat] = useState("h2h");
@@ -16,16 +17,20 @@ export default function CreateLeaguePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setUser(getSessionUser());
+  }, []);
+
   if (!user) {
     return (
       <div className="auth-page">
         <div className="auth-card">
           <div className="auth-header">
-            <h1>Login Required</h1>
-            <p>Please sign in to create a league</p>
+            <h1>{t("需要登录", "Login Required")}</h1>
+            <p>{t("请先登录后创建联赛", "Please sign in to create a league")}</p>
           </div>
           <Link href="/auth/login" className="form-submit" style={{ display: "block", textAlign: "center" }}>
-            Sign In
+            {t("登录", "Sign In")}
           </Link>
         </div>
       </div>
@@ -35,7 +40,7 @@ export default function CreateLeaguePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError("League name is required");
+      setError(t("请输入联赛名称", "League name is required"));
       return;
     }
     
@@ -45,7 +50,7 @@ export default function CreateLeaguePage() {
     const res = createLeague({ name, visibility });
     
     if (!res.ok) {
-      setError(res.error || "Failed to create league");
+      setError(res.error || t("创建失败", "Failed to create league"));
       setLoading(false);
       return;
     }
@@ -64,39 +69,39 @@ export default function CreateLeaguePage() {
               <path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/>
             </svg>
           </Link>
-          <h1>Create a League</h1>
-          <p>Set up your fantasy basketball league</p>
+          <h1>{t("创建联赛", "Create a League")}</h1>
+          <p>{t("设置你的 Fantasy 篮球联赛", "Set up your fantasy basketball league")}</p>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">League Name</label>
+            <label className="form-label">{t("联赛名称", "League Name")}</label>
             <input
               className="form-input"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Awesome League"
+              placeholder={t("我的联赛", "My Awesome League")}
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Number of Teams</label>
+            <label className="form-label">{t("队伍数量", "Number of Teams")}</label>
             <select 
               className="form-input" 
               value={teams}
               onChange={(e) => setTeams(e.target.value)}
             >
-              <option value="8">8 Teams</option>
-              <option value="10">10 Teams</option>
-              <option value="12">12 Teams</option>
-              <option value="14">14 Teams</option>
-              <option value="16">16 Teams</option>
+              <option value="8">8 {t("队", "Teams")}</option>
+              <option value="10">10 {t("队", "Teams")}</option>
+              <option value="12">12 {t("队", "Teams")}</option>
+              <option value="14">14 {t("队", "Teams")}</option>
+              <option value="16">16 {t("队", "Teams")}</option>
             </select>
           </div>
 
           <div className="form-group">
-            <label className="form-label">League Format</label>
+            <label className="form-label">{t("联赛格式", "League Format")}</label>
             <select 
               className="form-input" 
               value={format}
@@ -110,7 +115,7 @@ export default function CreateLeaguePage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Visibility</label>
+            <label className="form-label">{t("可见性", "Visibility")}</label>
             <div style={{ display: "flex", gap: 12 }}>
               <button
                 type="button"
@@ -124,7 +129,7 @@ export default function CreateLeaguePage() {
                 }}
                 onClick={() => setVisibility("public")}
               >
-                Public
+                {t("公开", "Public")}
               </button>
               <button
                 type="button"
@@ -138,7 +143,7 @@ export default function CreateLeaguePage() {
                 }}
                 onClick={() => setVisibility("private")}
               >
-                Private
+                {t("私人", "Private")}
               </button>
             </div>
           </div>
@@ -151,12 +156,12 @@ export default function CreateLeaguePage() {
             disabled={loading}
             style={{ marginTop: 8 }}
           >
-            {loading ? "Creating..." : "Create League"}
+            {loading ? t("创建中...", "Creating...") : t("创建联赛", "Create League")}
           </button>
         </form>
 
         <div className="auth-footer">
-          <Link href="/">← Back to Home</Link>
+          <Link href="/">← {t("返回首页", "Back to Home")}</Link>
         </div>
       </div>
     </div>

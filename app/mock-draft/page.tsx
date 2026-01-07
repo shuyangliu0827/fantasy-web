@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, getDraftPicks, listDrafts, Player, Draft } from "@/lib/store";
+import Header from "@/components/Header";
+import { useLang } from "@/lib/lang";
+import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
 
 export default function MockDraftPage() {
+  const { t } = useLang();
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [draftStarted, setDraftStarted] = useState(false);
@@ -14,7 +17,6 @@ export default function MockDraftPage() {
   const [currentPick, setCurrentPick] = useState(1);
   const [myDrafts, setMyDrafts] = useState<Draft[]>([]);
   const [settings, setSettings] = useState({ name: "Mock Draft", teams: 12, position: 6, rounds: 13, type: "snake" as const });
-  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -90,7 +92,6 @@ export default function MockDraftPage() {
         return;
       }
       
-      // AI picks best available
       if (newAvailable.length > 0) {
         const randomOffset = Math.floor(Math.random() * Math.min(3, newAvailable.length));
         newAvailable = newAvailable.filter((_, i) => i !== randomOffset);
@@ -98,7 +99,6 @@ export default function MockDraftPage() {
       nextPick++;
     }
     
-    // Draft complete
     if (currentDraft) {
       updateDraft(currentDraft.id, { status: "completed", completedAt: Date.now() });
     }
@@ -111,91 +111,71 @@ export default function MockDraftPage() {
   if (!draftStarted) {
     return (
       <div className="app">
-        <header className="header">
-          <div className="header-inner">
-            <Link href="/" className="logo">
-              <div className="logo-icon"><svg viewBox="0 0 40 40" fill="none"><circle cx="20" cy="20" r="18" stroke="currentColor" strokeWidth="2.5"/><path d="M20 4 C20 4, 8 16, 20 20 C32 24, 20 36, 20 36" stroke="currentColor" strokeWidth="2.5" fill="none"/><path d="M4 20 H36" stroke="currentColor" strokeWidth="2.5"/></svg></div>
-              <div className="logo-text"><span className="logo-title">蓝本</span><span className="logo-sub">Fantasy 篮球决策平台</span></div>
-            </Link>
-            <Link href="/" className="btn btn-ghost">← 返回首页</Link>
-          </div>
-        </header>
-
-        <nav className="main-nav">
-          <div className="nav-inner">
-            <Link href="/" className="nav-link">首页</Link>
-            <Link href="/rankings" className="nav-link">球员排名</Link>
-            <Link href="/draft-guide" className="nav-link">选秀指南</Link>
-            <Link href="/cheat-sheet" className="nav-link">备忘单</Link>
-            <Link href="/how-to-play" className="nav-link">新手入门</Link>
-            <Link href="/my-team" className="nav-link">我的球队</Link>
-            <Link href="/mock-draft" className="nav-link active">模拟选秀</Link>
-          </div>
-        </nav>
+        <Header />
 
         <main className="page-content">
           <div className="page-header">
-            <h1 className="page-title">模拟选秀 Mock Draft</h1>
-            <p className="page-desc">练习你的选秀策略，数据会自动保存</p>
+            <h1 className="page-title">{t("模拟选秀", "Mock Draft")}</h1>
+            <p className="page-desc">{t("练习你的选秀策略，数据会自动保存", "Practice your draft strategy. Data saves automatically")}</p>
           </div>
 
           <div className="draft-setup">
             <div className="setup-card">
-              <h2>开始新的模拟选秀</h2>
+              <h2>{t("开始新的模拟选秀", "Start New Mock Draft")}</h2>
               
               <div className="form-group">
-                <label className="form-label">选秀名称</label>
+                <label className="form-label">{t("选秀名称", "Draft Name")}</label>
                 <input className="form-input" value={settings.name} onChange={e => setSettings({...settings, name: e.target.value})} placeholder="Mock Draft" />
               </div>
 
               <div className="form-group">
-                <label className="form-label">联赛人数</label>
+                <label className="form-label">{t("联赛人数", "Number of Teams")}</label>
                 <select className="form-input" value={settings.teams} onChange={e => setSettings({...settings, teams: +e.target.value, position: Math.min(settings.position, +e.target.value)})}>
-                  <option value={10}>10 队</option>
-                  <option value={12}>12 队</option>
-                  <option value={14}>14 队</option>
+                  <option value={10}>10 {t("队", "Teams")}</option>
+                  <option value={12}>12 {t("队", "Teams")}</option>
+                  <option value={14}>14 {t("队", "Teams")}</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">你的选秀位置</label>
+                <label className="form-label">{t("你的选秀位置", "Your Draft Position")}</label>
                 <select className="form-input" value={settings.position} onChange={e => setSettings({...settings, position: +e.target.value})}>
                   {Array.from({length: settings.teams}, (_, i) => (
-                    <option key={i} value={i + 1}>第 {i + 1} 顺位</option>
+                    <option key={i} value={i + 1}>{t(`第 ${i + 1} 顺位`, `Pick #${i + 1}`)}</option>
                   ))}
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">选秀轮数</label>
+                <label className="form-label">{t("选秀轮数", "Number of Rounds")}</label>
                 <select className="form-input" value={settings.rounds} onChange={e => setSettings({...settings, rounds: +e.target.value})}>
-                  <option value={10}>10 轮</option>
-                  <option value={13}>13 轮</option>
-                  <option value={15}>15 轮</option>
+                  <option value={10}>10 {t("轮", "Rounds")}</option>
+                  <option value={13}>13 {t("轮", "Rounds")}</option>
+                  <option value={15}>15 {t("轮", "Rounds")}</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">选秀类型</label>
+                <label className="form-label">{t("选秀类型", "Draft Type")}</label>
                 <select className="form-input" value={settings.type} onChange={e => setSettings({...settings, type: e.target.value as any})}>
-                  <option value="snake">蛇形选秀 Snake</option>
-                  <option value="linear">线性选秀 Linear</option>
+                  <option value="snake">{t("蛇形选秀", "Snake Draft")}</option>
+                  <option value="linear">{t("线性选秀", "Linear Draft")}</option>
                 </select>
               </div>
 
               <button className="btn btn-primary btn-lg" onClick={startDraft} style={{ width: "100%", marginTop: 16 }}>
-                开始选秀
+                {t("开始选秀", "Start Draft")}
               </button>
             </div>
 
             {myDrafts.length > 0 && (
               <div className="setup-card">
-                <h3>历史选秀记录</h3>
+                <h3>{t("历史选秀记录", "Draft History")}</h3>
                 <div className="draft-history">
                   {myDrafts.slice(-5).reverse().map(d => (
                     <div key={d.id} className="history-item">
                       <span className="history-name">{d.name}</span>
-                      <span className="history-info">{d.teams} 队 · {d.status === "completed" ? "已完成" : "进行中"}</span>
+                      <span className="history-info">{d.teams} {t("队", "teams")} · {d.status === "completed" ? t("已完成", "Completed") : t("进行中", "In Progress")}</span>
                       <span className="history-date">{new Date(d.createdAt).toLocaleDateString()}</span>
                     </div>
                   ))}
@@ -215,18 +195,18 @@ export default function MockDraftPage() {
           <div className="draft-info">
             <h1>{settings.name}</h1>
             <span className="draft-status">
-              {isDraftComplete ? "选秀完成！" : `第 ${Math.ceil(currentPick / settings.teams)} 轮 · 第 ${currentPick} 顺位`}
+              {isDraftComplete ? t("选秀完成！", "Draft Complete!") : t(`第 ${Math.ceil(currentPick / settings.teams)} 轮 · 第 ${currentPick} 顺位`, `Round ${Math.ceil(currentPick / settings.teams)} · Pick ${currentPick}`)}
             </span>
           </div>
           <div className="draft-actions">
             {isDraftComplete ? (
-              <Link href="/my-team" className="btn btn-primary">查看球队</Link>
+              <Link href="/my-team" className="btn btn-primary">{t("查看球队", "View Team")}</Link>
             ) : (
               <span className={`pick-indicator ${isMyPick() ? "your-turn" : ""}`}>
-                {isMyPick() ? "🎯 轮到你选了！" : "⏳ AI 正在选择..."}
+                {isMyPick() ? t("🎯 轮到你选了！", "🎯 Your Pick!") : t("⏳ AI 正在选择...", "⏳ AI is picking...")}
               </span>
             )}
-            <button className="btn btn-ghost" onClick={() => { setDraftStarted(false); setMyDrafts(listDrafts()); }}>退出</button>
+            <button className="btn btn-ghost" onClick={() => { setDraftStarted(false); setMyDrafts(listDrafts()); }}>{t("退出", "Exit")}</button>
           </div>
         </div>
       </header>
@@ -234,8 +214,8 @@ export default function MockDraftPage() {
       <div className="draft-main">
         <div className="draft-board">
           <div className="board-header">
-            <h2>可选球员</h2>
-            <span>{availablePlayers.length} 人可选</span>
+            <h2>{t("可选球员", "Available Players")}</h2>
+            <span>{availablePlayers.length} {t("人可选", "available")}</span>
           </div>
           <div className="player-grid">
             {availablePlayers.slice(0, 50).map(p => (
@@ -261,12 +241,12 @@ export default function MockDraftPage() {
 
         <div className="my-team-panel">
           <div className="panel-header">
-            <h2>我的球队</h2>
-            <span>{myPicks.length} / {settings.rounds} 人</span>
+            <h2>{t("我的球队", "My Team")}</h2>
+            <span>{myPicks.length} / {settings.rounds}</span>
           </div>
           <div className="my-picks">
             {myPicks.length === 0 ? (
-              <div className="empty-picks">等待选秀开始...</div>
+              <div className="empty-picks">{t("等待选秀开始...", "Waiting for draft to start...")}</div>
             ) : (
               myPicks.map((p, i) => (
                 <div key={p.id} className="my-pick-item">
