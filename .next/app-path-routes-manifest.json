@@ -4,6 +4,7 @@
   "/auth/login/page": "/auth/login",
   "/auth/signup/page": "/auth/signup",
   "/cheat-sheet/page": "/cheat-sheet",
+  "/compare/page": "/compare",
   "/draft-guide/page": "/draft-guide",
   "/favicon.ico/route": "/favicon.ico",
   "/how-to-play/page": "/how-to-play",

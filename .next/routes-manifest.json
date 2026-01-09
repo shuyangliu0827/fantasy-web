@@ -84,6 +84,12 @@
       "namedRegex": "^/cheat\\-sheet(?:/)?$"
     },
     {
+      "page": "/compare",
+      "regex": "^/compare(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/compare(?:/)?$"
+    },
+    {
       "page": "/draft-guide",
       "regex": "^/draft\\-guide(?:/)?$",
       "routeKeys": {},
