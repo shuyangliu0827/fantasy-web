@@ -12,6 +12,7 @@ type ParsedInsight = {
   title: string;
   content: string;
   coverImage?: string;
+  images?: string[];
   tags?: string[];
   author: string;
   createdAt: number;
@@ -32,6 +33,8 @@ export default function InsightDetailPage() {
   const [likeCount, setLikeCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
     const currentUser = getSessionUser();
@@ -41,6 +44,7 @@ export default function InsightDetailPage() {
     if (raw) {
       let content = raw.body;
       let coverImage: string | undefined;
+      let images: string[] | undefined;
       let tags: string[] | undefined;
       
       try {
@@ -48,17 +52,17 @@ export default function InsightDetailPage() {
         if (parsed.content) {
           content = parsed.content;
           coverImage = parsed.metadata?.coverImage;
+          images = parsed.metadata?.images;
           tags = parsed.metadata?.tags;
         }
-      } catch {
-        // Body is plain text
-      }
+      } catch { }
 
       setInsight({
         id: raw.id,
         title: raw.title,
         content,
         coverImage,
+        images,
         tags,
         author: raw.author,
         createdAt: raw.createdAt,
@@ -66,11 +70,17 @@ export default function InsightDetailPage() {
         leagueSlug: raw.leagueSlug,
       });
       setLikeCount(raw.heat);
-      
       setComments(listComments(raw.id));
       
+      // Check if user liked
       const likedPosts = JSON.parse(localStorage.getItem("bp_liked_posts") || "[]");
       setLiked(likedPosts.includes(raw.id));
+      
+      // Check if following author
+      if (currentUser) {
+        const following = JSON.parse(localStorage.getItem(`bp_following_${currentUser.id}`) || "[]");
+        setIsFollowing(following.includes(raw.author));
+      }
     }
     setLoading(false);
   }, [id]);
@@ -98,6 +108,27 @@ export default function InsightDetailPage() {
     }
   };
 
+  const handleFollow = () => {
+    if (!user) {
+      alert(t("请先登录", "Please login first"));
+      return;
+    }
+    if (!insight) return;
+    
+    const key = `bp_following_${user.id}`;
+    const following = JSON.parse(localStorage.getItem(key) || "[]");
+    
+    if (isFollowing) {
+      const newFollowing = following.filter((name: string) => name !== insight.author);
+      localStorage.setItem(key, JSON.stringify(newFollowing));
+      setIsFollowing(false);
+    } else {
+      following.push(insight.author);
+      localStorage.setItem(key, JSON.stringify(following));
+      setIsFollowing(true);
+    }
+  };
+
   const handleComment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
@@ -115,25 +146,11 @@ export default function InsightDetailPage() {
   };
 
   const handleDelete = () => {
-    // 直接在 localStorage 中删除
     const allInsights = JSON.parse(localStorage.getItem("bp_insights") || "[]");
     const filtered = allInsights.filter((i: any) => i.id !== id);
     localStorage.setItem("bp_insights", JSON.stringify(filtered));
-    
     alert(t("帖子已删除", "Post deleted"));
     router.push("/");
-  };
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    
-    if (days === 0) return t("今天", "Today");
-    if (days === 1) return t("昨天", "Yesterday");
-    if (days < 7) return `${days} ${t("天前", "days ago")}`;
-    return date.toLocaleDateString();
   };
 
   const handleShare = async () => {
@@ -146,6 +163,18 @@ export default function InsightDetailPage() {
       navigator.clipboard.writeText(url);
       alert(t("链接已复制到剪贴板", "Link copied to clipboard"));
     }
+  };
+
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    
+    if (days === 0) return t("今天", "Today");
+    if (days === 1) return t("昨天", "Yesterday");
+    if (days < 7) return `${days} ${t("天前", "days ago")}`;
+    return date.toLocaleDateString();
   };
 
   if (loading) {
@@ -177,15 +206,16 @@ export default function InsightDetailPage() {
       <Header />
 
       <main className="insight-detail">
+        {/* Cover Image */}
         {insight.coverImage && (
-          <div className="cover-image">
+          <div className="cover-image" onClick={() => setLightboxImage(insight.coverImage!)}>
             <img src={insight.coverImage} alt={insight.title} />
           </div>
         )}
 
         <article className="insight-content">
           <header className="insight-header">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
               <h1 className="insight-title">{insight.title}</h1>
               {isAuthor && (
                 <button 
@@ -198,23 +228,26 @@ export default function InsightDetailPage() {
               )}
             </div>
             
-            <div className="insight-meta">
+            {/* Author Info with Follow Button */}
+            <div className="author-section">
               <Link href={`/u/${insight.author.replace("@", "")}`} className="author-link">
                 <div className="author-avatar">{insight.author[0]?.toUpperCase()}</div>
-                <span className="author-name">{insight.author}</span>
+                <div className="author-info">
+                  <span className="author-name">{insight.author}</span>
+                  <span className="publish-date">{formatDate(insight.createdAt)}</span>
+                </div>
               </Link>
-              <span className="meta-divider">·</span>
-              <span className="publish-date">{formatDate(insight.createdAt)}</span>
-              {insight.leagueSlug && (
-                <>
-                  <span className="meta-divider">·</span>
-                  <Link href={`/league/${insight.leagueSlug}`} className="league-link">
-                    {insight.leagueSlug}
-                  </Link>
-                </>
+              {!isAuthor && (
+                <button 
+                  className={`follow-btn ${isFollowing ? "following" : ""}`}
+                  onClick={handleFollow}
+                >
+                  {isFollowing ? t("已关注", "Following") : t("关注", "Follow")}
+                </button>
               )}
             </div>
 
+            {/* Tags */}
             {insight.tags && insight.tags.length > 0 && (
               <div className="insight-tags">
                 {insight.tags.map(tag => (
@@ -224,18 +257,35 @@ export default function InsightDetailPage() {
             )}
           </header>
 
+          {/* Body */}
           <div className="insight-body">
             {insight.content.split("\n").map((paragraph, i) => (
               paragraph.trim() ? <p key={i}>{paragraph}</p> : <br key={i} />
             ))}
           </div>
 
+          {/* Images Gallery */}
+          {insight.images && insight.images.length > 0 && (
+            <div className="images-gallery">
+              {insight.images.map((img, index) => (
+                <div 
+                  key={index} 
+                  className="gallery-item"
+                  onClick={() => setLightboxImage(img)}
+                >
+                  <img src={img} alt={`Image ${index + 1}`} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Actions */}
           <div className="insight-actions">
             <button className={`action-btn ${liked ? "liked" : ""}`} onClick={handleLike}>
               <span className="action-icon">{liked ? "❤️" : "🤍"}</span>
               <span>{likeCount}</span>
             </button>
-            <button className="action-btn">
+            <button className="action-btn" onClick={() => document.getElementById("comment-input")?.focus()}>
               <span className="action-icon">💬</span>
               <span>{comments.length}</span>
             </button>
@@ -245,6 +295,14 @@ export default function InsightDetailPage() {
             </button>
           </div>
         </article>
+
+        {/* Lightbox */}
+        {lightboxImage && (
+          <div className="lightbox" onClick={() => setLightboxImage(null)}>
+            <img src={lightboxImage} alt="Full size" />
+            <button className="lightbox-close">✕</button>
+          </div>
+        )}
 
         {/* Delete Confirmation Modal */}
         {showDeleteConfirm && (
@@ -266,6 +324,7 @@ export default function InsightDetailPage() {
           </div>
         )}
 
+        {/* Comments Section */}
         <section className="comments-section">
           <h3 className="comments-title">
             {t("评论", "Comments")} ({comments.length})
@@ -279,6 +338,7 @@ export default function InsightDetailPage() {
                 <div className="comment-avatar">?</div>
               )}
               <textarea
+                id="comment-input"
                 className="comment-input"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
@@ -332,11 +392,16 @@ export default function InsightDetailPage() {
           margin-bottom: 24px;
           border-radius: 12px;
           overflow: hidden;
+          cursor: pointer;
         }
         .cover-image img {
           width: 100%;
           height: auto;
           display: block;
+          transition: transform 0.3s;
+        }
+        .cover-image:hover img {
+          transform: scale(1.02);
         }
         .insight-content {
           background: var(--bg-card);
@@ -364,26 +429,27 @@ export default function InsightDetailPage() {
         .delete-btn:hover {
           opacity: 1;
         }
-        .insight-meta {
+        .author-section {
           display: flex;
           align-items: center;
-          gap: 8px;
+          justify-content: space-between;
           margin-bottom: 16px;
-          flex-wrap: wrap;
+          padding-bottom: 16px;
+          border-bottom: 1px solid var(--border-color);
         }
         .author-link {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 12px;
           text-decoration: none;
           color: inherit;
         }
-        .author-link:hover {
+        .author-link:hover .author-name {
           color: var(--accent);
         }
         .author-avatar, .comment-avatar {
-          width: 32px;
-          height: 32px;
+          width: 40px;
+          height: 40px;
           border-radius: 50%;
           background: linear-gradient(135deg, #f59e0b, #d97706);
           display: flex;
@@ -391,24 +457,37 @@ export default function InsightDetailPage() {
           justify-content: center;
           font-weight: 600;
           color: #000;
-          font-size: 14px;
+          font-size: 16px;
           flex-shrink: 0;
         }
-        .author-name {
-          font-weight: 500;
+        .author-info {
+          display: flex;
+          flex-direction: column;
         }
-        .meta-divider {
-          color: var(--text-muted);
+        .author-name {
+          font-weight: 600;
+          transition: color 0.2s;
         }
         .publish-date {
+          font-size: 13px;
           color: var(--text-muted);
         }
-        .league-link {
-          color: var(--accent);
-          text-decoration: none;
+        .follow-btn {
+          padding: 8px 20px;
+          border-radius: 20px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          background: var(--accent);
+          color: #000;
+          border: 2px solid var(--accent);
         }
-        .league-link:hover {
-          text-decoration: underline;
+        .follow-btn:hover {
+          transform: scale(1.05);
+        }
+        .follow-btn.following {
+          background: transparent;
+          color: var(--accent);
         }
         .insight-tags {
           display: flex;
@@ -430,6 +509,58 @@ export default function InsightDetailPage() {
         }
         .insight-body p {
           margin-bottom: 16px;
+        }
+        .images-gallery {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 8px;
+          margin-top: 24px;
+        }
+        .gallery-item {
+          aspect-ratio: 1;
+          border-radius: 8px;
+          overflow: hidden;
+          cursor: pointer;
+        }
+        .gallery-item img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          transition: transform 0.3s;
+        }
+        .gallery-item:hover img {
+          transform: scale(1.05);
+        }
+        .lightbox {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0,0,0,0.95);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2000;
+          cursor: pointer;
+        }
+        .lightbox img {
+          max-width: 90%;
+          max-height: 90%;
+          object-fit: contain;
+        }
+        .lightbox-close {
+          position: absolute;
+          top: 20px;
+          right: 20px;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: rgba(255,255,255,0.2);
+          color: white;
+          border: none;
+          font-size: 20px;
+          cursor: pointer;
         }
         .insight-actions {
           display: flex;

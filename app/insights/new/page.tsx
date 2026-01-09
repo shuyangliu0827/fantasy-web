@@ -17,9 +17,11 @@ export default function NewInsightPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]); // 多张配图
   const [loading, setLoading] = useState(false);
   const [leagues, setLeagues] = useState<{ slug: string; name: string }[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const imagesInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -29,15 +31,45 @@ export default function NewInsightPage() {
     }
   }, []);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(t("图片大小不能超过5MB", "Image size cannot exceed 5MB"));
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setCoverImage(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    
+    if (images.length + files.length > 9) {
+      alert(t("最多上传9张配图", "Maximum 9 images allowed"));
+      return;
+    }
+
+    Array.from(files).forEach(file => {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(t(`图片 ${file.name} 超过5MB，已跳过`, `Image ${file.name} exceeds 5MB, skipped`));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleAddTag = () => {
@@ -69,9 +101,9 @@ export default function NewInsightPage() {
 
     setLoading(true);
 
-    // 将额外数据存储在 body 中（临时方案）
     const metadata = {
       coverImage,
+      images,
       tags,
     };
     const bodyWithMeta = JSON.stringify({ content: body, metadata });
@@ -119,7 +151,7 @@ export default function NewInsightPage() {
             <label className="form-label">{t("封面图片", "Cover Image")} <span className="optional">({t("可选", "Optional")})</span></label>
             <div 
               className="cover-upload"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => coverInputRef.current?.click()}
               style={{
                 backgroundImage: coverImage ? `url(${coverImage})` : undefined,
                 backgroundSize: "cover",
@@ -134,7 +166,7 @@ export default function NewInsightPage() {
                     <polyline points="21 15 16 10 5 21"/>
                   </svg>
                   <span>{t("点击上传封面图", "Click to upload cover image")}</span>
-                  <span className="upload-hint">{t("推荐尺寸 16:9", "Recommended 16:9 ratio")}</span>
+                  <span className="upload-hint">{t("推荐尺寸 16:9，最大 5MB", "Recommended 16:9 ratio, max 5MB")}</span>
                 </div>
               )}
               {coverImage && (
@@ -148,10 +180,10 @@ export default function NewInsightPage() {
               )}
             </div>
             <input
-              ref={fileInputRef}
+              ref={coverInputRef}
               type="file"
               accept="image/*"
-              onChange={handleImageUpload}
+              onChange={handleCoverUpload}
               style={{ display: "none" }}
             />
           </div>
@@ -182,6 +214,36 @@ export default function NewInsightPage() {
                 "Share your strategy, analysis or experience...\n\nMarkdown formatting supported"
               )}
               rows={12}
+            />
+          </div>
+
+          {/* Multiple Images Upload */}
+          <div className="form-section">
+            <label className="form-label">{t("分析配图", "Analysis Images")} <span className="optional">({t("最多9张", "Max 9")})</span></label>
+            <div className="images-grid">
+              {images.map((img, index) => (
+                <div key={index} className="image-item">
+                  <img src={img} alt={`Image ${index + 1}`} />
+                  <button type="button" className="remove-image" onClick={() => removeImage(index)}>✕</button>
+                </div>
+              ))}
+              {images.length < 9 && (
+                <div className="add-image" onClick={() => imagesInputRef.current?.click()}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 24, height: 24 }}>
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>{t("添加图片", "Add Image")}</span>
+                </div>
+              )}
+            </div>
+            <input
+              ref={imagesInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImagesUpload}
+              style={{ display: "none" }}
             />
           </div>
 
@@ -303,18 +365,24 @@ export default function NewInsightPage() {
           font-size: 12px;
           margin-top: 4px;
         }
-        .remove-cover {
+        .remove-cover, .remove-image {
           position: absolute;
-          top: 12px;
-          right: 12px;
-          width: 32px;
-          height: 32px;
+          top: 8px;
+          right: 8px;
+          width: 28px;
+          height: 28px;
           border-radius: 50%;
           background: rgba(0,0,0,0.6);
           color: white;
           border: none;
           cursor: pointer;
-          font-size: 16px;
+          font-size: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .remove-cover:hover, .remove-image:hover {
+          background: rgba(239, 68, 68, 0.8);
         }
         .title-input {
           font-size: 18px;
@@ -330,6 +398,42 @@ export default function NewInsightPage() {
           min-height: 250px;
           resize: vertical;
           line-height: 1.6;
+        }
+        .images-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        .image-item {
+          position: relative;
+          aspect-ratio: 1;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        .image-item img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .add-image {
+          aspect-ratio: 1;
+          border: 2px dashed var(--border-color);
+          border-radius: 8px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          cursor: pointer;
+          color: var(--text-muted);
+          transition: all 0.2s;
+        }
+        .add-image:hover {
+          border-color: var(--accent);
+          color: var(--accent);
+        }
+        .add-image span {
+          font-size: 12px;
         }
         .tags-input-container {
           background: var(--bg-card);
