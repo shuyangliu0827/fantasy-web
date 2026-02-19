@@ -23,7 +23,7 @@
      id: string;
      slug: string;
      name: string;
-     owner_id: string;
+     commissioner_id: string;
      visibility: "public" | "private";
      created_at: string;
    };
@@ -563,7 +563,7 @@
        .select("*")
        .eq("slug", slug)
        .single();
-     if (error) return null;
+     if (error) { console.error("[getLeagueBySlug] error:", JSON.stringify(error)); return null; }
      return data;
    }
    
@@ -586,8 +586,11 @@
        .insert({
          name: input.name.trim(),
          slug,
-         owner_id: user.id,
+         commissioner_id: user.id,
          visibility: input.visibility,
+         season: "2024-25",
+         draft_type: "snake",
+         status: "draft_pending",
        })
        .select()
        .single();

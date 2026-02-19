@@ -2,25 +2,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  supabase,
-  getCurrentUser, 
-  joinLeague, 
-  startDraft,
-  subscribeToLeague,
-  type League,
-  type Team
-} from "@/lib/supabase";
+import { useParams } from "next/navigation";
+import { getLeagueBySlug, getSessionUser, supabase as storeSupa } from "@/lib/store";
 
 // 先导入选秀房间组件（稍后创建）
 // import DraftRoom from "@/components/DraftRoom";
 
-export default function LeaguePage({ params }: { params: { slug: string } }) {
-  const leagueId = params.slug;
+export default function LeaguePage() {
+  const params = useParams();
+  const leagueId = params.slug as string;
   
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [myTeam, setMyTeam] = useState<Team | null>(null);
+  const [league, setLeague] = useState<any | null>(null);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [myTeam, setMyTeam] = useState<any | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -32,23 +26,9 @@ export default function LeaguePage({ params }: { params: { slug: string } }) {
     init();
   }, []);
 
-  // 订阅联赛更新
-  useEffect(() => {
-    if (!leagueId) return;
-
-    const channel = subscribeToLeague(leagueId, () => {
-      loadLeagueInfo();
-    });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [leagueId]);
-
   async function init() {
     try {
-      const user = await getCurrentUser();
-      setCurrentUser(user);
+      setCurrentUser(getSessionUser());
       await loadLeagueInfo();
     } catch (err) {
       console.error("Init error:", err);
@@ -59,30 +39,24 @@ export default function LeaguePage({ params }: { params: { slug: string } }) {
 
   async function loadLeagueInfo() {
     try {
-      // 1. 获取联赛信息
-      const { data: leagueData, error: leagueError } = await supabase
-        .from('leagues')
-        .select('*')
-        .eq('id', leagueId)
-        .single();
-
-      if (leagueError) throw leagueError;
-      setLeague(leagueData);
+      // 1. 获取联赛信息 (by slug)
+      const leagueData = await getLeagueBySlug(leagueId);
+      if (!leagueData) return;
+      setLeague(leagueData as any);
 
       // 2. 获取所有队伍
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
+      const { data: teamsData } = await storeSupa
+        .from('fantasy_teams')
         .select('*')
-        .eq('league_id', leagueId)
+        .eq('league_id', leagueData.id)
         .order('draft_position', { ascending: true });
 
-      if (teamsError) throw teamsError;
       setTeams(teamsData || []);
 
       // 3. 找到我的队伍
-      const user = await getCurrentUser();
+      const user = getSessionUser();
       if (user) {
-        const myTeamData = teamsData?.find(t => t.user_id === user.id);
+        const myTeamData = teamsData?.find((t: any) => t.user_id === user.id);
         setMyTeam(myTeamData || null);
       }
     } catch (err) {
@@ -99,7 +73,17 @@ export default function LeaguePage({ params }: { params: { slug: string } }) {
     setJoining(true);
     
     try {
-      const team = await joinLeague(leagueId, teamName.trim());
+      const user = getSessionUser();
+      if (!user) throw new Error("请先登录");
+      const leagueData = league;
+      if (!leagueData) throw new Error("联赛不存在");
+      const { data: team, error } = await storeSupa
+        .from("fantasy_teams")
+        .insert({ league_id: leagueData.id, user_id: user.id, name: teamName.trim(), draft_position: teams.length + 1 })
+        .select()
+        .single();
+      if (error) throw error;
+      await storeSupa.from("league_members").upsert({ league_id: leagueData.id, user_id: user.id, role: "member" }, { onConflict: "league_id,user_id" });
       setMyTeam(team);
       setShowJoinModal(false);
       setTeamName("");
@@ -120,7 +104,8 @@ export default function LeaguePage({ params }: { params: { slug: string } }) {
     setStarting(true);
     
     try {
-      await startDraft(leagueId);
+      const { error } = await storeSupa.from("leagues").update({ status: "drafting" }).eq("slug", leagueId);
+      if (error) throw error;
       await loadLeagueInfo();
     } catch (err: any) {
       console.error("Start draft error:", err);
@@ -354,7 +339,7 @@ export default function LeaguePage({ params }: { params: { slug: string } }) {
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  {team.team_name}
+                  {team.name}
                   {myTeam?.id === team.id && (
                     <span style={{
                       padding: '2px 8px',

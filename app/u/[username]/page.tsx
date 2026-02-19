@@ -86,7 +86,7 @@ export default function UserProfilePage() {
     const allLeagues = await listLeagues();
     let userOwnedLeagues: League[] = [];
     if (user && isOwn) {
-      userOwnedLeagues = allLeagues.filter((l: any) => l.owner_id === user.id || l.ownerId === user.id);
+      userOwnedLeagues = allLeagues.filter((l: any) => l.commissioner_id === user.id);
       setUserLeagues(userOwnedLeagues);
     }
     

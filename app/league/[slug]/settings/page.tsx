@@ -115,7 +115,7 @@ export default function SettingsPage() {
     }
   }
 
-  const isOwner = user && league && league.owner_id === user.id;
+  const isOwner = user && league && league.commissioner_id === user.id;
 
   if (loading) {
     return (

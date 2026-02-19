@@ -67,7 +67,7 @@ export default function ScoreboardPage() {
     setLoading(false);
   }
 
-  const isOwner = user && league && league.owner_id === user.id;
+  const isOwner = user && league && league.commissioner_id === user.id;
 
   const getMemberName = (member: LeagueMember) => {
     return member.user?.username || member.user?.name || "Anonymous";
