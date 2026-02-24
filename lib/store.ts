@@ -182,62 +182,103 @@
      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
    }
    
-   export function logout() {
+   export async function logout() {
      if (typeof window === "undefined") return;
      localStorage.removeItem(SESSION_KEY);
+     await supabase.auth.signOut().catch(() => {});
    }
    
    // ==================== Auth (Supabase + localStorage for password) ====================
    
    export async function signup(name: string, email: string, password: string) {
-     const { data: existingUser } = await supabase
-       .from("users")
-       .select("id")
-       .eq("email", email)
-       .single();
-   
-     if (existingUser) {
-       return { ok: false as const, error: "Email already exists" };
+     // 1. Use Supabase Auth for password storage (works across all browsers/devices)
+     const { data: authData, error: authError } = await supabase.auth.signUp({
+       email,
+       password,
+     });
+
+     if (authError) {
+       // Check if it's a duplicate email error
+       if (authError.message.toLowerCase().includes("already") || authError.message.toLowerCase().includes("exists")) {
+         return { ok: false as const, error: "Email already exists" };
+       }
+       return { ok: false as const, error: authError.message };
      }
-   
+
+     if (!authData.user) {
+       return { ok: false as const, error: "Signup failed" };
+     }
+
+     // 2. Create user profile in users table
      const username = email.split("@")[0];
      const { data: newUser, error } = await supabase
        .from("users")
-       .insert({ name, email, username })
+       .insert({ id: authData.user.id, name, email, username })
        .select()
        .single();
-   
+
      if (error) {
-       return { ok: false as const, error: error.message };
+       // If users table insert fails, try without specifying id (in case of uuid mismatch)
+       const { data: fallbackUser, error: fallbackError } = await supabase
+         .from("users")
+         .insert({ name, email, username })
+         .select()
+         .single();
+
+       if (fallbackError) {
+         return { ok: false as const, error: fallbackError.message };
+       }
+       setSessionUser(fallbackUser);
+       return { ok: true as const, user: fallbackUser };
      }
-   
-     // Store password in localStorage (simplified, use Supabase Auth in production)
-     const users = JSON.parse(localStorage.getItem("bp_users") || "[]");
-     users.push({ id: newUser.id, email, password });
-     localStorage.setItem("bp_users", JSON.stringify(users));
-   
+
      setSessionUser(newUser);
      return { ok: true as const, user: newUser };
    }
    
    export async function login(email: string, password: string) {
+     // 1. Try Supabase Auth first (works across all browsers/devices)
+     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+       email,
+       password,
+     });
+
+     if (!authError && authData.user) {
+       // Supabase Auth succeeded — fetch user profile
+       const { data: user, error } = await supabase
+         .from("users")
+         .select("*")
+         .eq("email", email)
+         .single();
+
+       if (user) {
+         setSessionUser(user);
+         return { ok: true as const, user };
+       }
+     }
+
+     // 2. Fallback: check localStorage for old accounts (backward compat)
      const users = JSON.parse(localStorage.getItem("bp_users") || "[]");
      const storedUser = users.find((u: any) => u.email === email);
-   
+
      if (!storedUser || storedUser.password !== password) {
        return { ok: false as const, error: "Invalid credentials" };
      }
-   
+
+     // localStorage auth succeeded — fetch user profile from Supabase
      const { data: user, error } = await supabase
        .from("users")
        .select("*")
        .eq("email", email)
        .single();
-   
+
      if (error || !user) {
        return { ok: false as const, error: "User not found" };
      }
-   
+
+     // Auto-migrate: create Supabase Auth account so future logins work everywhere
+     await supabase.auth.signUp({ email, password }).catch(() => {});
+
      setSessionUser(user);
      return { ok: true as const, user };
    }
