@@ -5,8 +5,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { getLeagueBySlug, getSessionUser, supabase as storeSupa } from "@/lib/store";
 
-// 先导入选秀房间组件（稍后创建）
-// import DraftRoom from "@/components/DraftRoom";
+import DraftRoom from "@/components/DraftRoom";
 
 export default function LeaguePage() {
   const params = useParams();
@@ -136,12 +135,20 @@ export default function LeaguePage() {
   // 如果选秀已开始且用户已加入，显示选秀房间
   if (league.status === "drafting" && myTeam) {
     return (
-      <div style={{ padding: '20px' }}>
-        <h1>🏀 选秀进行中...</h1>
-        <p>选秀房间功能正在开发中</p>
-        <p>您的队伍: {myTeam.team_name}</p>
-        <p>选秀位置: #{myTeam.draft_position}</p>
-      </div>
+      <DraftRoom
+        league={league}
+        teams={teams}
+        myTeam={myTeam}
+        onDraftComplete={async () => {
+          // 选秀完成后更新联赛状态
+          try {
+            await storeSupa.from("leagues").update({ status: "active" }).eq("slug", leagueId);
+          } catch (err) {
+            console.error("Failed to update league status:", err);
+          }
+          await loadLeagueInfo();
+        }}
+      />
     );
   }
 
