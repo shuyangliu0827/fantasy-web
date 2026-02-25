@@ -249,8 +249,8 @@ export default function LeaguePage() {
         marginBottom: '24px',
         borderLeft: '4px solid #3b82f6'
       }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px' }}>📢 联赛公告</h3>
-        <p style={{ margin: 0, color: '#64748b', lineHeight: 1.6 }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', color: '#111' }}>📢 联赛公告</h3>
+        <p style={{ margin: 0, color: '#333', lineHeight: 1.6 }}>
           欢迎来到联赛！准备好开始你的Fantasy 篮球之旅了吗?
         </p>
         {canStartDraft && (
@@ -302,8 +302,8 @@ export default function LeaguePage() {
             >
               <span style={{ fontSize: '32px' }}>{item.icon}</span>
               <div>
-                <div style={{ fontWeight: 600, fontSize: '15px' }}>{item.title}</div>
-                <div style={{ fontSize: '12px', color: '#64748b' }}>{item.desc}</div>
+                <div style={{ fontWeight: 600, fontSize: '15px', color: '#111' }}>{item.title}</div>
+                <div style={{ fontSize: '12px', color: '#333' }}>{item.desc}</div>
               </div>
             </a>
           ))}
@@ -323,7 +323,7 @@ export default function LeaguePage() {
           alignItems: 'center',
           marginBottom: '20px'
         }}>
-          <h3 style={{ margin: 0, fontSize: '20px' }}>
+          <h3 style={{ margin: 0, fontSize: '20px', color: '#111' }}>
             👥 参赛队伍 ({teams.length}/{league.max_teams})
           </h3>
           {canStartDraft && (
@@ -386,7 +386,8 @@ export default function LeaguePage() {
                   marginBottom: '4px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '8px',
+                  color: '#111'
                 }}>
                   {team.name}
                   {myTeam?.id === team.id && (
@@ -405,7 +406,7 @@ export default function LeaguePage() {
                     <span style={{ fontSize: '14px' }}>👑</span>
                   )}
                 </div>
-                <div style={{ color: '#64748b', fontSize: '13px' }}>
+                <div style={{ color: '#333', fontSize: '13px' }}>
                   {league.status === "draft_pending" ? "等待选秀" : `${team.wins}-${team.losses}`}
                 </div>
               </div>
@@ -428,7 +429,7 @@ export default function LeaguePage() {
                 cursor: myTeam ? 'default' : 'pointer',
                 flexDirection: 'column',
                 gap: '8px',
-                color: '#94a3b8'
+                color: '#555'
               }}
             >
               <span style={{ fontSize: '32px' }}>➕</span>
@@ -474,7 +475,7 @@ export default function LeaguePage() {
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <h3 style={{ margin: 0, fontSize: '20px' }}>➕ 加入联赛</h3>
+              <h3 style={{ margin: 0, fontSize: '20px', color: '#111' }}>➕ 加入联赛</h3>
               <button 
                 onClick={() => setShowJoinModal(false)}
                 style={{
@@ -492,7 +493,7 @@ export default function LeaguePage() {
             </div>
             
             <div style={{ padding: '24px' }}>
-              <p style={{ margin: '0 0 16px 0', color: '#64748b' }}>
+              <p style={{ margin: '0 0 16px 0', color: '#333' }}>
                 请为你的队伍起个名字
               </p>
               
@@ -524,15 +525,15 @@ export default function LeaguePage() {
                 background: '#f8fafc',
                 borderRadius: '8px'
               }}>
-                <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>📋 你将获得:</p>
+                <p style={{ margin: '0 0 12px 0', fontWeight: 600, color: '#111' }}>📋 你将获得:</p>
                 <ul style={{ margin: 0, paddingLeft: '24px' }}>
-                  <li style={{ marginBottom: '8px', color: '#64748b' }}>
+                  <li style={{ marginBottom: '8px', color: '#333' }}>
                     一个独特的选秀位置 (#{teams.length + 1})
                   </li>
-                  <li style={{ marginBottom: '8px', color: '#64748b' }}>
+                  <li style={{ marginBottom: '8px', color: '#333' }}>
                     13个球员名额
                   </li>
-                  <li style={{ color: '#64748b' }}>
+                  <li style={{ color: '#333' }}>
                     参与所有周赛
                   </li>
                 </ul>
@@ -553,7 +554,7 @@ export default function LeaguePage() {
                   border: 'none',
                   borderRadius: '8px',
                   background: '#f1f5f9',
-                  color: '#64748b',
+                  color: '#333',
                   fontWeight: 600,
                   cursor: 'pointer'
                 }}
