@@ -283,6 +283,27 @@
      return { ok: true as const, user };
    }
    
+   // ==================== Password Reset ====================
+
+   export async function requestPasswordReset(email: string, redirectUrl?: string) {
+     const baseUrl = redirectUrl || (typeof window !== "undefined" ? window.location.origin : "");
+     const { error } = await supabase.auth.resetPasswordForEmail(email, {
+       redirectTo: `${baseUrl}/auth/reset-password`,
+     });
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const };
+   }
+
+   export async function updatePassword(newPassword: string) {
+     const { error } = await supabase.auth.updateUser({ password: newPassword });
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const };
+   }
+
    // ==================== Users (Supabase) ====================
    
    export async function getUserById(id: string): Promise<User | null> {

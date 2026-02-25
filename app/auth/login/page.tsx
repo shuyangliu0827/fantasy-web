@@ -68,6 +68,11 @@ export default function LoginPage() {
               placeholder="••••••••"
               required
             />
+            <div style={{ marginTop: 8, textAlign: "right" }}>
+              <Link href="/auth/forgot-password" style={{ fontSize: 13, color: "#f59e0b", fontWeight: 500 }}>
+                {t("忘记密码？", "Forgot password?")}
+              </Link>
+            </div>
           </div>
 
           {error && <div className="form-error">{error}</div>}
