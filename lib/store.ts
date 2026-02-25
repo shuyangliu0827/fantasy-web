@@ -636,12 +636,17 @@
      const user = getSessionUser();
      if (!user) return { ok: false as const, error: "Login required" };
    
-     const slug = input.name
+     let slug = input.name
        .trim()
        .toLowerCase()
        .replace(/[^a-z0-9]+/g, "-")
        .replace(/^-+|-+$/g, "")
        .slice(0, 40);
+
+     // If slug is empty (e.g. Chinese characters only), generate a random one
+     if (!slug) {
+       slug = "league-" + Math.random().toString(36).slice(2, 10);
+     }
    
      const { data, error } = await supabase
        .from("leagues")
