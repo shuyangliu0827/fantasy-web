@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { getLeagueBySlug, getSessionUser, supabase as storeSupa } from "@/lib/store";
 
 import DraftRoom from "@/components/DraftRoom";
@@ -267,6 +267,48 @@ export default function LeaguePage() {
           </div>
         )}
       </div>
+
+      {/* 快速操作 - 联赛进行中时显示 */}
+      {league.status === 'active' && myTeam && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px'
+        }}>
+          {[
+            { href: `/league/${leagueId}/roster`, icon: '📋', title: '查看阵容', desc: '管理首发和板凳' },
+            { href: `/league/${leagueId}/free-agents`, icon: '🏪', title: '自由市场', desc: '签约和放弃球员' },
+            { href: `/league/${leagueId}/trade`, icon: '🔄', title: '球员交易', desc: '与其他队伍交易' },
+            { href: `/league/${leagueId}/standings`, icon: '🏆', title: '排行榜', desc: '查看联赛排名' },
+          ].map(item => (
+            <a
+              key={item.href}
+              href={item.href}
+              style={{
+                background: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                textDecoration: 'none',
+                color: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                border: '2px solid transparent',
+                transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#3b82f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+            >
+              <span style={{ fontSize: '32px' }}>{item.icon}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '15px' }}>{item.title}</div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>{item.desc}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
 
       {/* 参赛队伍 */}
       <div style={{

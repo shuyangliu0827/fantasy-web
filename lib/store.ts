@@ -1004,3 +1004,313 @@
      localStorage.setItem(KEYS.myTeams, JSON.stringify(all));
      return { ok: true as const };
    }
+
+   // ==================== League Roster (localStorage) ====================
+
+   export type RosterPlayer = {
+     id: string;
+     name: string;
+     team: string;
+     position: string;
+     ppg: number;
+     rpg: number;
+     apg: number;
+     spg: number;
+     bpg: number;
+     fg: number;
+     ft: number;
+     tov: number;
+     round: number;
+     acquiredVia?: "draft" | "free_agent" | "trade";
+     acquiredAt?: number;
+   };
+
+   // Fantasy basketball lineup slots
+   export const LINEUP_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"] as const;
+   export type LineupSlot = typeof LINEUP_SLOTS[number];
+
+   // Which positions are eligible for which slot
+   const SLOT_ELIGIBLE: Record<string, string[]> = {
+     PG: ["PG"],
+     SG: ["SG"],
+     SF: ["SF"],
+     PF: ["PF"],
+     C: ["C"],
+     G: ["PG", "SG"],
+     F: ["SF", "PF"],
+     UTIL1: ["PG", "SG", "SF", "PF", "C"],
+     UTIL2: ["PG", "SG", "SF", "PF", "C"],
+     BE1: ["PG", "SG", "SF", "PF", "C"],
+     BE2: ["PG", "SG", "SF", "PF", "C"],
+     BE3: ["PG", "SG", "SF", "PF", "C"],
+     BE4: ["PG", "SG", "SF", "PF", "C"],
+   };
+
+   export function isEligibleForSlot(playerPosition: string, slot: string): boolean {
+     const eligible = SLOT_ELIGIBLE[slot];
+     if (!eligible) return false;
+     // Player position can be "PG", "SG/SF", "PF/C" etc.
+     const positions = playerPosition.split("/").map(p => p.trim());
+     return positions.some(p => eligible.includes(p));
+   }
+
+   export function getLeagueRosters(leagueId: string): Record<string, RosterPlayer[]> {
+     if (!canUseStorage()) return {};
+     return safeParse<Record<string, RosterPlayer[]>>(
+       localStorage.getItem(`bp_league_rosters_${leagueId}`), {}
+     );
+   }
+
+   export function getTeamRoster(leagueId: string, teamId: string): RosterPlayer[] {
+     const all = getLeagueRosters(leagueId);
+     return all[teamId] || [];
+   }
+
+   export function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]) {
+     if (!canUseStorage()) return;
+     const all = getLeagueRosters(leagueId);
+     all[teamId] = roster;
+     localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+   }
+
+   // Lineup: { PG: playerId, SG: playerId, ... }
+   export type LineupMap = Record<string, string>;
+
+   export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
+     if (!canUseStorage()) return {};
+     return safeParse<LineupMap>(
+       localStorage.getItem(`bp_league_lineup_${leagueId}_${teamId}`), {}
+     );
+   }
+
+   export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
+     if (!canUseStorage()) return;
+     localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
+   }
+
+   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
+     const roster = getTeamRoster(leagueId, teamId);
+     const lineup: LineupMap = {};
+     const assigned = new Set<string>();
+
+     // Auto-assign: go through slots in order, pick best available player
+     const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"];
+     for (const slot of slotOrder) {
+       const eligible = roster
+         .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
+         .sort((a, b) => b.ppg - a.ppg);
+       if (eligible.length > 0) {
+         lineup[slot] = eligible[0].id;
+         assigned.add(eligible[0].id);
+       }
+     }
+     setTeamLineup(leagueId, teamId, lineup);
+     return lineup;
+   }
+
+   // ==================== Free Agency (localStorage) ====================
+
+   export function getUndraftedPlayers(leagueId: string): Player[] {
+     const allPlayers = getPlayers();
+     const rosters = getLeagueRosters(leagueId);
+     const draftedIds = new Set<string>();
+     for (const teamPlayers of Object.values(rosters)) {
+       for (const p of teamPlayers) {
+         draftedIds.add(p.id);
+       }
+     }
+     return allPlayers.filter(p => !draftedIds.has(p.id));
+   }
+
+   export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
+     if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+     const roster = getTeamRoster(leagueId, teamId);
+     const allPlayers = getPlayers();
+     const player = allPlayers.find(p => p.id === playerId);
+     if (!player) return { ok: false, error: "Player not found" };
+
+     // Check if player is already on a team
+     const rosters = getLeagueRosters(leagueId);
+     for (const [tid, teamRoster] of Object.entries(rosters)) {
+       if (teamRoster.some(p => p.id === playerId)) {
+         return { ok: false, error: tid === teamId ? "Player already on your team" : "Player is on another team" };
+       }
+     }
+
+     if (dropPlayerId) {
+       // Drop a player and add the free agent
+       const dropIdx = roster.findIndex(p => p.id === dropPlayerId);
+       if (dropIdx === -1) return { ok: false, error: "Drop player not found on roster" };
+       roster.splice(dropIdx, 1);
+       // Also update lineup if dropped player was in it
+       const lineup = getTeamLineup(leagueId, teamId);
+       for (const [slot, pid] of Object.entries(lineup)) {
+         if (pid === dropPlayerId) delete lineup[slot];
+       }
+       setTeamLineup(leagueId, teamId, lineup);
+     } else if (roster.length >= 13) {
+       return { ok: false, error: "Roster is full (13 players). Drop a player first." };
+     }
+
+     const newPlayer: RosterPlayer = {
+       id: player.id,
+       name: player.name,
+       team: player.team,
+       position: player.position,
+       ppg: player.ppg,
+       rpg: player.rpg,
+       apg: player.apg,
+       spg: player.spg,
+       bpg: player.bpg,
+       fg: player.fg,
+       ft: player.ft,
+       tov: player.tov,
+       round: 0,
+       acquiredVia: "free_agent",
+       acquiredAt: Date.now(),
+     };
+
+     roster.push(newPlayer);
+     setTeamRoster(leagueId, teamId, roster);
+     return { ok: true };
+   }
+
+   export function dropPlayer(leagueId: string, teamId: string, playerId: string): { ok: boolean; error?: string } {
+     if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+     const roster = getTeamRoster(leagueId, teamId);
+     const idx = roster.findIndex(p => p.id === playerId);
+     if (idx === -1) return { ok: false, error: "Player not on roster" };
+     roster.splice(idx, 1);
+     setTeamRoster(leagueId, teamId, roster);
+     // Remove from lineup
+     const lineup = getTeamLineup(leagueId, teamId);
+     for (const [slot, pid] of Object.entries(lineup)) {
+       if (pid === playerId) delete lineup[slot];
+     }
+     setTeamLineup(leagueId, teamId, lineup);
+     return { ok: true };
+   }
+
+   // ==================== Trades (localStorage) ====================
+
+   export type TradeProposal = {
+     id: string;
+     leagueId: string;
+     fromTeamId: string;
+     fromTeamName: string;
+     toTeamId: string;
+     toTeamName: string;
+     offeredPlayerIds: string[];
+     requestedPlayerIds: string[];
+     status: "pending" | "accepted" | "rejected" | "cancelled";
+     createdAt: number;
+     resolvedAt?: number;
+     message?: string;
+   };
+
+   export function getLeagueTrades(leagueId: string): TradeProposal[] {
+     if (!canUseStorage()) return [];
+     return safeParse<TradeProposal[]>(
+       localStorage.getItem(`bp_league_trades_${leagueId}`), []
+     );
+   }
+
+   function saveLeagueTrades(leagueId: string, trades: TradeProposal[]) {
+     if (!canUseStorage()) return;
+     localStorage.setItem(`bp_league_trades_${leagueId}`, JSON.stringify(trades));
+   }
+
+   export function proposeTrade(input: {
+     leagueId: string;
+     fromTeamId: string;
+     fromTeamName: string;
+     toTeamId: string;
+     toTeamName: string;
+     offeredPlayerIds: string[];
+     requestedPlayerIds: string[];
+     message?: string;
+   }): { ok: boolean; trade?: TradeProposal; error?: string } {
+     if (input.offeredPlayerIds.length === 0 || input.requestedPlayerIds.length === 0) {
+       return { ok: false, error: "Must offer and request at least one player" };
+     }
+     const trade: TradeProposal = {
+       id: uid("trade"),
+       ...input,
+       status: "pending",
+       createdAt: Date.now(),
+     };
+     const trades = getLeagueTrades(input.leagueId);
+     trades.push(trade);
+     saveLeagueTrades(input.leagueId, trades);
+     return { ok: true, trade };
+   }
+
+   export function respondToTrade(leagueId: string, tradeId: string, accept: boolean): { ok: boolean; error?: string } {
+     const trades = getLeagueTrades(leagueId);
+     const idx = trades.findIndex(t => t.id === tradeId);
+     if (idx === -1) return { ok: false, error: "Trade not found" };
+     const trade = trades[idx];
+     if (trade.status !== "pending") return { ok: false, error: "Trade already resolved" };
+
+     if (accept) {
+       // Execute the trade: swap players between rosters
+       const fromRoster = getTeamRoster(leagueId, trade.fromTeamId);
+       const toRoster = getTeamRoster(leagueId, trade.toTeamId);
+
+       const offeredPlayers = fromRoster.filter(p => trade.offeredPlayerIds.includes(p.id));
+       const requestedPlayers = toRoster.filter(p => trade.requestedPlayerIds.includes(p.id));
+
+       if (offeredPlayers.length !== trade.offeredPlayerIds.length) {
+         return { ok: false, error: "Some offered players not found on roster" };
+       }
+       if (requestedPlayers.length !== trade.requestedPlayerIds.length) {
+         return { ok: false, error: "Some requested players not found on roster" };
+       }
+
+       // Remove from original rosters
+       const newFromRoster = fromRoster.filter(p => !trade.offeredPlayerIds.includes(p.id));
+       const newToRoster = toRoster.filter(p => !trade.requestedPlayerIds.includes(p.id));
+
+       // Add to new rosters with updated acquisition info
+       for (const p of offeredPlayers) {
+         newToRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+       }
+       for (const p of requestedPlayers) {
+         newFromRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+       }
+
+       setTeamRoster(leagueId, trade.fromTeamId, newFromRoster);
+       setTeamRoster(leagueId, trade.toTeamId, newToRoster);
+
+       // Clean up lineups for traded players
+       for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
+         const lineup = getTeamLineup(leagueId, teamId);
+         const roster = teamId === trade.fromTeamId ? newFromRoster : newToRoster;
+         const rosterIds = new Set(roster.map(p => p.id));
+         for (const [slot, pid] of Object.entries(lineup)) {
+           if (!rosterIds.has(pid)) delete lineup[slot];
+         }
+         setTeamLineup(leagueId, teamId, lineup);
+       }
+
+       trade.status = "accepted";
+     } else {
+       trade.status = "rejected";
+     }
+
+     trade.resolvedAt = Date.now();
+     trades[idx] = trade;
+     saveLeagueTrades(leagueId, trades);
+     return { ok: true };
+   }
+
+   export function cancelTrade(leagueId: string, tradeId: string): { ok: boolean; error?: string } {
+     const trades = getLeagueTrades(leagueId);
+     const idx = trades.findIndex(t => t.id === tradeId);
+     if (idx === -1) return { ok: false, error: "Trade not found" };
+     if (trades[idx].status !== "pending") return { ok: false, error: "Trade already resolved" };
+     trades[idx].status = "cancelled";
+     trades[idx].resolvedAt = Date.now();
+     saveLeagueTrades(leagueId, trades);
+     return { ok: true };
+   }

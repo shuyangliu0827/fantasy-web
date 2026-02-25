@@ -17,10 +17,11 @@ function LeagueNav({ slug, isOwner }: { slug: string; isOwner: boolean }) {
   const { t } = useLang();
   const mainNav = [
     { href: `/league/${slug}`, label: t("联赛主页", "League Home"), icon: "🏠" },
+    { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), icon: "📋" },
+    { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), icon: "🏪" },
+    { href: `/league/${slug}/trade`, label: t("交易", "Trade"), icon: "🔄" },
     { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), icon: "🏆" },
     { href: `/league/${slug}/scoreboard`, label: t("记分板", "Scoreboard"), icon: "📊" },
-    { href: `/league/${slug}/schedule`, label: t("赛程表", "Schedule"), icon: "📅" },
-    { href: `/league/${slug}/board`, label: t("讨论区", "Message Board"), icon: "💬" },
     { href: `/league/${slug}/members`, label: t("成员", "Members"), icon: "👥" },
   ];
   if (isOwner) {

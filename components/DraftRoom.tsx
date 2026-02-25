@@ -143,6 +143,41 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     setTimer(90);
   }, [numTeams]);
 
+  // Save draft results to localStorage when draft completes
+  useEffect(() => {
+    if (!draftState.draftComplete || draftState.picks.length === 0) return;
+    try {
+      const rostersByTeam: Record<string, { id: string; name: string; team: string; position: string; ppg: number; rpg: number; apg: number; spg: number; bpg: number; fg: number; ft: number; tov: number; round: number }[]> = {};
+      for (const pick of draftState.picks) {
+        if (!rostersByTeam[pick.teamId]) rostersByTeam[pick.teamId] = [];
+        rostersByTeam[pick.teamId].push({
+          id: pick.player.id,
+          name: pick.player.name,
+          team: pick.player.team,
+          position: pick.player.position,
+          ppg: pick.player.ppg,
+          rpg: pick.player.rpg,
+          apg: pick.player.apg,
+          spg: pick.player.spg,
+          bpg: pick.player.bpg,
+          fg: pick.player.fg,
+          ft: pick.player.ft,
+          tov: pick.player.tov,
+          round: pick.round,
+        });
+      }
+      localStorage.setItem(`bp_league_rosters_${league.id}`, JSON.stringify(rostersByTeam));
+      localStorage.setItem(`bp_league_draft_picks_${league.id}`, JSON.stringify(draftState.picks.map(p => ({
+        round: p.round, pickInRound: p.pickInRound, overallPick: p.overallPick,
+        teamId: p.teamId, teamName: p.teamName,
+        playerId: p.player.id, playerName: p.player.name,
+        playerTeam: p.player.team, playerPosition: p.player.position,
+      }))));
+    } catch (e) {
+      console.error("Failed to save draft results:", e);
+    }
+  }, [draftState.draftComplete, draftState.picks, league.id]);
+
   // Timer countdown
   useEffect(() => {
     if (draftState.draftComplete) return;
