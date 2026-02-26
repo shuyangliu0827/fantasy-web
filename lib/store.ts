@@ -182,66 +182,128 @@
      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
    }
    
-   export function logout() {
+   export async function logout() {
      if (typeof window === "undefined") return;
      localStorage.removeItem(SESSION_KEY);
+     await supabase.auth.signOut().catch(() => {});
    }
    
    // ==================== Auth (Supabase + localStorage for password) ====================
    
    export async function signup(name: string, email: string, password: string) {
-     const { data: existingUser } = await supabase
-       .from("users")
-       .select("id")
-       .eq("email", email)
-       .single();
-   
-     if (existingUser) {
-       return { ok: false as const, error: "Email already exists" };
+     // 1. Use Supabase Auth for password storage (works across all browsers/devices)
+     const { data: authData, error: authError } = await supabase.auth.signUp({
+       email,
+       password,
+     });
+
+     if (authError) {
+       // Check if it's a duplicate email error
+       if (authError.message.toLowerCase().includes("already") || authError.message.toLowerCase().includes("exists")) {
+         return { ok: false as const, error: "Email already exists" };
+       }
+       return { ok: false as const, error: authError.message };
      }
-   
+
+     if (!authData.user) {
+       return { ok: false as const, error: "Signup failed" };
+     }
+
+     // 2. Create user profile in users table
      const username = email.split("@")[0];
      const { data: newUser, error } = await supabase
        .from("users")
-       .insert({ name, email, username })
+       .insert({ id: authData.user.id, name, email, username })
        .select()
        .single();
-   
+
      if (error) {
-       return { ok: false as const, error: error.message };
+       // If users table insert fails, try without specifying id (in case of uuid mismatch)
+       const { data: fallbackUser, error: fallbackError } = await supabase
+         .from("users")
+         .insert({ name, email, username })
+         .select()
+         .single();
+
+       if (fallbackError) {
+         return { ok: false as const, error: fallbackError.message };
+       }
+       setSessionUser(fallbackUser);
+       return { ok: true as const, user: fallbackUser };
      }
-   
-     // Store password in localStorage (simplified, use Supabase Auth in production)
-     const users = JSON.parse(localStorage.getItem("bp_users") || "[]");
-     users.push({ id: newUser.id, email, password });
-     localStorage.setItem("bp_users", JSON.stringify(users));
-   
+
      setSessionUser(newUser);
      return { ok: true as const, user: newUser };
    }
    
    export async function login(email: string, password: string) {
+     // 1. Try Supabase Auth first (works across all browsers/devices)
+     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+       email,
+       password,
+     });
+
+     if (!authError && authData.user) {
+       // Supabase Auth succeeded — fetch user profile
+       const { data: user, error } = await supabase
+         .from("users")
+         .select("*")
+         .eq("email", email)
+         .single();
+
+       if (user) {
+         setSessionUser(user);
+         return { ok: true as const, user };
+       }
+     }
+
+     // 2. Fallback: check localStorage for old accounts (backward compat)
      const users = JSON.parse(localStorage.getItem("bp_users") || "[]");
      const storedUser = users.find((u: any) => u.email === email);
-   
+
      if (!storedUser || storedUser.password !== password) {
        return { ok: false as const, error: "Invalid credentials" };
      }
-   
+
+     // localStorage auth succeeded — fetch user profile from Supabase
      const { data: user, error } = await supabase
        .from("users")
        .select("*")
        .eq("email", email)
        .single();
-   
+
      if (error || !user) {
        return { ok: false as const, error: "User not found" };
      }
-   
+
+     // Auto-migrate: create Supabase Auth account so future logins work everywhere
+     await supabase.auth.signUp({ email, password }).catch(() => {});
+
      setSessionUser(user);
      return { ok: true as const, user };
    }
    
+   // ==================== Password Reset ====================
+
+   export async function requestPasswordReset(email: string, redirectUrl?: string) {
+     const baseUrl = redirectUrl || (typeof window !== "undefined" ? window.location.origin : "");
+     const { error } = await supabase.auth.resetPasswordForEmail(email, {
+       redirectTo: `${baseUrl}/auth/reset-password`,
+     });
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const };
+   }
+
+   export async function updatePassword(newPassword: string) {
+     const { error } = await supabase.auth.updateUser({ password: newPassword });
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const };
+   }
+
    // ==================== Users (Supabase) ====================
    
    export async function getUserById(id: string): Promise<User | null> {
@@ -574,12 +636,17 @@
      const user = getSessionUser();
      if (!user) return { ok: false as const, error: "Login required" };
    
-     const slug = input.name
+     let slug = input.name
        .trim()
        .toLowerCase()
        .replace(/[^a-z0-9]+/g, "-")
        .replace(/^-+|-+$/g, "")
        .slice(0, 40);
+
+     // If slug is empty (e.g. Chinese characters only), generate a random one
+     if (!slug) {
+       slug = "league-" + Math.random().toString(36).slice(2, 10);
+     }
    
      const { data, error } = await supabase
        .from("leagues")
@@ -936,4 +1003,371 @@
      all[idx].players = all[idx].players.filter((p) => p !== playerId);
      localStorage.setItem(KEYS.myTeams, JSON.stringify(all));
      return { ok: true as const };
+   }
+
+   // ==================== League Roster (localStorage) ====================
+
+   export type RosterPlayer = {
+     id: string;
+     name: string;
+     team: string;
+     position: string;
+     ppg: number;
+     rpg: number;
+     apg: number;
+     spg: number;
+     bpg: number;
+     fg: number;
+     ft: number;
+     tov: number;
+     round: number;
+     acquiredVia?: "draft" | "free_agent" | "trade";
+     acquiredAt?: number;
+   };
+
+   // Fantasy basketball lineup slots
+   export const LINEUP_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"] as const;
+   export type LineupSlot = typeof LINEUP_SLOTS[number];
+
+   // Which positions are eligible for which slot
+   const SLOT_ELIGIBLE: Record<string, string[]> = {
+     PG: ["PG"],
+     SG: ["SG"],
+     SF: ["SF"],
+     PF: ["PF"],
+     C: ["C"],
+     G: ["PG", "SG"],
+     F: ["SF", "PF"],
+     UTIL1: ["PG", "SG", "SF", "PF", "C"],
+     UTIL2: ["PG", "SG", "SF", "PF", "C"],
+     BE1: ["PG", "SG", "SF", "PF", "C"],
+     BE2: ["PG", "SG", "SF", "PF", "C"],
+     BE3: ["PG", "SG", "SF", "PF", "C"],
+     BE4: ["PG", "SG", "SF", "PF", "C"],
+   };
+
+   export function isEligibleForSlot(playerPosition: string, slot: string): boolean {
+     const eligible = SLOT_ELIGIBLE[slot];
+     if (!eligible) return false;
+     // Player position can be "PG", "SG/SF", "PF/C" etc.
+     const positions = playerPosition.split("/").map(p => p.trim());
+     return positions.some(p => eligible.includes(p));
+   }
+
+   export function getLeagueRosters(leagueId: string): Record<string, RosterPlayer[]> {
+     if (!canUseStorage()) return {};
+     return safeParse<Record<string, RosterPlayer[]>>(
+       localStorage.getItem(`bp_league_rosters_${leagueId}`), {}
+     );
+   }
+
+   export function getTeamRoster(leagueId: string, teamId: string): RosterPlayer[] {
+     const all = getLeagueRosters(leagueId);
+     return all[teamId] || [];
+   }
+
+   export function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]) {
+     if (!canUseStorage()) return;
+     const all = getLeagueRosters(leagueId);
+     all[teamId] = roster;
+     localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+   }
+
+   // Lineup: { PG: playerId, SG: playerId, ... }
+   export type LineupMap = Record<string, string>;
+
+   export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
+     if (!canUseStorage()) return {};
+     return safeParse<LineupMap>(
+       localStorage.getItem(`bp_league_lineup_${leagueId}_${teamId}`), {}
+     );
+   }
+
+   export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
+     if (!canUseStorage()) return;
+     localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
+   }
+
+   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
+     const roster = getTeamRoster(leagueId, teamId);
+     const lineup: LineupMap = {};
+     const assigned = new Set<string>();
+
+     // Auto-assign: go through slots in order, pick best available player
+     const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"];
+     for (const slot of slotOrder) {
+       const eligible = roster
+         .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
+         .sort((a, b) => b.ppg - a.ppg);
+       if (eligible.length > 0) {
+         lineup[slot] = eligible[0].id;
+         assigned.add(eligible[0].id);
+       }
+     }
+     setTeamLineup(leagueId, teamId, lineup);
+     return lineup;
+   }
+
+   // ==================== Free Agency (localStorage) ====================
+
+   export function getUndraftedPlayers(leagueId: string): Player[] {
+     const allPlayers = getPlayers();
+     const rosters = getLeagueRosters(leagueId);
+     const draftedIds = new Set<string>();
+     for (const teamPlayers of Object.values(rosters)) {
+       for (const p of teamPlayers) {
+         draftedIds.add(p.id);
+       }
+     }
+     return allPlayers.filter(p => !draftedIds.has(p.id));
+   }
+
+   export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
+     if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+     const roster = getTeamRoster(leagueId, teamId);
+     const allPlayers = getPlayers();
+     const player = allPlayers.find(p => p.id === playerId);
+     if (!player) return { ok: false, error: "Player not found" };
+
+     // Check if player is already on a team
+     const rosters = getLeagueRosters(leagueId);
+     for (const [tid, teamRoster] of Object.entries(rosters)) {
+       if (teamRoster.some(p => p.id === playerId)) {
+         return { ok: false, error: tid === teamId ? "Player already on your team" : "Player is on another team" };
+       }
+     }
+
+     if (dropPlayerId) {
+       // Drop a player and add the free agent
+       const dropIdx = roster.findIndex(p => p.id === dropPlayerId);
+       if (dropIdx === -1) return { ok: false, error: "Drop player not found on roster" };
+       roster.splice(dropIdx, 1);
+       // Also update lineup if dropped player was in it
+       const lineup = getTeamLineup(leagueId, teamId);
+       for (const [slot, pid] of Object.entries(lineup)) {
+         if (pid === dropPlayerId) delete lineup[slot];
+       }
+       setTeamLineup(leagueId, teamId, lineup);
+     } else if (roster.length >= 13) {
+       return { ok: false, error: "Roster is full (13 players). Drop a player first." };
+     }
+
+     const newPlayer: RosterPlayer = {
+       id: player.id,
+       name: player.name,
+       team: player.team,
+       position: player.position,
+       ppg: player.ppg,
+       rpg: player.rpg,
+       apg: player.apg,
+       spg: player.spg,
+       bpg: player.bpg,
+       fg: player.fg,
+       ft: player.ft,
+       tov: player.tov,
+       round: 0,
+       acquiredVia: "free_agent",
+       acquiredAt: Date.now(),
+     };
+
+     roster.push(newPlayer);
+     setTeamRoster(leagueId, teamId, roster);
+     return { ok: true };
+   }
+
+   export function dropPlayer(leagueId: string, teamId: string, playerId: string): { ok: boolean; error?: string } {
+     if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+     const roster = getTeamRoster(leagueId, teamId);
+     const idx = roster.findIndex(p => p.id === playerId);
+     if (idx === -1) return { ok: false, error: "Player not on roster" };
+     roster.splice(idx, 1);
+     setTeamRoster(leagueId, teamId, roster);
+     // Remove from lineup
+     const lineup = getTeamLineup(leagueId, teamId);
+     for (const [slot, pid] of Object.entries(lineup)) {
+       if (pid === playerId) delete lineup[slot];
+     }
+     setTeamLineup(leagueId, teamId, lineup);
+     return { ok: true };
+   }
+
+   // ==================== Trades (Supabase) ====================
+
+   export type TradeProposal = {
+     id: string;
+     leagueId: string;
+     fromTeamId: string;
+     fromTeamName: string;
+     toTeamId: string;
+     toTeamName: string;
+     offeredPlayerIds: string[];
+     requestedPlayerIds: string[];
+     status: "pending" | "accepted" | "rejected" | "cancelled";
+     createdAt: number;
+     resolvedAt?: number;
+     message?: string;
+   };
+
+   // Map Supabase row to TradeProposal
+   function mapTradeRow(row: any): TradeProposal {
+     return {
+       id: row.id,
+       leagueId: row.league_id,
+       fromTeamId: row.from_team_id,
+       fromTeamName: row.from_team_name,
+       toTeamId: row.to_team_id,
+       toTeamName: row.to_team_name,
+       offeredPlayerIds: row.offered_player_ids || [],
+       requestedPlayerIds: row.requested_player_ids || [],
+       status: row.status,
+       createdAt: new Date(row.created_at).getTime(),
+       resolvedAt: row.resolved_at ? new Date(row.resolved_at).getTime() : undefined,
+       message: row.message,
+     };
+   }
+
+   export async function getLeagueTrades(leagueId: string): Promise<TradeProposal[]> {
+     const { data, error } = await supabase
+       .from("trade_proposals")
+       .select("*")
+       .eq("league_id", leagueId)
+       .order("created_at", { ascending: false });
+     if (error) {
+       console.error("[getLeagueTrades] error:", error);
+       return [];
+     }
+     return (data || []).map(mapTradeRow);
+   }
+
+   export async function getPendingTradeCount(leagueId: string, teamId: string): Promise<number> {
+     const { count, error } = await supabase
+       .from("trade_proposals")
+       .select("*", { count: "exact", head: true })
+       .eq("league_id", leagueId)
+       .eq("to_team_id", teamId)
+       .eq("status", "pending");
+     if (error) return 0;
+     return count || 0;
+   }
+
+   export async function proposeTrade(input: {
+     leagueId: string;
+     fromTeamId: string;
+     fromTeamName: string;
+     toTeamId: string;
+     toTeamName: string;
+     offeredPlayerIds: string[];
+     requestedPlayerIds: string[];
+     message?: string;
+   }): Promise<{ ok: boolean; trade?: TradeProposal; error?: string }> {
+     if (input.offeredPlayerIds.length === 0 || input.requestedPlayerIds.length === 0) {
+       return { ok: false, error: "Must offer and request at least one player" };
+     }
+     const { data, error } = await supabase
+       .from("trade_proposals")
+       .insert({
+         league_id: input.leagueId,
+         from_team_id: input.fromTeamId,
+         from_team_name: input.fromTeamName,
+         to_team_id: input.toTeamId,
+         to_team_name: input.toTeamName,
+         offered_player_ids: input.offeredPlayerIds,
+         requested_player_ids: input.requestedPlayerIds,
+         message: input.message || null,
+         status: "pending",
+       })
+       .select()
+       .single();
+
+     if (error) {
+       return { ok: false, error: error.message };
+     }
+     return { ok: true, trade: mapTradeRow(data) };
+   }
+
+   export async function respondToTrade(leagueId: string, tradeId: string, accept: boolean): Promise<{ ok: boolean; error?: string }> {
+     // Fetch the trade from Supabase
+     const { data: row, error: fetchError } = await supabase
+       .from("trade_proposals")
+       .select("*")
+       .eq("id", tradeId)
+       .single();
+
+     if (fetchError || !row) return { ok: false, error: "Trade not found" };
+     if (row.status !== "pending") return { ok: false, error: "Trade already resolved" };
+
+     const trade = mapTradeRow(row);
+
+     if (accept) {
+       // Execute the trade: swap players between rosters (localStorage)
+       const fromRoster = getTeamRoster(leagueId, trade.fromTeamId);
+       const toRoster = getTeamRoster(leagueId, trade.toTeamId);
+
+       const offeredPlayers = fromRoster.filter(p => trade.offeredPlayerIds.includes(p.id));
+       const requestedPlayers = toRoster.filter(p => trade.requestedPlayerIds.includes(p.id));
+
+       if (offeredPlayers.length !== trade.offeredPlayerIds.length) {
+         return { ok: false, error: "Some offered players not found on roster" };
+       }
+       if (requestedPlayers.length !== trade.requestedPlayerIds.length) {
+         return { ok: false, error: "Some requested players not found on roster" };
+       }
+
+       // Remove from original rosters
+       const newFromRoster = fromRoster.filter(p => !trade.offeredPlayerIds.includes(p.id));
+       const newToRoster = toRoster.filter(p => !trade.requestedPlayerIds.includes(p.id));
+
+       // Add to new rosters with updated acquisition info
+       for (const p of offeredPlayers) {
+         newToRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+       }
+       for (const p of requestedPlayers) {
+         newFromRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+       }
+
+       setTeamRoster(leagueId, trade.fromTeamId, newFromRoster);
+       setTeamRoster(leagueId, trade.toTeamId, newToRoster);
+
+       // Clean up lineups for traded players
+       for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
+         const lineup = getTeamLineup(leagueId, teamId);
+         const roster = teamId === trade.fromTeamId ? newFromRoster : newToRoster;
+         const rosterIds = new Set(roster.map(p => p.id));
+         for (const [slot, pid] of Object.entries(lineup)) {
+           if (!rosterIds.has(pid)) delete lineup[slot];
+         }
+         setTeamLineup(leagueId, teamId, lineup);
+       }
+     }
+
+     // Update status in Supabase
+     const newStatus = accept ? "accepted" : "rejected";
+     const { error: updateError } = await supabase
+       .from("trade_proposals")
+       .update({ status: newStatus, resolved_at: new Date().toISOString() })
+       .eq("id", tradeId);
+
+     if (updateError) {
+       return { ok: false, error: updateError.message };
+     }
+     return { ok: true };
+   }
+
+   export async function cancelTrade(leagueId: string, tradeId: string): Promise<{ ok: boolean; error?: string }> {
+     const { data: row, error: fetchError } = await supabase
+       .from("trade_proposals")
+       .select("status")
+       .eq("id", tradeId)
+       .single();
+
+     if (fetchError || !row) return { ok: false, error: "Trade not found" };
+     if (row.status !== "pending") return { ok: false, error: "Trade already resolved" };
+
+     const { error } = await supabase
+       .from("trade_proposals")
+       .update({ status: "cancelled", resolved_at: new Date().toISOString() })
+       .eq("id", tradeId);
+
+     if (error) return { ok: false, error: error.message };
+     return { ok: true };
    }

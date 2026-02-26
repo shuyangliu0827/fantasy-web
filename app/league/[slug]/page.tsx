@@ -2,11 +2,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { getLeagueBySlug, getSessionUser, supabase as storeSupa } from "@/lib/store";
 
-// 先导入选秀房间组件（稍后创建）
-// import DraftRoom from "@/components/DraftRoom";
+import DraftRoom from "@/components/DraftRoom";
 
 export default function LeaguePage() {
   const params = useParams();
@@ -136,12 +135,15 @@ export default function LeaguePage() {
   // 如果选秀已开始且用户已加入，显示选秀房间
   if (league.status === "drafting" && myTeam) {
     return (
-      <div style={{ padding: '20px' }}>
-        <h1>🏀 选秀进行中...</h1>
-        <p>选秀房间功能正在开发中</p>
-        <p>您的队伍: {myTeam.team_name}</p>
-        <p>选秀位置: #{myTeam.draft_position}</p>
-      </div>
+      <DraftRoom
+        league={league}
+        teams={teams}
+        myTeam={myTeam}
+        onDraftComplete={async () => {
+          // DraftRoom already updates league status in Supabase when draft completes
+          await loadLeagueInfo();
+        }}
+      />
     );
   }
 
@@ -242,8 +244,8 @@ export default function LeaguePage() {
         marginBottom: '24px',
         borderLeft: '4px solid #3b82f6'
       }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px' }}>📢 联赛公告</h3>
-        <p style={{ margin: 0, color: '#64748b', lineHeight: 1.6 }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', color: '#111' }}>📢 联赛公告</h3>
+        <p style={{ margin: 0, color: '#333', lineHeight: 1.6 }}>
           欢迎来到联赛！准备好开始你的Fantasy 篮球之旅了吗?
         </p>
         {canStartDraft && (
@@ -261,6 +263,48 @@ export default function LeaguePage() {
         )}
       </div>
 
+      {/* 快速操作 - 联赛进行中时显示 */}
+      {league.status === 'active' && myTeam && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px'
+        }}>
+          {[
+            { href: `/league/${leagueId}/roster`, icon: '📋', title: '查看阵容', desc: '管理首发和板凳' },
+            { href: `/league/${leagueId}/free-agents`, icon: '🏪', title: '自由市场', desc: '签约和放弃球员' },
+            { href: `/league/${leagueId}/trade`, icon: '🔄', title: '球员交易', desc: '与其他队伍交易' },
+            { href: `/league/${leagueId}/standings`, icon: '🏆', title: '排行榜', desc: '查看联赛排名' },
+          ].map(item => (
+            <a
+              key={item.href}
+              href={item.href}
+              style={{
+                background: 'white',
+                padding: '20px',
+                borderRadius: '12px',
+                textDecoration: 'none',
+                color: 'inherit',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                border: '2px solid transparent',
+                transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#3b82f6')}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+            >
+              <span style={{ fontSize: '32px' }}>{item.icon}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '15px', color: '#111' }}>{item.title}</div>
+                <div style={{ fontSize: '12px', color: '#333' }}>{item.desc}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+
       {/* 参赛队伍 */}
       <div style={{
         background: 'white',
@@ -274,7 +318,7 @@ export default function LeaguePage() {
           alignItems: 'center',
           marginBottom: '20px'
         }}>
-          <h3 style={{ margin: 0, fontSize: '20px' }}>
+          <h3 style={{ margin: 0, fontSize: '20px', color: '#111' }}>
             👥 参赛队伍 ({teams.length}/{league.max_teams})
           </h3>
           {canStartDraft && (
@@ -337,7 +381,8 @@ export default function LeaguePage() {
                   marginBottom: '4px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px'
+                  gap: '8px',
+                  color: '#111'
                 }}>
                   {team.name}
                   {myTeam?.id === team.id && (
@@ -356,7 +401,7 @@ export default function LeaguePage() {
                     <span style={{ fontSize: '14px' }}>👑</span>
                   )}
                 </div>
-                <div style={{ color: '#64748b', fontSize: '13px' }}>
+                <div style={{ color: '#333', fontSize: '13px' }}>
                   {league.status === "draft_pending" ? "等待选秀" : `${team.wins}-${team.losses}`}
                 </div>
               </div>
@@ -379,7 +424,7 @@ export default function LeaguePage() {
                 cursor: myTeam ? 'default' : 'pointer',
                 flexDirection: 'column',
                 gap: '8px',
-                color: '#94a3b8'
+                color: '#555'
               }}
             >
               <span style={{ fontSize: '32px' }}>➕</span>
@@ -425,7 +470,7 @@ export default function LeaguePage() {
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <h3 style={{ margin: 0, fontSize: '20px' }}>➕ 加入联赛</h3>
+              <h3 style={{ margin: 0, fontSize: '20px', color: '#111' }}>➕ 加入联赛</h3>
               <button 
                 onClick={() => setShowJoinModal(false)}
                 style={{
@@ -443,7 +488,7 @@ export default function LeaguePage() {
             </div>
             
             <div style={{ padding: '24px' }}>
-              <p style={{ margin: '0 0 16px 0', color: '#64748b' }}>
+              <p style={{ margin: '0 0 16px 0', color: '#333' }}>
                 请为你的队伍起个名字
               </p>
               
@@ -475,15 +520,15 @@ export default function LeaguePage() {
                 background: '#f8fafc',
                 borderRadius: '8px'
               }}>
-                <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>📋 你将获得:</p>
+                <p style={{ margin: '0 0 12px 0', fontWeight: 600, color: '#111' }}>📋 你将获得:</p>
                 <ul style={{ margin: 0, paddingLeft: '24px' }}>
-                  <li style={{ marginBottom: '8px', color: '#64748b' }}>
+                  <li style={{ marginBottom: '8px', color: '#333' }}>
                     一个独特的选秀位置 (#{teams.length + 1})
                   </li>
-                  <li style={{ marginBottom: '8px', color: '#64748b' }}>
+                  <li style={{ marginBottom: '8px', color: '#333' }}>
                     13个球员名额
                   </li>
-                  <li style={{ color: '#64748b' }}>
+                  <li style={{ color: '#333' }}>
                     参与所有周赛
                   </li>
                 </ul>
@@ -504,7 +549,7 @@ export default function LeaguePage() {
                   border: 'none',
                   borderRadius: '8px',
                   background: '#f1f5f9',
-                  color: '#64748b',
+                  color: '#333',
                   fontWeight: 600,
                   cursor: 'pointer'
                 }}
