@@ -140,12 +140,7 @@ export default function LeaguePage() {
         teams={teams}
         myTeam={myTeam}
         onDraftComplete={async () => {
-          // 选秀完成后更新联赛状态
-          try {
-            await storeSupa.from("leagues").update({ status: "active" }).eq("slug", leagueId);
-          } catch (err) {
-            console.error("Failed to update league status:", err);
-          }
+          // DraftRoom already updates league status in Supabase when draft completes
           await loadLeagueInfo();
         }}
       />
