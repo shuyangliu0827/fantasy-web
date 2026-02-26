@@ -21,6 +21,17 @@ type DraftPick = {
   timestamp: number;
 };
 
+// Serializable version for localStorage / broadcast
+type SerializedPick = {
+  round: number;
+  pickInRound: number;
+  overallPick: number;
+  teamId: string;
+  teamName: string;
+  playerId: string;
+  timestamp: number;
+};
+
 type Props = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   league: any;
@@ -41,11 +52,59 @@ function getDraftingTeam(teams: Team[], numTeams: number, round: number, pickInR
   return teams.find(t => t.draft_position === draftPos);
 }
 
-// Compute round and pick from total number of picks
 function computeRoundAndPick(totalPicks: number, numTeams: number): { round: number; pickInRound: number } {
   const round = Math.floor(totalPicks / numTeams) + 1;
   const pickInRound = (totalPicks % numTeams) + 1;
   return { round, pickInRound };
+}
+
+// localStorage key for draft picks
+function draftStorageKey(leagueId: string) {
+  return `bp_draft_picks_${leagueId}`;
+}
+
+// Save picks to localStorage
+function savePicks(leagueId: string, picks: DraftPick[]) {
+  try {
+    const serialized: SerializedPick[] = picks.map(p => ({
+      round: p.round,
+      pickInRound: p.pickInRound,
+      overallPick: p.overallPick,
+      teamId: p.teamId,
+      teamName: p.teamName,
+      playerId: p.player.id,
+      timestamp: p.timestamp,
+    }));
+    localStorage.setItem(draftStorageKey(leagueId), JSON.stringify(serialized));
+  } catch (e) {
+    console.error("Failed to save draft picks:", e);
+  }
+}
+
+// Load picks from localStorage
+function loadStoredPicks(leagueId: string, allPlayers: Player[]): DraftPick[] {
+  try {
+    const raw = localStorage.getItem(draftStorageKey(leagueId));
+    if (!raw) return [];
+    const serialized: SerializedPick[] = JSON.parse(raw);
+    const picks: DraftPick[] = [];
+    for (const s of serialized) {
+      const player = allPlayers.find(p => p.id === s.playerId);
+      if (!player) continue;
+      picks.push({
+        round: s.round,
+        pickInRound: s.pickInRound,
+        overallPick: s.overallPick,
+        teamId: s.teamId,
+        teamName: s.teamName,
+        player,
+        timestamp: s.timestamp,
+      });
+    }
+    return picks.sort((a, b) => a.overallPick - b.overallPick);
+  } catch {
+    return [];
+  }
 }
 
 export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Props) {
@@ -85,123 +144,130 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   const picksRef = useRef(picks);
   useEffect(() => { picksRef.current = picks; }, [picks]);
 
-  // Build DraftPick from Supabase row
-  const buildPick = useCallback((row: any): DraftPick | null => {
-    const player = allPlayers.find(p => p.id === row.player_id);
-    if (!player) return null;
-    const team = teams.find(t => t.id === row.team_id);
-    return {
-      round: row.round,
-      pickInRound: row.pick_number,
-      overallPick: row.overall_pick,
-      teamId: row.team_id,
-      teamName: team?.name || row.team_name || "Unknown",
-      player,
-      timestamp: new Date(row.picked_at || row.created_at || Date.now()).getTime(),
-    };
-  }, [allPlayers, teams]);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Apply a list of picks to state
+  // Apply a list of picks to state + save to localStorage
   const applyPicks = useCallback((picksList: DraftPick[]) => {
     setPicks(picksList);
     setDraftedPlayerIds(new Set(picksList.map(p => p.player.id)));
     const complete = picksList.length >= totalPicksNeeded;
     setDraftComplete(complete);
-  }, [totalPicksNeeded]);
+    savePicks(league.id, picksList);
+  }, [totalPicksNeeded, league.id]);
 
-  // Load existing picks from Supabase on mount
-  useEffect(() => {
-    async function loadPicks() {
-      try {
-        const { data, error } = await supabase
-          .from("draft_picks")
-          .select("*")
-          .eq("league_id", league.id)
-          .order("overall_pick", { ascending: true });
+  // Merge incoming picks with current picks (dedup by overallPick)
+  const mergePicks = useCallback((incoming: SerializedPick[]) => {
+    const current = picksRef.current;
+    const existingOveralls = new Set(current.map(p => p.overallPick));
+    let hasNew = false;
+    const newPicks: DraftPick[] = [...current];
 
-        if (error) {
-          console.error("Failed to load draft picks:", error.message);
-          setLoading(false);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const loaded: DraftPick[] = [];
-          for (const row of data) {
-            const pick = buildPick(row);
-            if (pick) loaded.push(pick);
-          }
-          applyPicks(loaded);
-        }
-      } catch (err) {
-        console.error("Error loading picks:", err);
-      }
-      setLoading(false);
+    for (const s of incoming) {
+      if (existingOveralls.has(s.overallPick)) continue;
+      const player = allPlayers.find(p => p.id === s.playerId);
+      if (!player) continue;
+      newPicks.push({
+        round: s.round,
+        pickInRound: s.pickInRound,
+        overallPick: s.overallPick,
+        teamId: s.teamId,
+        teamName: s.teamName,
+        player,
+        timestamp: s.timestamp,
+      });
+      hasNew = true;
     }
 
-    loadPicks();
-  }, [league.id, buildPick, applyPicks]);
+    if (hasNew) {
+      newPicks.sort((a, b) => a.overallPick - b.overallPick);
+      applyPicks(newPicks);
+    }
+  }, [allPlayers, applyPicks]);
 
-  // Subscribe to Supabase Realtime for new picks
+  // Load from localStorage on mount + set up Realtime broadcast
   useEffect(() => {
-    const channel = supabase
-      .channel(`draft-${league.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "draft_picks",
-          filter: `league_id=eq.${league.id}`,
-        },
-        (payload) => {
-          const newPick = buildPick(payload.new);
-          if (!newPick) return;
+    // Load from localStorage
+    const stored = loadStoredPicks(league.id, allPlayers);
+    if (stored.length > 0) {
+      applyPicks(stored);
+    }
+    setLoading(false);
 
-          // Skip if we already have this pick
-          const existing = picksRef.current;
-          if (existing.some(p => p.overallPick === newPick.overallPick)) return;
+    // Set up Supabase Realtime broadcast channel
+    const channel = supabase.channel(`draft-room-${league.id}`, {
+      config: { broadcast: { self: false } },
+    });
 
-          const updated = [...existing, newPick].sort((a, b) => a.overallPick - b.overallPick);
-          applyPicks(updated);
-          setTimer(90);
-
-          setShowPickBanner(newPick);
-          setTimeout(() => setShowPickBanner(null), 2500);
+    channel
+      .on("broadcast", { event: "pick" }, (payload) => {
+        // Received a new pick from another user
+        const pick = payload.payload as SerializedPick;
+        if (pick) {
+          mergePicks([pick]);
+          // Show banner
+          const player = allPlayers.find(p => p.id === pick.playerId);
+          if (player) {
+            const dp: DraftPick = {
+              round: pick.round,
+              pickInRound: pick.pickInRound,
+              overallPick: pick.overallPick,
+              teamId: pick.teamId,
+              teamName: pick.teamName,
+              player,
+              timestamp: pick.timestamp,
+            };
+            setShowPickBanner(dp);
+            setTimeout(() => setShowPickBanner(null), 2500);
+            setTimer(90);
+          }
         }
-      )
-      .subscribe();
+      })
+      .on("broadcast", { event: "sync_request" }, () => {
+        // Someone is requesting the full state - send our picks
+        const current = picksRef.current;
+        if (current.length > 0) {
+          const serialized: SerializedPick[] = current.map(p => ({
+            round: p.round,
+            pickInRound: p.pickInRound,
+            overallPick: p.overallPick,
+            teamId: p.teamId,
+            teamName: p.teamName,
+            playerId: p.player.id,
+            timestamp: p.timestamp,
+          }));
+          channel.send({
+            type: "broadcast",
+            event: "sync_response",
+            payload: { picks: serialized },
+          });
+        }
+      })
+      .on("broadcast", { event: "sync_response" }, (payload) => {
+        // Received full state from another user
+        const data = payload.payload as { picks: SerializedPick[] };
+        if (data?.picks?.length) {
+          mergePicks(data.picks);
+        }
+      })
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          // Request sync from other connected clients
+          channel.send({
+            type: "broadcast",
+            event: "sync_request",
+            payload: {},
+          });
+        }
+      });
+
+    channelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
+      channelRef.current = null;
     };
-  }, [league.id, buildPick, applyPicks]);
-
-  // Also poll every 3s as a fallback (in case Realtime misses something)
-  useEffect(() => {
-    if (draftComplete) return;
-    const interval = setInterval(async () => {
-      try {
-        const { data } = await supabase
-          .from("draft_picks")
-          .select("*")
-          .eq("league_id", league.id)
-          .order("overall_pick", { ascending: true });
-
-        if (data && data.length > picksRef.current.length) {
-          const loaded: DraftPick[] = [];
-          for (const row of data) {
-            const pick = buildPick(row);
-            if (pick) loaded.push(pick);
-          }
-          applyPicks(loaded);
-        }
-      } catch {
-        // Silent fail for polling
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [league.id, draftComplete, buildPick, applyPicks]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [league.id]);
 
   // Timer countdown
   useEffect(() => {
@@ -227,6 +293,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
         });
       }
       localStorage.setItem(`bp_league_rosters_${league.id}`, JSON.stringify(rostersByTeam));
+
+      // Update league status to active
+      supabase.from("leagues").update({ status: "active" }).eq("id", league.id).then(() => {});
     } catch (e) {
       console.error("Failed to save draft results:", e);
     }
@@ -244,27 +313,6 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       const pickInRound = currentPickInRound;
       const pickOverall = overallPick;
 
-      const { error } = await supabase.from("draft_picks").insert({
-        league_id: league.id,
-        team_id: team.id,
-        team_name: team.name,
-        player_id: player.id,
-        player_name: player.name,
-        player_team: player.team,
-        player_position: player.position,
-        round: pickRound,
-        pick_number: pickInRound,
-        overall_pick: pickOverall,
-      });
-
-      if (error) {
-        console.error("Pick failed:", error.message);
-        alert("选择失败: " + error.message);
-        setPicking(false);
-        return;
-      }
-
-      // Optimistic local update (Realtime will also fire)
       const newPick: DraftPick = {
         round: pickRound,
         pickInRound,
@@ -275,6 +323,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
         timestamp: Date.now(),
       };
 
+      // Update local state immediately
       const updated = [...picks, newPick];
       applyPicks(updated);
       setTimer(90);
@@ -282,16 +331,30 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       setShowPickBanner(newPick);
       setTimeout(() => setShowPickBanner(null), 2500);
 
-      // If draft complete, update league status
-      if (updated.length >= totalPicksNeeded) {
-        await supabase.from("leagues").update({ status: "active" }).eq("id", league.id);
+      // Broadcast to other users via Supabase Realtime
+      const serialized: SerializedPick = {
+        round: pickRound,
+        pickInRound,
+        overallPick: pickOverall,
+        teamId: team.id,
+        teamName: team.name,
+        playerId: player.id,
+        timestamp: newPick.timestamp,
+      };
+
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "pick",
+          payload: serialized,
+        });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Pick error:", err);
       alert("选择失败");
     }
     setPicking(false);
-  }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, league.id, picks, applyPicks, totalPicksNeeded]);
+  }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, picks, applyPicks]);
 
   const timerColor = timer <= 10 ? "#ef4444" : timer <= 30 ? "#f59e0b" : "#10b981";
 
