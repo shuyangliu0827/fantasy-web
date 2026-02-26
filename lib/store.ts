@@ -1191,7 +1191,7 @@
      return { ok: true };
    }
 
-   // ==================== Trades (localStorage) ====================
+   // ==================== Trades (Supabase) ====================
 
    export type TradeProposal = {
      id: string;
@@ -1208,19 +1208,49 @@
      message?: string;
    };
 
-   export function getLeagueTrades(leagueId: string): TradeProposal[] {
-     if (!canUseStorage()) return [];
-     return safeParse<TradeProposal[]>(
-       localStorage.getItem(`bp_league_trades_${leagueId}`), []
-     );
+   // Map Supabase row to TradeProposal
+   function mapTradeRow(row: any): TradeProposal {
+     return {
+       id: row.id,
+       leagueId: row.league_id,
+       fromTeamId: row.from_team_id,
+       fromTeamName: row.from_team_name,
+       toTeamId: row.to_team_id,
+       toTeamName: row.to_team_name,
+       offeredPlayerIds: row.offered_player_ids || [],
+       requestedPlayerIds: row.requested_player_ids || [],
+       status: row.status,
+       createdAt: new Date(row.created_at).getTime(),
+       resolvedAt: row.resolved_at ? new Date(row.resolved_at).getTime() : undefined,
+       message: row.message,
+     };
    }
 
-   function saveLeagueTrades(leagueId: string, trades: TradeProposal[]) {
-     if (!canUseStorage()) return;
-     localStorage.setItem(`bp_league_trades_${leagueId}`, JSON.stringify(trades));
+   export async function getLeagueTrades(leagueId: string): Promise<TradeProposal[]> {
+     const { data, error } = await supabase
+       .from("trade_proposals")
+       .select("*")
+       .eq("league_id", leagueId)
+       .order("created_at", { ascending: false });
+     if (error) {
+       console.error("[getLeagueTrades] error:", error);
+       return [];
+     }
+     return (data || []).map(mapTradeRow);
    }
 
-   export function proposeTrade(input: {
+   export async function getPendingTradeCount(leagueId: string, teamId: string): Promise<number> {
+     const { count, error } = await supabase
+       .from("trade_proposals")
+       .select("*", { count: "exact", head: true })
+       .eq("league_id", leagueId)
+       .eq("to_team_id", teamId)
+       .eq("status", "pending");
+     if (error) return 0;
+     return count || 0;
+   }
+
+   export async function proposeTrade(input: {
      leagueId: string;
      fromTeamId: string;
      fromTeamName: string;
@@ -1229,31 +1259,47 @@
      offeredPlayerIds: string[];
      requestedPlayerIds: string[];
      message?: string;
-   }): { ok: boolean; trade?: TradeProposal; error?: string } {
+   }): Promise<{ ok: boolean; trade?: TradeProposal; error?: string }> {
      if (input.offeredPlayerIds.length === 0 || input.requestedPlayerIds.length === 0) {
        return { ok: false, error: "Must offer and request at least one player" };
      }
-     const trade: TradeProposal = {
-       id: uid("trade"),
-       ...input,
-       status: "pending",
-       createdAt: Date.now(),
-     };
-     const trades = getLeagueTrades(input.leagueId);
-     trades.push(trade);
-     saveLeagueTrades(input.leagueId, trades);
-     return { ok: true, trade };
+     const { data, error } = await supabase
+       .from("trade_proposals")
+       .insert({
+         league_id: input.leagueId,
+         from_team_id: input.fromTeamId,
+         from_team_name: input.fromTeamName,
+         to_team_id: input.toTeamId,
+         to_team_name: input.toTeamName,
+         offered_player_ids: input.offeredPlayerIds,
+         requested_player_ids: input.requestedPlayerIds,
+         message: input.message || null,
+         status: "pending",
+       })
+       .select()
+       .single();
+
+     if (error) {
+       return { ok: false, error: error.message };
+     }
+     return { ok: true, trade: mapTradeRow(data) };
    }
 
-   export function respondToTrade(leagueId: string, tradeId: string, accept: boolean): { ok: boolean; error?: string } {
-     const trades = getLeagueTrades(leagueId);
-     const idx = trades.findIndex(t => t.id === tradeId);
-     if (idx === -1) return { ok: false, error: "Trade not found" };
-     const trade = trades[idx];
-     if (trade.status !== "pending") return { ok: false, error: "Trade already resolved" };
+   export async function respondToTrade(leagueId: string, tradeId: string, accept: boolean): Promise<{ ok: boolean; error?: string }> {
+     // Fetch the trade from Supabase
+     const { data: row, error: fetchError } = await supabase
+       .from("trade_proposals")
+       .select("*")
+       .eq("id", tradeId)
+       .single();
+
+     if (fetchError || !row) return { ok: false, error: "Trade not found" };
+     if (row.status !== "pending") return { ok: false, error: "Trade already resolved" };
+
+     const trade = mapTradeRow(row);
 
      if (accept) {
-       // Execute the trade: swap players between rosters
+       // Execute the trade: swap players between rosters (localStorage)
        const fromRoster = getTeamRoster(leagueId, trade.fromTeamId);
        const toRoster = getTeamRoster(leagueId, trade.toTeamId);
 
@@ -1292,25 +1338,36 @@
          }
          setTeamLineup(leagueId, teamId, lineup);
        }
-
-       trade.status = "accepted";
-     } else {
-       trade.status = "rejected";
      }
 
-     trade.resolvedAt = Date.now();
-     trades[idx] = trade;
-     saveLeagueTrades(leagueId, trades);
+     // Update status in Supabase
+     const newStatus = accept ? "accepted" : "rejected";
+     const { error: updateError } = await supabase
+       .from("trade_proposals")
+       .update({ status: newStatus, resolved_at: new Date().toISOString() })
+       .eq("id", tradeId);
+
+     if (updateError) {
+       return { ok: false, error: updateError.message };
+     }
      return { ok: true };
    }
 
-   export function cancelTrade(leagueId: string, tradeId: string): { ok: boolean; error?: string } {
-     const trades = getLeagueTrades(leagueId);
-     const idx = trades.findIndex(t => t.id === tradeId);
-     if (idx === -1) return { ok: false, error: "Trade not found" };
-     if (trades[idx].status !== "pending") return { ok: false, error: "Trade already resolved" };
-     trades[idx].status = "cancelled";
-     trades[idx].resolvedAt = Date.now();
-     saveLeagueTrades(leagueId, trades);
+   export async function cancelTrade(leagueId: string, tradeId: string): Promise<{ ok: boolean; error?: string }> {
+     const { data: row, error: fetchError } = await supabase
+       .from("trade_proposals")
+       .select("status")
+       .eq("id", tradeId)
+       .single();
+
+     if (fetchError || !row) return { ok: false, error: "Trade not found" };
+     if (row.status !== "pending") return { ok: false, error: "Trade already resolved" };
+
+     const { error } = await supabase
+       .from("trade_proposals")
+       .update({ status: "cancelled", resolved_at: new Date().toISOString() })
+       .eq("id", tradeId);
+
+     if (error) return { ok: false, error: error.message };
      return { ok: true };
    }

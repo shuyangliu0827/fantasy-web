@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
+import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
   getSessionUser,
@@ -19,39 +20,12 @@ import {
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 
-function LeagueNav({ slug, isOwner }: { slug: string; isOwner: boolean }) {
-  const { t } = useLang();
-  const mainNav = [
-    { href: `/league/${slug}`, label: t("联赛主页", "League Home"), icon: "🏠" },
-    { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), icon: "📋" },
-    { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), icon: "🏪" },
-    { href: `/league/${slug}/trade`, label: t("交易", "Trade"), icon: "🔄" },
-    { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), icon: "🏆" },
-    { href: `/league/${slug}/scoreboard`, label: t("记分板", "Scoreboard"), icon: "📊" },
-    { href: `/league/${slug}/members`, label: t("成员", "Members"), icon: "👥" },
-  ];
-  if (isOwner) {
-    mainNav.push({ href: `/league/${slug}/settings`, label: t("设置", "Settings"), icon: "⚙️" });
-  }
-  return (
-    <nav className="league-nav">
-      <div className="league-nav-inner">
-        {mainNav.map((item) => (
-          <Link key={item.href} href={item.href} className={`league-nav-link ${item.href.includes('/trade') && !item.href.includes('/trade/') ? 'active' : ''}`}>
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
 type TeamInfo = { id: string; name: string; user_id: string };
 
 export default function TradePage() {
   const { t } = useLang();
   const params = useParams();
+  const searchParams = useSearchParams();
   const slug = params.slug as string;
 
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
@@ -60,7 +34,11 @@ export default function TradePage() {
   const [allTeams, setAllTeams] = useState<TeamInfo[]>([]);
   const [trades, setTrades] = useState<TradeProposal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"propose" | "pending" | "history">("propose");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Check URL params for default tab (from email link)
+  const defaultTab = searchParams.get("tab") === "pending" ? "pending" : "propose";
+  const [tab, setTab] = useState<"propose" | "pending" | "history">(defaultTab as any);
 
   // Propose trade state
   const [targetTeamId, setTargetTeamId] = useState<string | null>(null);
@@ -74,6 +52,37 @@ export default function TradePage() {
     setUser(getSessionUser());
     loadData();
   }, [slug]);
+
+  // Real-time subscription for trade updates
+  useEffect(() => {
+    if (!league) return;
+    const channel = supabase
+      .channel(`trade_page_${league.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trade_proposals",
+          filter: `league_id=eq.${league.id}`,
+        },
+        () => {
+          // Reload trades on any change
+          reloadTrades();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [league?.id]);
+
+  async function reloadTrades() {
+    if (!league) return;
+    const tradeData = await getLeagueTrades(league.id);
+    setTrades(tradeData);
+  }
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -95,7 +104,8 @@ export default function TradePage() {
       }
     }
 
-    setTrades(getLeagueTrades(leagueData.id));
+    const tradeData = await getLeagueTrades(leagueData.id);
+    setTrades(tradeData);
     setLoading(false);
   }
 
@@ -122,8 +132,8 @@ export default function TradePage() {
     setRequestedIds(next);
   }
 
-  function handlePropose() {
-    if (!league || !myTeam || !targetTeamId) return;
+  async function handlePropose() {
+    if (!league || !myTeam || !targetTeamId || submitting) return;
     if (offeredIds.size === 0 || requestedIds.size === 0) {
       alert(t("请至少选择一名己方球员和一名对方球员", "Select at least one player from each side"));
       return;
@@ -131,7 +141,9 @@ export default function TradePage() {
     const targetTeam = allTeams.find(t => t.id === targetTeamId);
     if (!targetTeam) return;
 
-    const result = proposeTrade({
+    setSubmitting(true);
+
+    const result = await proposeTrade({
       leagueId: league.id,
       fromTeamId: myTeam.id,
       fromTeamName: myTeam.name,
@@ -144,32 +156,84 @@ export default function TradePage() {
 
     if (!result.ok) {
       alert(result.error);
+      setSubmitting(false);
       return;
     }
 
-    setTrades(getLeagueTrades(league.id));
+    // Send email notification to the target team's owner
+    try {
+      const { data: targetUser } = await supabase
+        .from("users")
+        .select("email, name")
+        .eq("id", targetTeam.user_id)
+        .single();
+
+      if (targetUser?.email) {
+        const offeredNames = Array.from(offeredIds).map(id => {
+          const p = myRoster.find(r => r.id === id);
+          return p ? `${p.name} (${p.ppg} PPG)` : id;
+        });
+        const requestedNames = Array.from(requestedIds).map(id => {
+          const p = targetRoster.find(r => r.id === id);
+          return p ? `${p.name} (${p.ppg} PPG)` : id;
+        });
+
+        fetch("/api/trade-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toEmail: targetUser.email,
+            toName: targetUser.name,
+            fromTeamName: myTeam.name,
+            toTeamName: targetTeam.name,
+            leagueSlug: slug,
+            leagueName: league.name,
+            offeredPlayers: offeredNames,
+            requestedPlayers: requestedNames,
+            message: tradeMessage || undefined,
+          }),
+        }).catch(() => {}); // Fire and forget
+      }
+    } catch {}
+
+    const tradeData = await getLeagueTrades(league.id);
+    setTrades(tradeData);
     setTargetTeamId(null);
     setOfferedIds(new Set());
     setRequestedIds(new Set());
     setTradeMessage("");
     setTab("pending");
+    setSubmitting(false);
   }
 
-  function handleRespond(tradeId: string, accept: boolean) {
-    if (!league) return;
+  async function handleRespond(tradeId: string, accept: boolean) {
+    if (!league || submitting) return;
     const action = accept ? t("接受", "accept") : t("拒绝", "reject");
     if (!confirm(t(`确定要${action}这笔交易吗？`, `Are you sure you want to ${action} this trade?`))) return;
-    const result = respondToTrade(league.id, tradeId, accept);
-    if (!result.ok) { alert(result.error); return; }
-    setTrades(getLeagueTrades(league.id));
+
+    setSubmitting(true);
+    const result = await respondToTrade(league.id, tradeId, accept);
+    if (!result.ok) {
+      alert(result.error);
+      setSubmitting(false);
+      return;
+    }
+
+    const tradeData = await getLeagueTrades(league.id);
+    setTrades(tradeData);
     if (myTeam) setMyRoster(getTeamRoster(league.id, myTeam.id));
+    setSubmitting(false);
   }
 
-  function handleCancel(tradeId: string) {
-    if (!league) return;
+  async function handleCancel(tradeId: string) {
+    if (!league || submitting) return;
     if (!confirm(t("确定要取消这笔交易吗？", "Cancel this trade?"))) return;
-    cancelTrade(league.id, tradeId);
-    setTrades(getLeagueTrades(league.id));
+
+    setSubmitting(true);
+    await cancelTrade(league.id, tradeId);
+    const tradeData = await getLeagueTrades(league.id);
+    setTrades(tradeData);
+    setSubmitting(false);
   }
 
   function getPlayerName(playerId: string, teamId: string): string {
@@ -218,7 +282,7 @@ export default function TradePage() {
         </div>
       </div>
 
-      <LeagueNav slug={slug} isOwner={!!isOwner} />
+      <LeagueNav slug={slug} isOwner={!!isOwner} leagueId={league.id} />
 
       <main className="page-content">
         <div className="container">
@@ -354,9 +418,9 @@ export default function TradePage() {
                       <button
                         className="propose-btn"
                         onClick={handlePropose}
-                        disabled={offeredIds.size === 0 || requestedIds.size === 0}
+                        disabled={offeredIds.size === 0 || requestedIds.size === 0 || submitting}
                       >
-                        {t("发送交易提案", "Send Trade Proposal")}
+                        {submitting ? t("发送中...", "Sending...") : t("发送交易提案", "Send Trade Proposal")}
                       </button>
                     </div>
                   )}
@@ -395,8 +459,12 @@ export default function TradePage() {
                       </div>
                       {trade.message && <div className="tc-message">{trade.message}</div>}
                       <div className="tc-actions">
-                        <button className="accept-btn" onClick={() => handleRespond(trade.id, true)}>{t("接受", "Accept")}</button>
-                        <button className="reject-btn" onClick={() => handleRespond(trade.id, false)}>{t("拒绝", "Reject")}</button>
+                        <button className="accept-btn" onClick={() => handleRespond(trade.id, true)} disabled={submitting}>
+                          {t("接受", "Accept")}
+                        </button>
+                        <button className="reject-btn" onClick={() => handleRespond(trade.id, false)} disabled={submitting}>
+                          {t("拒绝", "Reject")}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -430,7 +498,9 @@ export default function TradePage() {
                       </div>
                       <div className="tc-actions">
                         <span className="pending-badge">{t("等待对方回复", "Waiting for response")}</span>
-                        <button className="cancel-btn" onClick={() => handleCancel(trade.id)}>{t("取消", "Cancel")}</button>
+                        <button className="cancel-btn" onClick={() => handleCancel(trade.id)} disabled={submitting}>
+                          {t("取消", "Cancel")}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -502,11 +572,6 @@ const styles = `
   .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .league-title { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-size: 20px; font-weight: 600; }
   .league-icon { font-size: 28px; }
-  .league-nav { background: #111; border-bottom: 1px solid #222; position: sticky; top: 60px; z-index: 40; }
-  .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
-  .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #888; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
-  .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
   .page-content { min-height: calc(100vh - 200px); background: #0a0a0a; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
@@ -607,6 +672,7 @@ const styles = `
     padding: 8px 20px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
     border-radius: 6px; color: #6ee7b7; font-weight: 600; cursor: pointer;
   }
+  .accept-btn:disabled, .reject-btn:disabled, .cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .reject-btn {
     padding: 8px 20px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 6px; color: #fca5a5; font-weight: 600; cursor: pointer;

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
+import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
   getSessionUser,
@@ -20,35 +21,6 @@ import {
   LineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
-
-function LeagueNav({ slug, isOwner }: { slug: string; isOwner: boolean }) {
-  const { t } = useLang();
-  const mainNav = [
-    { href: `/league/${slug}`, label: t("联赛主页", "League Home"), icon: "🏠" },
-    { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), icon: "📋" },
-    { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), icon: "🏪" },
-    { href: `/league/${slug}/trade`, label: t("交易", "Trade"), icon: "🔄" },
-    { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), icon: "🏆" },
-    { href: `/league/${slug}/scoreboard`, label: t("记分板", "Scoreboard"), icon: "📊" },
-    { href: `/league/${slug}/members`, label: t("成员", "Members"), icon: "👥" },
-  ];
-  if (isOwner) {
-    mainNav.push({ href: `/league/${slug}/settings`, label: t("设置", "Settings"), icon: "⚙️" });
-  }
-
-  return (
-    <nav className="league-nav">
-      <div className="league-nav-inner">
-        {mainNav.map((item) => (
-          <Link key={item.href} href={item.href} className={`league-nav-link ${item.href.includes('/roster') ? 'active' : ''}`}>
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
 
 const SLOT_LABELS: Record<string, { label: string; labelEn: string; type: "starter" | "bench" }> = {
   PG: { label: "控卫", labelEn: "PG", type: "starter" },
@@ -246,7 +218,7 @@ export default function RosterPage() {
         </div>
       </div>
 
-      <LeagueNav slug={slug} isOwner={!!isOwner} />
+      <LeagueNav slug={slug} isOwner={!!isOwner} leagueId={league.id} />
 
       <main className="page-content">
         <div className="container">
