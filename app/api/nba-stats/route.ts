@@ -1,12 +1,14 @@
 // app/api/nba-stats/route.ts
-// 后台预取并缓存 NBA 数据，用户访问时直接返回缓存数据
+// Reads persisted player stats from Supabase player_stats_cache.
+// Falls back to fetching from BDL API directly (and persisting) if the table is empty.
+// The table is kept fresh by the refresh-nba-stats Supabase Edge Function (runs hourly via pg_cron).
 
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
 
-// Fantasy 计分规则
 const FANTASY_WEIGHTS = {
   pts: 1,
   reb: 1,
@@ -17,271 +19,252 @@ const FANTASY_WEIGHTS = {
   tov: -1,
 };
 
-// 内存缓存 (生产环境建议用 Redis/Upstash)
-let cachedData: {
-  players: any[];
-  gamesLoaded: number;
-  lastUpdated: string;
-  isUpdating: boolean;
-} = {
-  players: [],
-  gamesLoaded: 0,
-  lastUpdated: "",
-  isUpdating: false,
-};
+// Use service-role key for writes; anon key is fine for reads.
+// We use the anon key here since RLS is open for all operations.
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-// 获取最近 N 天的日期
+// ──────────────────────────────────────────────
+// Transform a player_stats_cache row → API shape
+// ──────────────────────────────────────────────
+function rowToPlayer(row: any) {
+  return {
+    id: row.player_id,
+    name: row.name,
+    team: row.team,
+    position: row.position,
+    gamesPlayed: row.games_played,
+    totals: {
+      min:  row.min_total,
+      fgm:  row.fgm_total,
+      fga:  row.fga_total,
+      fg3m: row.fg3m_total,
+      fg3a: row.fg3a_total,
+      ftm:  row.ftm_total,
+      fta:  row.fta_total,
+      reb:  row.reb_total,
+      ast:  row.ast_total,
+      stl:  row.stl_total,
+      blk:  row.blk_total,
+      tov:  row.tov_total,
+      pts:  row.pts_total,
+    },
+    averages: {
+      min:     row.min_avg,
+      fgm:     row.fgm_avg,
+      fga:     row.fga_avg,
+      fg3m:    row.fg3m_avg,
+      fg3a:    row.fg3a_avg,
+      ftm:     row.ftm_avg,
+      fta:     row.fta_avg,
+      fg_pct:  row.fg_pct,
+      fg3_pct: row.fg3_pct,
+      ft_pct:  row.ft_pct,
+      reb:     row.reb_avg,
+      ast:     row.ast_avg,
+      stl:     row.stl_avg,
+      blk:     row.blk_avg,
+      tov:     row.tov_avg,
+      pts:     row.pts_avg,
+    },
+    fpts:     row.fpts,
+    fptsAvg:  row.fpts_avg,
+    rank:     row.rank,
+    injury:   row.injury,
+  };
+}
+
+// ──────────────────────────────────────────────
+// Fallback: fetch from BDL API + persist to DB
+// (used when the table is empty on first boot)
+// ──────────────────────────────────────────────
+let isRefreshing = false;
+
 function getRecentDates(days: number): string[] {
   const dates: string[] = [];
   for (let i = 1; i <= days; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    dates.push(date.toISOString().split("T")[0]);
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().split("T")[0]);
   }
   return dates;
 }
 
-// API 请求封装
 async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   const url = new URL(`${API_BASE}${endpoint}`);
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.append(key, value);
-    });
-  }
-
-  const response = await fetch(url.toString(), {
-    headers: { Authorization: API_KEY },
-    next: { revalidate: 0 }, // 不使用 Next.js 缓存
-  });
-
-  if (!response.ok) {
-    throw new Error(`API Error: ${response.status}`);
-  }
-
-  return response.json();
+  if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
+  const res = await fetch(url.toString(), { headers: { Authorization: API_KEY } });
+  if (!res.ok) throw new Error(`API Error: ${res.status}`);
+  return res.json();
 }
 
-// 计算 Fantasy Points
-function calculateFantasyPoints(stats: any): number {
+function calcFpts(totals: any): number {
   return (
-    (stats.pts || 0) * FANTASY_WEIGHTS.pts +
-    (stats.reb || 0) * FANTASY_WEIGHTS.reb +
-    (stats.ast || 0) * FANTASY_WEIGHTS.ast +
-    (stats.stl || 0) * FANTASY_WEIGHTS.stl +
-    (stats.blk || 0) * FANTASY_WEIGHTS.blk +
-    (stats.fg3m || 0) * FANTASY_WEIGHTS.fg3m +
-    (stats.tov || 0) * FANTASY_WEIGHTS.tov
+    (totals.pts  || 0) * FANTASY_WEIGHTS.pts  +
+    (totals.reb  || 0) * FANTASY_WEIGHTS.reb  +
+    (totals.ast  || 0) * FANTASY_WEIGHTS.ast  +
+    (totals.stl  || 0) * FANTASY_WEIGHTS.stl  +
+    (totals.blk  || 0) * FANTASY_WEIGHTS.blk  +
+    (totals.fg3m || 0) * FANTASY_WEIGHTS.fg3m +
+    (totals.tov  || 0) * FANTASY_WEIGHTS.tov
   );
 }
 
-// 后台刷新数据
-async function refreshData() {
-  if (cachedData.isUpdating) {
-    console.log("Already updating, skip...");
-    return;
-  }
-
-  cachedData.isUpdating = true;
-  console.log("Starting data refresh...");
+async function refreshAndPersist() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+  console.log("[nba-stats] Starting fallback refresh...");
 
   try {
-    // 1. 获取最近 5 天的已完成比赛
     const recentDates = getRecentDates(5);
     const allGames: any[] = [];
 
     for (const date of recentDates) {
-      const gamesRes = await fetchAPI("/games", { "dates[]": date, per_page: "50" });
-      const finishedGames = (gamesRes.data || []).filter((g: any) => g.status === "Final");
-      allGames.push(...finishedGames);
-      await new Promise((r) => setTimeout(r, 200)); // Rate limit
+      const res = await fetchAPI("/games", { "dates[]": date, per_page: "50" });
+      allGames.push(...(res.data || []).filter((g: any) => g.status === "Final"));
+      await new Promise((r) => setTimeout(r, 200));
     }
 
     if (allGames.length === 0) {
-      console.log("No finished games found");
-      cachedData.isUpdating = false;
+      console.log("[nba-stats] No finished games found");
       return;
     }
 
-    console.log(`Found ${allGames.length} finished games`);
-
-    // 2. 获取每场比赛的球员统计
     const playerStatsMap = new Map<number, { player: any; games: any[] }>();
-
     for (const game of allGames) {
       try {
         const statsRes = await fetchAPI("/stats", { "game_ids[]": game.id.toString(), per_page: "100" });
-        const stats = statsRes.data || [];
-
-        for (const stat of stats) {
-          const playerId = stat.player.id;
-          if (!playerStatsMap.has(playerId)) {
-            playerStatsMap.set(playerId, { player: stat.player, games: [] });
-          }
-          playerStatsMap.get(playerId)!.games.push({ ...stat, team: stat.team });
+        for (const stat of statsRes.data || []) {
+          const pid = stat.player.id;
+          if (!playerStatsMap.has(pid)) playerStatsMap.set(pid, { player: stat.player, games: [] });
+          playerStatsMap.get(pid)!.games.push({ ...stat, team: stat.team });
         }
-      } catch (e) {
-        console.error(`Failed to fetch stats for game ${game.id}`);
-      }
-      await new Promise((r) => setTimeout(r, 300)); // Rate limit
-    }
-
-    // 3. 获取伤病信息
-    let injuries: any[] = [];
-    try {
-      const injuriesRes = await fetchAPI("/player_injuries", { per_page: "100" });
-      injuries = injuriesRes.data || [];
-    } catch (e) {
-      console.log("Could not fetch injuries");
+      } catch { /* skip individual failures */ }
+      await new Promise((r) => setTimeout(r, 300));
     }
 
     const injuryMap = new Map<number, string>();
-    injuries.forEach((inj) => {
-      injuryMap.set(inj.player.id, inj.status);
-    });
+    try {
+      const injRes = await fetchAPI("/player_injuries", { per_page: "100" });
+      for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
+    } catch { /* non-fatal */ }
 
-    // 4. 计算球员数据
-    const playersData: any[] = [];
-
+    const rows: any[] = [];
     playerStatsMap.forEach(({ player, games }) => {
-      if (games.length === 0) return;
-
+      if (!games.length) return;
       const totals = games.reduce(
         (acc, g) => ({
-          min: acc.min + parseFloat(g.min || "0"),
-          fgm: acc.fgm + (g.fgm || 0),
-          fga: acc.fga + (g.fga || 0),
+          min:  acc.min  + parseFloat(g.min || "0"),
+          fgm:  acc.fgm  + (g.fgm  || 0),
+          fga:  acc.fga  + (g.fga  || 0),
           fg3m: acc.fg3m + (g.fg3m || 0),
           fg3a: acc.fg3a + (g.fg3a || 0),
-          ftm: acc.ftm + (g.ftm || 0),
-          fta: acc.fta + (g.fta || 0),
-          reb: acc.reb + (g.reb || 0),
-          ast: acc.ast + (g.ast || 0),
-          stl: acc.stl + (g.stl || 0),
-          blk: acc.blk + (g.blk || 0),
-          tov: acc.tov + (g.turnover || 0),
-          pts: acc.pts + (g.pts || 0),
+          ftm:  acc.ftm  + (g.ftm  || 0),
+          fta:  acc.fta  + (g.fta  || 0),
+          reb:  acc.reb  + (g.reb  || 0),
+          ast:  acc.ast  + (g.ast  || 0),
+          stl:  acc.stl  + (g.stl  || 0),
+          blk:  acc.blk  + (g.blk  || 0),
+          tov:  acc.tov  + (g.turnover || 0),
+          pts:  acc.pts  + (g.pts  || 0),
         }),
         { min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0 }
       );
-
       const gp = games.length;
-      const averages = {
-        min: totals.min / gp,
-        fgm: totals.fgm / gp,
-        fga: totals.fga / gp,
-        fg3m: totals.fg3m / gp,
-        fg3a: totals.fg3a / gp,
-        ftm: totals.ftm / gp,
-        fta: totals.fta / gp,
-        fg_pct: totals.fga > 0 ? (totals.fgm / totals.fga) * 100 : 0,
-        fg3_pct: totals.fg3a > 0 ? (totals.fg3m / totals.fg3a) * 100 : 0,
-        ft_pct: totals.fta > 0 ? (totals.ftm / totals.fta) * 100 : 0,
-        reb: totals.reb / gp,
-        ast: totals.ast / gp,
-        stl: totals.stl / gp,
-        blk: totals.blk / gp,
-        tov: totals.tov / gp,
-        pts: totals.pts / gp,
-      };
-
-      const fptsTotal = calculateFantasyPoints(totals);
-      const fptsAvg = fptsTotal / gp;
       const latestGame = games[games.length - 1];
+      const fptsTotal = calcFpts(totals);
 
-      playersData.push({
-        id: player.id,
+      rows.push({
+        player_id: player.id,
         name: `${player.first_name} ${player.last_name}`,
         team: latestGame.team?.abbreviation || player.team?.abbreviation || "N/A",
         position: player.position || "N/A",
-        gamesPlayed: gp,
-        totals,
-        averages,
+        games_played: gp,
+        min_total: totals.min,  fgm_total: totals.fgm,  fga_total: totals.fga,
+        fg3m_total: totals.fg3m, fg3a_total: totals.fg3a,
+        ftm_total: totals.ftm,  fta_total: totals.fta,
+        reb_total: totals.reb,  ast_total: totals.ast,
+        stl_total: totals.stl,  blk_total: totals.blk,
+        tov_total: totals.tov,  pts_total: totals.pts,
+        min_avg: totals.min / gp,  fgm_avg: totals.fgm / gp, fga_avg: totals.fga / gp,
+        fg3m_avg: totals.fg3m / gp, fg3a_avg: totals.fg3a / gp,
+        ftm_avg: totals.ftm / gp,  fta_avg: totals.fta / gp,
+        fg_pct:  totals.fga  > 0 ? (totals.fgm  / totals.fga)  * 100 : 0,
+        fg3_pct: totals.fg3a > 0 ? (totals.fg3m / totals.fg3a) * 100 : 0,
+        ft_pct:  totals.fta  > 0 ? (totals.ftm  / totals.fta)  * 100 : 0,
+        reb_avg: totals.reb / gp,  ast_avg: totals.ast / gp,
+        stl_avg: totals.stl / gp,  blk_avg: totals.blk / gp,
+        tov_avg: totals.tov / gp,  pts_avg: totals.pts / gp,
         fpts: Math.round(fptsTotal * 10) / 10,
-        fptsAvg: Math.round(fptsAvg * 10) / 10,
-        rank: 0,
-        injury: injuryMap.get(player.id),
+        fpts_avg: Math.round((fptsTotal / gp) * 10) / 10,
+        injury: injuryMap.get(player.id) ?? null,
+        updated_at: new Date().toISOString(),
       });
     });
 
-    // 5. 排序
-    playersData.sort((a, b) => b.fptsAvg - a.fptsAvg);
-    playersData.forEach((p, i) => {
-      p.rank = i + 1;
-    });
+    rows.sort((a, b) => b.fpts_avg - a.fpts_avg);
+    rows.forEach((r, i) => { r.rank = i + 1; });
 
-    // 6. 更新缓存
-    cachedData = {
-      players: playersData,
-      gamesLoaded: allGames.length,
-      lastUpdated: new Date().toISOString(),
-      isUpdating: false,
-    };
+    const { error } = await supabase
+      .from("player_stats_cache")
+      .upsert(rows, { onConflict: "player_id" });
 
-    console.log(`Data refresh complete: ${playersData.length} players`);
-  } catch (error) {
-    console.error("Error refreshing data:", error);
-    cachedData.isUpdating = false;
+    if (error) console.error("[nba-stats] Supabase upsert error:", error);
+    else console.log(`[nba-stats] Persisted ${rows.length} players to player_stats_cache`);
+  } catch (err) {
+    console.error("[nba-stats] Fallback refresh error:", err);
+  } finally {
+    isRefreshing = false;
   }
 }
 
-// GET: 返回缓存数据
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const forceRefresh = searchParams.get("refresh") === "true";
+// ──────────────────────────────────────────────
+// GET — read from Supabase
+// ──────────────────────────────────────────────
+export async function GET() {
+  const { data, error } = await supabase
+    .from("player_stats_cache")
+    .select("*")
+    .order("rank", { ascending: true });
 
-  // 如果没有数据或者强制刷新，开始后台刷新
-  if (cachedData.players.length === 0 || forceRefresh) {
-    // 异步刷新，不阻塞响应
-    refreshData();
-
-    // 如果完全没有数据，等待第一次加载
-    if (cachedData.players.length === 0) {
-      return NextResponse.json({
-        status: "loading",
-        message: "Data is being loaded for the first time, please wait...",
-        players: [],
-        gamesLoaded: 0,
-        lastUpdated: null,
-      });
-    }
+  if (error) {
+    console.error("[nba-stats] Supabase read error:", error);
   }
 
-  // 检查数据是否过期 (超过 30 分钟自动后台刷新)
-  if (cachedData.lastUpdated) {
-    const lastUpdate = new Date(cachedData.lastUpdated).getTime();
-    const now = Date.now();
-    const thirtyMinutes = 30 * 60 * 1000;
-
-    if (now - lastUpdate > thirtyMinutes && !cachedData.isUpdating) {
-      // 后台刷新，不阻塞
-      refreshData();
-    }
+  if (!data || data.length === 0) {
+    // Table is empty — trigger a background fetch+persist and return loading status
+    refreshAndPersist();
+    return NextResponse.json({
+      status: "loading",
+      message: "Stats are being loaded for the first time, please wait...",
+      players: [],
+      gamesLoaded: 0,
+      lastUpdated: null,
+      isUpdating: true,
+    });
   }
+
+  const players = data.map(rowToPlayer);
+  const lastUpdated = data[0]?.updated_at ?? null;
 
   return NextResponse.json({
     status: "success",
-    players: cachedData.players,
-    gamesLoaded: cachedData.gamesLoaded,
-    lastUpdated: cachedData.lastUpdated,
-    isUpdating: cachedData.isUpdating,
+    players,
+    gamesLoaded: data.length,
+    lastUpdated,
+    isUpdating: isRefreshing,
   });
 }
 
-// POST: 手动触发刷新
+// ──────────────────────────────────────────────
+// POST — manual trigger (re-fetches + persists)
+// ──────────────────────────────────────────────
 export async function POST() {
-  if (cachedData.isUpdating) {
-    return NextResponse.json({
-      status: "already_updating",
-      message: "Data refresh is already in progress",
-    });
+  if (isRefreshing) {
+    return NextResponse.json({ status: "already_updating", message: "Refresh already in progress" });
   }
-
-  // 后台刷新
-  refreshData();
-
-  return NextResponse.json({
-    status: "refresh_started",
-    message: "Data refresh started in background",
-  });
+  refreshAndPersist();
+  return NextResponse.json({ status: "refresh_started", message: "Data refresh started in background" });
 }
