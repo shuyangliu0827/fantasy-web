@@ -237,7 +237,8 @@ export async function GET() {
   }
 
   const players = data.map((row, i) => rowToPlayer(row, i));
-  const lastUpdated = data[0]?.updated_at ?? null;
+  const lastUpdated = data.reduce((max: string | null, row) =>
+    !max || row.updated_at > max ? row.updated_at : max, null);
 
   return NextResponse.json({
     status: "success",

@@ -149,14 +149,28 @@ Deno.serve(async () => {
       });
     }
 
-    console.log(`[5] Built ${rows.length} rows, upserting...`);
-    // 6. Upsert this batch and advance the cursor
-    if (rows.length > 0) {
-      const { error } = await supabase
-        .from("player_stats_cache")
-        .upsert(rows, { onConflict: "player_id" });
-      if (error) throw error;
+    console.log(`[5] Built ${rows.length} rows, upserting in chunks...`);
+    // 6. Upsert in chunks of 10 to isolate any failing rows
+    let upsertErrors = 0;
+    for (let i = 0; i < rows.length; i += 10) {
+      const chunk = rows.slice(i, i + 10);
+      try {
+        const upsertRes = await supabase
+          .from("player_stats_cache")
+          .upsert(chunk, { onConflict: "player_id" })
+          .select("player_id");
+        if (upsertRes?.error) {
+          console.error(`[6-err] chunk ${i}-${i+10}: ${JSON.stringify(upsertRes.error)}`);
+          upsertErrors++;
+        } else {
+          console.log(`[6-ok] chunk ${i}-${i+10} upserted ${upsertRes?.data?.length} rows`);
+        }
+      } catch (e: any) {
+        console.error(`[6-throw] chunk ${i}-${i+10}: ${e?.message}`);
+        upsertErrors++;
+      }
     }
+    console.log(`[7] Upsert complete. errors=${upsertErrors}`);
 
     try {
       await supabase
