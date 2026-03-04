@@ -29,7 +29,7 @@ const supabase = createClient(
 // ──────────────────────────────────────────────
 // Transform a player_stats_cache row → API shape
 // ──────────────────────────────────────────────
-function rowToPlayer(row: any) {
+function rowToPlayer(row: any, index: number) {
   return {
     id: row.player_id,
     name: row.name,
@@ -71,7 +71,7 @@ function rowToPlayer(row: any) {
     },
     fpts:     row.fpts,
     fptsAvg:  row.fpts_avg,
-    rank:     row.rank,
+    rank:     index + 1,
     injury:   row.injury,
   };
 }
@@ -217,7 +217,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("player_stats_cache")
     .select("*")
-    .order("rank", { ascending: true });
+    .order("fpts_avg", { ascending: false });
 
   if (error) {
     console.error("[nba-stats] Supabase read error:", error);
@@ -236,7 +236,7 @@ export async function GET() {
     });
   }
 
-  const players = data.map(rowToPlayer);
+  const players = data.map((row, i) => rowToPlayer(row, i));
   const lastUpdated = data[0]?.updated_at ?? null;
 
   return NextResponse.json({
