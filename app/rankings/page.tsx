@@ -443,12 +443,6 @@ export default function PlayerRankingsPage() {
             </div>
           )}
 
-          {/* 计分说明 */}
-          <div className="scoring-note">
-            <h4>⚡ Fantasy Scoring</h4>
-            <p>PTS: +1 | REB: +1 | AST: +1 | STL: +2 | BLK: +2 | 3PM: +1 | TO: -1</p>
-            <p className="data-info">📊 Ball Don't Lie API • {t("每小时自动更新", "Auto-updates every hour")}</p>
-          </div>
         </div>
       </main>
       <style jsx>{styles}</style>
