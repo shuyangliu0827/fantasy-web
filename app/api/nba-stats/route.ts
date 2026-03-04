@@ -1,6 +1,6 @@
 // app/api/nba-stats/route.ts
 // Reads persisted player stats from Supabase player_stats_cache.
-// Falls back to fetching from BDL API directly (and persisting) if the table is empty.
+// Falls back to fetching full-season averages from BDL API (and persisting) if the table is empty.
 // The table is kept fresh by the refresh-nba-stats Supabase Edge Function (runs hourly via pg_cron).
 
 import { NextResponse } from "next/server";
@@ -8,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
+const CURRENT_SEASON = 2025; // 2025-26 NBA season
 
 const FANTASY_WEIGHTS = {
   pts: 1,
@@ -19,8 +20,7 @@ const FANTASY_WEIGHTS = {
   tov: -1,
 };
 
-// Use service-role key for writes; anon key is fine for reads.
-// We use the anon key here since RLS is open for all operations.
+// Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -77,20 +77,10 @@ function rowToPlayer(row: any) {
 }
 
 // ──────────────────────────────────────────────
-// Fallback: fetch from BDL API + persist to DB
+// Fallback: fetch full-season averages from BDL + persist to DB
 // (used when the table is empty on first boot)
 // ──────────────────────────────────────────────
 let isRefreshing = false;
-
-function getRecentDates(days: number): string[] {
-  const dates: string[] = [];
-  for (let i = 1; i <= days; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split("T")[0]);
-  }
-  return dates;
-}
 
 async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   const url = new URL(`${API_BASE}${endpoint}`);
@@ -100,109 +90,109 @@ async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   return res.json();
 }
 
-function calcFpts(totals: any): number {
-  return (
-    (totals.pts  || 0) * FANTASY_WEIGHTS.pts  +
-    (totals.reb  || 0) * FANTASY_WEIGHTS.reb  +
-    (totals.ast  || 0) * FANTASY_WEIGHTS.ast  +
-    (totals.stl  || 0) * FANTASY_WEIGHTS.stl  +
-    (totals.blk  || 0) * FANTASY_WEIGHTS.blk  +
-    (totals.fg3m || 0) * FANTASY_WEIGHTS.fg3m +
-    (totals.tov  || 0) * FANTASY_WEIGHTS.tov
-  );
-}
-
 async function refreshAndPersist() {
   if (isRefreshing) return;
   isRefreshing = true;
-  console.log("[nba-stats] Starting fallback refresh...");
+  console.log("[nba-stats] Starting fallback refresh (full season stats)...");
 
   try {
-    const recentDates = getRecentDates(5);
-    const allGames: any[] = [];
+    // 1. Fetch all stats for the current season (cursor-paginated)
+    type Entry = {
+      player: any; team: any; gp: number;
+      totals: { min: number; fgm: number; fga: number; fg3m: number; fg3a: number; ftm: number; fta: number; reb: number; ast: number; stl: number; blk: number; tov: number; pts: number };
+    };
 
-    for (const date of recentDates) {
-      const res = await fetchAPI("/games", { "dates[]": date, per_page: "50" });
-      allGames.push(...(res.data || []).filter((g: any) => g.status === "Final"));
-      await new Promise((r) => setTimeout(r, 200));
-    }
+    const playerMap = new Map<number, Entry>();
+    let cursor: number | undefined;
 
-    if (allGames.length === 0) {
-      console.log("[nba-stats] No finished games found");
-      return;
-    }
-
-    const playerStatsMap = new Map<number, { player: any; games: any[] }>();
-    for (const game of allGames) {
+    do {
+      const params: Record<string, string> = { per_page: "100", "seasons[]": String(CURRENT_SEASON) };
+      if (cursor) params.cursor = String(cursor);
       try {
-        const statsRes = await fetchAPI("/stats", { "game_ids[]": game.id.toString(), per_page: "100" });
-        for (const stat of statsRes.data || []) {
+        const res = await fetchAPI("/stats", params);
+        for (const stat of (res.data || [])) {
+          const minNum = parseFloat((stat.min || "0").replace(":", ".")) || 0;
+          if (minNum === 0) continue;
           const pid = stat.player.id;
-          if (!playerStatsMap.has(pid)) playerStatsMap.set(pid, { player: stat.player, games: [] });
-          playerStatsMap.get(pid)!.games.push({ ...stat, team: stat.team });
+          if (!playerMap.has(pid)) {
+            playerMap.set(pid, {
+              player: stat.player, team: stat.team, gp: 0,
+              totals: { min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0 },
+            });
+          }
+          const e = playerMap.get(pid)!;
+          e.team = stat.team;
+          e.gp++;
+          e.totals.min  += minNum;
+          e.totals.fgm  += stat.fgm  || 0;
+          e.totals.fga  += stat.fga  || 0;
+          e.totals.fg3m += stat.fg3m || 0;
+          e.totals.fg3a += stat.fg3a || 0;
+          e.totals.ftm  += stat.ftm  || 0;
+          e.totals.fta  += stat.fta  || 0;
+          e.totals.reb  += stat.reb  || 0;
+          e.totals.ast  += stat.ast  || 0;
+          e.totals.stl  += stat.stl  || 0;
+          e.totals.blk  += stat.blk  || 0;
+          e.totals.tov  += stat.turnover || 0;
+          e.totals.pts  += stat.pts  || 0;
         }
-      } catch { /* skip individual failures */ }
-      await new Promise((r) => setTimeout(r, 300));
-    }
+        cursor = res.meta?.next_cursor;
+      } catch { cursor = undefined; }
+      await new Promise(r => setTimeout(r, 200));
+    } while (cursor);
 
+    // 2. Fetch current injuries
     const injuryMap = new Map<number, string>();
     try {
       const injRes = await fetchAPI("/player_injuries", { per_page: "100" });
       for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
     } catch { /* non-fatal */ }
 
+    // 3. Build cache rows
+    const r1 = (v: number) => Math.round(v * 10) / 10;
     const rows: any[] = [];
-    playerStatsMap.forEach(({ player, games }) => {
-      if (!games.length) return;
-      const totals = games.reduce(
-        (acc, g) => ({
-          min:  acc.min  + parseFloat(g.min || "0"),
-          fgm:  acc.fgm  + (g.fgm  || 0),
-          fga:  acc.fga  + (g.fga  || 0),
-          fg3m: acc.fg3m + (g.fg3m || 0),
-          fg3a: acc.fg3a + (g.fg3a || 0),
-          ftm:  acc.ftm  + (g.ftm  || 0),
-          fta:  acc.fta  + (g.fta  || 0),
-          reb:  acc.reb  + (g.reb  || 0),
-          ast:  acc.ast  + (g.ast  || 0),
-          stl:  acc.stl  + (g.stl  || 0),
-          blk:  acc.blk  + (g.blk  || 0),
-          tov:  acc.tov  + (g.turnover || 0),
-          pts:  acc.pts  + (g.pts  || 0),
-        }),
-        { min: 0, fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0 }
-      );
-      const gp = games.length;
-      const latestGame = games[games.length - 1];
-      const fptsTotal = calcFpts(totals);
 
+    for (const [playerId, { player, team, gp, totals }] of playerMap.entries()) {
+      if (gp < 1) continue;
+      const avg = {
+        min:  r1(totals.min  / gp), fgm:  r1(totals.fgm  / gp), fga:  r1(totals.fga  / gp),
+        fg3m: r1(totals.fg3m / gp), fg3a: r1(totals.fg3a / gp),
+        ftm:  r1(totals.ftm  / gp), fta:  r1(totals.fta  / gp),
+        reb:  r1(totals.reb  / gp), ast:  r1(totals.ast  / gp),
+        stl:  r1(totals.stl  / gp), blk:  r1(totals.blk  / gp),
+        tov:  r1(totals.tov  / gp), pts:  r1(totals.pts  / gp),
+      };
+      const fptsAvg = r1(
+        avg.pts * FANTASY_WEIGHTS.pts + avg.reb * FANTASY_WEIGHTS.reb +
+        avg.ast * FANTASY_WEIGHTS.ast + avg.stl * FANTASY_WEIGHTS.stl +
+        avg.blk * FANTASY_WEIGHTS.blk + avg.fg3m * FANTASY_WEIGHTS.fg3m +
+        avg.tov * FANTASY_WEIGHTS.tov
+      );
       rows.push({
-        player_id: player.id,
+        player_id: playerId,
         name: `${player.first_name} ${player.last_name}`,
-        team: latestGame.team?.abbreviation || player.team?.abbreviation || "N/A",
+        team: team?.abbreviation || player.team?.abbreviation || "N/A",
         position: player.position || "N/A",
         games_played: gp,
-        min_total: totals.min,  fgm_total: totals.fgm,  fga_total: totals.fga,
-        fg3m_total: totals.fg3m, fg3a_total: totals.fg3a,
-        ftm_total: totals.ftm,  fta_total: totals.fta,
-        reb_total: totals.reb,  ast_total: totals.ast,
-        stl_total: totals.stl,  blk_total: totals.blk,
-        tov_total: totals.tov,  pts_total: totals.pts,
-        min_avg: totals.min / gp,  fgm_avg: totals.fgm / gp, fga_avg: totals.fga / gp,
-        fg3m_avg: totals.fg3m / gp, fg3a_avg: totals.fg3a / gp,
-        ftm_avg: totals.ftm / gp,  fta_avg: totals.fta / gp,
-        fg_pct:  totals.fga  > 0 ? (totals.fgm  / totals.fga)  * 100 : 0,
-        fg3_pct: totals.fg3a > 0 ? (totals.fg3m / totals.fg3a) * 100 : 0,
-        ft_pct:  totals.fta  > 0 ? (totals.ftm  / totals.fta)  * 100 : 0,
-        reb_avg: totals.reb / gp,  ast_avg: totals.ast / gp,
-        stl_avg: totals.stl / gp,  blk_avg: totals.blk / gp,
-        tov_avg: totals.tov / gp,  pts_avg: totals.pts / gp,
-        fpts: Math.round(fptsTotal * 10) / 10,
-        fpts_avg: Math.round((fptsTotal / gp) * 10) / 10,
-        injury: injuryMap.get(player.id) ?? null,
+        min_avg: avg.min,   pts_avg: avg.pts,   reb_avg: avg.reb,   ast_avg: avg.ast,
+        stl_avg: avg.stl,   blk_avg: avg.blk,   tov_avg: avg.tov,
+        fgm_avg: avg.fgm,   fga_avg: avg.fga,   fg3m_avg: avg.fg3m, fg3a_avg: avg.fg3a,
+        ftm_avg: avg.ftm,   fta_avg: avg.fta,
+        fg_pct:  totals.fga  > 0 ? Math.round(totals.fgm  / totals.fga  * 1000) / 10 : 0,
+        fg3_pct: totals.fg3a > 0 ? Math.round(totals.fg3m / totals.fg3a * 1000) / 10 : 0,
+        ft_pct:  totals.fta  > 0 ? Math.round(totals.ftm  / totals.fta  * 1000) / 10 : 0,
+        min_total: r1(totals.min),  pts_total: r1(totals.pts),  reb_total: r1(totals.reb),
+        ast_total: r1(totals.ast),  stl_total: r1(totals.stl),  blk_total: r1(totals.blk),
+        tov_total: r1(totals.tov),  fgm_total: r1(totals.fgm),  fga_total: r1(totals.fga),
+        fg3m_total: r1(totals.fg3m), fg3a_total: r1(totals.fg3a),
+        ftm_total: r1(totals.ftm),  fta_total: r1(totals.fta),
+        fpts:     r1(fptsAvg * gp),
+        fpts_avg: fptsAvg,
+        injury:   injuryMap.get(playerId) ?? null,
         updated_at: new Date().toISOString(),
       });
-    });
+    }
 
     rows.sort((a, b) => b.fpts_avg - a.fpts_avg);
     rows.forEach((r, i) => { r.rank = i + 1; });
