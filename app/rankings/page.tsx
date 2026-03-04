@@ -423,11 +423,10 @@ export default function PlayerRankingsPage() {
                 ← Prev
               </button>
               <div className="page-numbers">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum = page - 2 + i;
-                  if (pageNum < 1) pageNum = i + 1;
-                  if (pageNum > totalPages) return null;
-                  return (
+                {(() => {
+                  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                  const end = Math.min(totalPages, start + 4);
+                  return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((pageNum) => (
                     <button
                       key={pageNum}
                       className={pageNum === page ? "active" : ""}
@@ -435,8 +434,8 @@ export default function PlayerRankingsPage() {
                     >
                       {pageNum}
                     </button>
-                  );
-                })}
+                  ));
+                })()}
               </div>
               <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                 Next →
@@ -448,7 +447,7 @@ export default function PlayerRankingsPage() {
           <div className="scoring-note">
             <h4>⚡ Fantasy Scoring</h4>
             <p>PTS: +1 | REB: +1 | AST: +1 | STL: +2 | BLK: +2 | 3PM: +1 | TO: -1</p>
-            <p className="data-info">📊 Ball Don't Lie API • {t("每30分钟自动更新", "Auto-updates every 30 min")}</p>
+            <p className="data-info">📊 Ball Don't Lie API • {t("每小时自动更新", "Auto-updates every hour")}</p>
           </div>
         </div>
       </main>
