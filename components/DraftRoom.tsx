@@ -107,6 +107,15 @@ function loadStoredPicks(leagueId: string, allPlayers: Player[]): DraftPick[] {
   }
 }
 
+type LiveStats = {
+  gamesPlayed: number;
+  min: number; fgm: number; fga: number;
+  fg3m: number; ftm: number; fta: number;
+  reb: number; ast: number; stl: number;
+  blk: number; tov: number; pts: number;
+  fpts: number; fptsAvg: number;
+};
+
 export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Props) {
   const [allPlayers] = useState<Player[]>(() => getPlayers());
   const [picks, setPicks] = useState<DraftPick[]>([]);
@@ -118,6 +127,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   const [searchQuery, setSearchQuery] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [showPickBanner, setShowPickBanner] = useState<DraftPick | null>(null);
+  const [statsMap, setStatsMap] = useState<Record<string, LiveStats>>({});
 
   const numTeams = teams.length;
   const totalPicksNeeded = numTeams * TOTAL_ROUNDS;
@@ -268,6 +278,29 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league.id]);
+
+  // Fetch live stats from Supabase cache
+  useEffect(() => {
+    fetch("/api/nba-stats")
+      .then(r => r.json())
+      .then(data => {
+        if (data.players) {
+          const map: Record<string, LiveStats> = {};
+          for (const p of data.players) {
+            map[p.name] = {
+              gamesPlayed: p.gamesPlayed,
+              min: p.averages.min, fgm: p.averages.fgm, fga: p.averages.fga,
+              fg3m: p.averages.fg3m, ftm: p.averages.ftm, fta: p.averages.fta,
+              reb: p.averages.reb, ast: p.averages.ast, stl: p.averages.stl,
+              blk: p.averages.blk, tov: p.averages.tov, pts: p.averages.pts,
+              fpts: p.fpts, fptsAvg: p.fptsAvg,
+            };
+          }
+          setStatsMap(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Timer countdown
   useEffect(() => {
@@ -503,71 +536,93 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
 
           {/* Player list header */}
           <div style={{
-            display: "grid", gridTemplateColumns: "40px 1fr 60px 50px 50px 50px 50px 50px 80px",
-            padding: "6px 16px", background: "#0f172a", fontSize: "10px", color: "#64748b",
+            display: "grid",
+            gridTemplateColumns: "36px 180px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px",
+            padding: "6px 12px", background: "#0f172a", fontSize: "10px", color: "#64748b",
             fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px",
+            minWidth: "max-content",
           }}>
-            <span>排名</span><span>球员</span><span>位置</span>
-            <span>PPG</span><span>RPG</span><span>APG</span><span>SPG</span><span>BPG</span>
+            <span>#</span><span>球员</span><span>位置</span>
+            <span>GP</span><span>MIN</span><span>FGM</span><span>FGA</span>
+            <span>FTM</span><span>FTA</span><span>3PM</span>
+            <span>REB</span><span>AST</span><span>STL</span><span>BLK</span><span>TO</span><span>PTS</span>
+            <span style={{ color: "#10b981" }}>FPTS</span>
             <span style={{ textAlign: "center" }}>{isMyTurn ? "选择" : ""}</span>
           </div>
 
           {/* Player list */}
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            {availablePlayers.slice(0, 100).map((player, idx) => (
-              <div
-                key={player.id}
-                onClick={() => isMyTurn && !picking && handlePlayerPick(player)}
-                style={{
-                  display: "grid", gridTemplateColumns: "40px 1fr 60px 50px 50px 50px 50px 50px 80px",
-                  padding: "8px 16px", background: idx % 2 === 0 ? "#0a0a0a" : "#111",
-                  cursor: isMyTurn ? "pointer" : "default", borderBottom: "1px solid #1a1a1a",
-                  transition: "background 0.15s", alignItems: "center",
-                  opacity: picking ? 0.6 : 1,
-                }}
-                onMouseEnter={e => { if (isMyTurn) (e.currentTarget as HTMLElement).style.background = "#1e293b"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? "#0a0a0a" : "#111"; }}
-              >
-                <span style={{ color: "#64748b", fontWeight: 600, fontSize: "12px" }}>#{player.rank}</span>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: "13px", color: "#e5e5e5" }}>
-                    {player.name}
-                    {player.injury && (
-                      <span style={{
-                        marginLeft: "6px", padding: "1px 5px",
-                        background: player.injury === "Out" ? "#7f1d1d" : "#78350f",
-                        color: player.injury === "Out" ? "#fca5a5" : "#fde68a",
-                        borderRadius: "3px", fontSize: "9px", fontWeight: 700,
-                      }}>{player.injury}</span>
+          <div style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
+            {availablePlayers.slice(0, 150).map((player, idx) => {
+              const s = statsMap[player.name];
+              const fmt = (v?: number) => v != null ? v.toFixed(1) : "—";
+              return (
+                <div
+                  key={player.id}
+                  onClick={() => isMyTurn && !picking && handlePlayerPick(player)}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "36px 180px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px",
+                    padding: "7px 12px", background: idx % 2 === 0 ? "#0a0a0a" : "#111",
+                    cursor: isMyTurn ? "pointer" : "default", borderBottom: "1px solid #1a1a1a",
+                    transition: "background 0.15s", alignItems: "center",
+                    opacity: picking ? 0.6 : 1, minWidth: "max-content",
+                  }}
+                  onMouseEnter={e => { if (isMyTurn) (e.currentTarget as HTMLElement).style.background = "#1e293b"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? "#0a0a0a" : "#111"; }}
+                >
+                  <span style={{ color: "#64748b", fontWeight: 600, fontSize: "11px" }}>#{player.rank}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: "12px", color: "#e5e5e5", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {player.name}
+                      {player.injury && (
+                        <span style={{
+                          marginLeft: "5px", padding: "1px 4px",
+                          background: player.injury === "Out" ? "#7f1d1d" : "#78350f",
+                          color: player.injury === "Out" ? "#fca5a5" : "#fde68a",
+                          borderRadius: "3px", fontSize: "9px", fontWeight: 700,
+                        }}>{player.injury}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "10px", color: "#64748b" }}>{player.team}</div>
+                  </div>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{player.position}</span>
+                  <span style={{ fontSize: "11px", color: "#64748b" }}>{s?.gamesPlayed ?? "—"}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.min)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.fgm)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.fga)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.ftm)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.fta)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.fg3m)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.reb)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.ast)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.stl)}</span>
+                  <span style={{ fontSize: "11px", color: "#94a3b8" }}>{fmt(s?.blk)}</span>
+                  <span style={{ fontSize: "11px", color: "#ef4444" }}>{fmt(s?.tov)}</span>
+                  <span style={{ fontSize: "11px", color: "#f59e0b", fontWeight: 600 }}>{fmt(s?.pts)}</span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
+                    <span style={{ fontSize: "10px", color: "#64748b" }}>{s ? s.fpts : "—"}</span>
+                    <span style={{ fontSize: "12px", color: "#10b981", fontWeight: 700 }}>{s ? s.fptsAvg : "—"}</span>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    {isMyTurn && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handlePlayerPick(player); }}
+                        disabled={picking}
+                        style={{
+                          padding: "4px 10px",
+                          background: picking ? "#334155" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                          color: "white", border: "none", borderRadius: "4px",
+                          fontSize: "11px", fontWeight: 600,
+                          cursor: picking ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {picking ? "..." : "选择"}
+                      </button>
                     )}
                   </div>
-                  <div style={{ fontSize: "11px", color: "#64748b" }}>{player.team}</div>
                 </div>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{player.position}</span>
-                <span style={{ fontSize: "12px", color: "#f59e0b", fontWeight: 600 }}>{player.ppg}</span>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{player.rpg}</span>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{player.apg}</span>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{player.spg}</span>
-                <span style={{ fontSize: "12px", color: "#94a3b8" }}>{player.bpg}</span>
-                <div style={{ textAlign: "center" }}>
-                  {isMyTurn && (
-                    <button
-                      onClick={e => { e.stopPropagation(); handlePlayerPick(player); }}
-                      disabled={picking}
-                      style={{
-                        padding: "4px 12px",
-                        background: picking ? "#334155" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-                        color: "white", border: "none", borderRadius: "4px",
-                        fontSize: "11px", fontWeight: 600,
-                        cursor: picking ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      {picking ? "..." : "选择"}
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
