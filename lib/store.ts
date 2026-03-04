@@ -191,46 +191,45 @@
    // ==================== Auth (Supabase + localStorage for password) ====================
    
    export async function signup(name: string, email: string, password: string) {
-     // 1. Use Supabase Auth for password storage (works across all browsers/devices)
-     const { data: authData, error: authError } = await supabase.auth.signUp({
-       email,
-       password,
-     });
-
-     if (authError) {
-       // Check if it's a duplicate email error
-       if (authError.message.toLowerCase().includes("already") || authError.message.toLowerCase().includes("exists")) {
-         return { ok: false as const, error: "Email already exists" };
-       }
-       return { ok: false as const, error: authError.message };
-     }
-
-     if (!authData.user) {
-       return { ok: false as const, error: "Signup failed" };
-     }
-
-     // 2. Create user profile in users table
      const username = email.split("@")[0];
-     const { data: newUser, error } = await supabase
+
+     // Check if email already exists in users table
+     const { data: existing } = await supabase
        .from("users")
-       .insert({ id: authData.user.id, name, email, username })
+       .select("id")
+       .eq("email", email)
+       .single();
+     if (existing) return { ok: false as const, error: "Email already exists" };
+
+     // 1. Try Supabase Auth signup
+     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+     let userId: string | undefined = authData?.user?.id;
+
+     // 2. If Auth fails (e.g. email rate limit), fall back to local-only auth
+     if (authError || !userId) {
+       const isDuplicate = authError?.message?.toLowerCase().includes("already") ||
+                           authError?.message?.toLowerCase().includes("exists");
+       if (isDuplicate) return { ok: false as const, error: "Email already exists" };
+       const isRateLimit = authError?.message?.toLowerCase().includes("rate") ||
+                           authError?.message?.toLowerCase().includes("email");
+       if (!isRateLimit && authError) return { ok: false as const, error: authError.message };
+       // Rate-limited or no user returned: generate a UUID and continue without Supabase Auth
+       userId = crypto.randomUUID();
+     }
+
+     // 3. Insert into users table
+     const { data: newUser, error: insertError } = await supabase
+       .from("users")
+       .insert({ id: userId, name, email, username })
        .select()
        .single();
 
-     if (error) {
-       // If users table insert fails, try without specifying id (in case of uuid mismatch)
-       const { data: fallbackUser, error: fallbackError } = await supabase
-         .from("users")
-         .insert({ name, email, username })
-         .select()
-         .single();
+     if (insertError) return { ok: false as const, error: insertError.message };
 
-       if (fallbackError) {
-         return { ok: false as const, error: fallbackError.message };
-       }
-       setSessionUser(fallbackUser);
-       return { ok: true as const, user: fallbackUser };
-     }
+     // 4. Store credentials in localStorage so login works without Supabase Auth
+     const storedUsers = JSON.parse(localStorage.getItem("bp_users") || "[]");
+     storedUsers.push({ id: userId, email, password, username, name });
+     localStorage.setItem("bp_users", JSON.stringify(storedUsers));
 
      setSessionUser(newUser);
      return { ok: true as const, user: newUser };
