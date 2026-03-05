@@ -63,34 +63,6 @@ export default function LeaguePage() {
     }
   }
 
-  async function resolveAuthUserId(sessionUser: { id: string; email?: string }): Promise<string> {
-    // Try to get the auth user from Supabase Auth session
-    const { data: authData } = await storeSupa.auth.getUser();
-    if (authData?.user?.id) return authData.user.id;
-
-    // No active auth session — try to sign in with stored credentials
-    const storedUsers = JSON.parse(localStorage.getItem("bp_users") || "[]");
-    const stored = storedUsers.find((u: any) => u.id === sessionUser.id || u.email === sessionUser.email);
-    if (stored?.email && stored?.password) {
-      // Try sign in first
-      const { data: signInData } = await storeSupa.auth.signInWithPassword({
-        email: stored.email,
-        password: stored.password,
-      });
-      if (signInData?.user?.id) return signInData.user.id;
-
-      // Try sign up (creates auth.users entry)
-      const { data: signUpData } = await storeSupa.auth.signUp({
-        email: stored.email,
-        password: stored.password,
-      });
-      if (signUpData?.user?.id) return signUpData.user.id;
-    }
-
-    // Fallback: return the session user ID (may still fail FK if not in auth.users)
-    return sessionUser.id;
-  }
-
   async function handleJoinDraft() {
     if (!teamName.trim()) {
       alert("请输入队伍名称");
@@ -105,25 +77,13 @@ export default function LeaguePage() {
       const leagueData = league;
       if (!leagueData) throw new Error("联赛不存在");
 
-      // Resolve the auth user ID to satisfy fantasy_teams FK constraint
-      const authUserId = await resolveAuthUserId(user);
-
       const { data: team, error } = await storeSupa
         .from("fantasy_teams")
-        .insert({ league_id: leagueData.id, user_id: authUserId, name: teamName.trim(), draft_position: teams.length + 1 })
+        .insert({ league_id: leagueData.id, user_id: user.id, name: teamName.trim(), draft_position: teams.length + 1 })
         .select()
         .single();
       if (error) throw error;
       await storeSupa.from("league_members").upsert({ league_id: leagueData.id, user_id: user.id, role: "member" }, { onConflict: "league_id,user_id" });
-
-      // If the auth user ID differs from session, update the session and public.users
-      if (authUserId !== user.id) {
-        await storeSupa.from("users").update({ id: authUserId }).eq("id", user.id).then(() => {
-          const updated = { ...user, id: authUserId };
-          localStorage.setItem("bp_session", JSON.stringify(updated));
-          setCurrentUser(updated);
-        });
-      }
 
       setMyTeam(team);
       setShowJoinModal(false);
