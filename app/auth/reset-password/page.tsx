@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { updatePassword } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
@@ -15,17 +15,41 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const readyRef = useRef(false);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Supabase will auto-detect the token from the URL hash and establish a session
+    // Listen for PASSWORD_RECOVERY event (works for both hash-based and PKCE flows)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
+        readyRef.current = true;
         setReady(true);
       }
     });
 
+    // PKCE flow: Supabase appends ?code=... to the redirect URL
+    const code = searchParams.get("code");
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (error) {
+          setExpired(true);
+        }
+        // On success, the onAuthStateChange listener above will fire PASSWORD_RECOVERY
+      });
+    } else {
+      // No code param — fall back to hash-based detection with timeout
+      const timer = setTimeout(() => {
+        if (!readyRef.current) setExpired(true);
+      }, 5000);
+      return () => {
+        clearTimeout(timer);
+        subscription.unsubscribe();
+      };
+    }
+
     return () => subscription.unsubscribe();
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +92,28 @@ export default function ResetPasswordPage() {
           <p>{t("请输入你的新密码", "Please enter your new password")}</p>
         </div>
 
-        {!ready ? (
+        {expired ? (
+          <div style={{
+            padding: "16px 20px",
+            background: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: "var(--radius-md)",
+            fontSize: 14,
+            color: "#f87171",
+            textAlign: "center",
+            lineHeight: 1.6,
+          }}>
+            {t(
+              "重置链接无效或已过期，请重新申请。",
+              "This reset link is invalid or has expired. Please request a new one."
+            )}
+            <div style={{ marginTop: 12 }}>
+              <Link href="/auth/forgot-password" style={{ color: "#f59e0b", textDecoration: "underline" }}>
+                {t("重新发送重置链接", "Request a new reset link")}
+              </Link>
+            </div>
+          </div>
+        ) : !ready ? (
           <div style={{
             padding: "16px 20px",
             background: "rgba(245, 158, 11, 0.1)",
