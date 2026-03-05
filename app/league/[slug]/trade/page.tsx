@@ -14,6 +14,7 @@ import {
   proposeTrade,
   respondToTrade,
   cancelTrade,
+  syncTradeRosters,
   League,
   RosterPlayer,
   TradeProposal,
@@ -100,6 +101,8 @@ export default function TradePage() {
       const myT = teamsData.find((t: TeamInfo) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
+        // Sync rosters from accepted trades before loading local roster
+        await syncTradeRosters(leagueData.id, myT.id);
         setMyRoster(getTeamRoster(leagueData.id, myT.id));
       }
     }

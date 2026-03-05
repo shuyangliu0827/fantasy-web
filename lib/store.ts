@@ -1297,6 +1297,8 @@
 
      const trade = mapTradeRow(row);
 
+     let rosterData: { fromRoster: RosterPlayer[]; toRoster: RosterPlayer[] } | null = null;
+
      if (accept) {
        // Execute the trade: swap players between rosters (localStorage)
        const fromRoster = getTeamRoster(leagueId, trade.fromTeamId);
@@ -1327,6 +1329,9 @@
        setTeamRoster(leagueId, trade.fromTeamId, newFromRoster);
        setTeamRoster(leagueId, trade.toTeamId, newToRoster);
 
+       // Store roster snapshots for cross-browser sync
+       rosterData = { fromRoster: newFromRoster, toRoster: newToRoster };
+
        // Clean up lineups for traded players
        for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
          const lineup = getTeamLineup(leagueId, teamId);
@@ -1339,17 +1344,88 @@
        }
      }
 
-     // Update status in Supabase
+     // Update status in Supabase (include roster snapshots for accepted trades)
      const newStatus = accept ? "accepted" : "rejected";
+     const updatePayload: any = { status: newStatus, resolved_at: new Date().toISOString() };
+     if (rosterData) {
+       updatePayload.roster_data = rosterData;
+     }
      const { error: updateError } = await supabase
        .from("trade_proposals")
-       .update({ status: newStatus, resolved_at: new Date().toISOString() })
+       .update(updatePayload)
        .eq("id", tradeId);
 
      if (updateError) {
        return { ok: false, error: updateError.message };
      }
      return { ok: true };
+   }
+
+   /**
+    * Sync rosters from accepted trades stored in Supabase.
+    * This ensures that the trade initiator's browser (which didn't run respondToTrade)
+    * gets the updated rosters.
+    */
+   export async function syncTradeRosters(leagueId: string, teamId: string): Promise<void> {
+     // Fetch accepted trades for this team that have roster_data
+     const { data: trades, error } = await supabase
+       .from("trade_proposals")
+       .select("id, from_team_id, to_team_id, offered_player_ids, requested_player_ids, roster_data")
+       .eq("league_id", leagueId)
+       .eq("status", "accepted")
+       .not("roster_data", "is", null);
+
+     if (error || !trades || trades.length === 0) return;
+
+     // Track which trades we've already synced locally
+     const syncKey = `bp_synced_trades_${leagueId}`;
+     const synced = new Set<string>(safeParse<string[]>(
+       canUseStorage() ? localStorage.getItem(syncKey) : null, []
+     ));
+
+     let changed = false;
+
+     for (const trade of trades) {
+       if (synced.has(trade.id)) continue;
+
+       // Only apply if this team is involved in the trade
+       const isFromTeam = trade.from_team_id === teamId;
+       const isToTeam = trade.to_team_id === teamId;
+       if (!isFromTeam && !isToTeam) {
+         synced.add(trade.id);
+         changed = true;
+         continue;
+       }
+
+       const rd = trade.roster_data as { fromRoster: RosterPlayer[]; toRoster: RosterPlayer[] } | null;
+       if (!rd) continue;
+
+       // Check if local roster needs updating by seeing if traded-away players are still present
+       const localRoster = getTeamRoster(leagueId, teamId);
+       const tradedAwayIds = isFromTeam ? (trade.offered_player_ids || []) : (trade.requested_player_ids || []);
+       const stillHasTradedPlayers = tradedAwayIds.some((pid: string) => localRoster.some(p => p.id === pid));
+
+       if (stillHasTradedPlayers) {
+         // Apply the roster snapshot from Supabase
+         const newRoster = isFromTeam ? rd.fromRoster : rd.toRoster;
+         setTeamRoster(leagueId, teamId, newRoster);
+
+         // Clean up lineup
+         const lineup = getTeamLineup(leagueId, teamId);
+         const rosterIds = new Set(newRoster.map(p => p.id));
+         for (const [slot, pid] of Object.entries(lineup)) {
+           if (!rosterIds.has(pid)) delete lineup[slot];
+         }
+         setTeamLineup(leagueId, teamId, lineup);
+       }
+
+       synced.add(trade.id);
+       changed = true;
+     }
+
+     if (changed && canUseStorage()) {
+       localStorage.setItem(syncKey, JSON.stringify(Array.from(synced)));
+     }
    }
 
    export async function cancelTrade(leagueId: string, tradeId: string): Promise<{ ok: boolean; error?: string }> {

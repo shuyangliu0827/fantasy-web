@@ -15,6 +15,7 @@ import {
   setTeamLineup,
   autoSetLineup,
   isEligibleForSlot,
+  syncTradeRosters,
   League,
   LeagueMember,
   RosterPlayer,
@@ -79,6 +80,8 @@ export default function RosterPage() {
         setMyTeam(myT);
         const teamId = myT.id;
         setViewTeamId(teamId);
+        // Sync rosters from accepted trades before loading local roster
+        await syncTradeRosters(leagueData.id, teamId);
         const rosterData = getTeamRoster(leagueData.id, teamId);
         setRoster(rosterData);
         let lineupData = getTeamLineup(leagueData.id, teamId);
