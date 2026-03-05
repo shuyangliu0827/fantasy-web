@@ -1070,6 +1070,24 @@
      const all = getLeagueRosters(leagueId);
      all[teamId] = roster;
      localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+     // Also persist to Supabase so other users can see this roster
+     supabase.from("fantasy_teams").update({ roster_json: roster }).eq("id", teamId).then(() => {});
+   }
+
+   // Load all teams' rosters from Supabase (for viewing other teams)
+   export async function loadAllRostersFromSupabase(leagueId: string): Promise<Record<string, RosterPlayer[]>> {
+     const { data } = await supabase
+       .from("fantasy_teams")
+       .select("id, roster_json")
+       .eq("league_id", leagueId);
+     if (!data) return {};
+     const result: Record<string, RosterPlayer[]> = {};
+     for (const team of data) {
+       if (team.roster_json && Array.isArray(team.roster_json) && team.roster_json.length > 0) {
+         result[team.id] = team.roster_json as RosterPlayer[];
+       }
+     }
+     return result;
    }
 
    // Lineup: { PG: playerId, SG: playerId, ... }

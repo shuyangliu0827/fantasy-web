@@ -16,6 +16,7 @@ import {
   autoSetLineup,
   isEligibleForSlot,
   syncTradeRosters,
+  loadAllRostersFromSupabase,
   League,
   LeagueMember,
   RosterPlayer,
@@ -55,6 +56,7 @@ export default function RosterPage() {
   const [swapSource, setSwapSource] = useState<string | null>(null); // slot name being swapped
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; user_id: string }[]>([]);
+  const [allRosters, setAllRosters] = useState<Record<string, RosterPlayer[]>>({});
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -73,6 +75,10 @@ export default function RosterPage() {
       .eq("league_id", leagueData.id);
     setAllTeams(teamsData || []);
 
+    // Load all rosters from Supabase so we can view any team
+    const supabaseRosters = await loadAllRostersFromSupabase(leagueData.id);
+    setAllRosters(supabaseRosters);
+
     const currentUser = getSessionUser();
     if (currentUser && teamsData) {
       const myT = teamsData.find((t: { user_id: string }) => t.user_id === currentUser.id);
@@ -89,7 +95,18 @@ export default function RosterPage() {
           lineupData = autoSetLineup(leagueData.id, teamId);
         }
         setLineup(lineupData);
+      } else {
+        // User is not in the league, show first team
+        if (teamsData.length > 0) {
+          const firstTeam = teamsData[0];
+          setViewTeamId(firstTeam.id);
+          setRoster(supabaseRosters[firstTeam.id] || []);
+        }
       }
+    } else if (teamsData && teamsData.length > 0) {
+      // Not logged in, show first team
+      setViewTeamId(teamsData[0].id);
+      setRoster(supabaseRosters[teamsData[0].id] || []);
     }
     setLoading(false);
   }
@@ -97,7 +114,9 @@ export default function RosterPage() {
   function switchViewTeam(teamId: string) {
     if (!league) return;
     setViewTeamId(teamId);
-    const rosterData = getTeamRoster(league.id, teamId);
+    // For own team, use localStorage; for others, use Supabase data
+    const isOwn = teamId === myTeam?.id;
+    const rosterData = isOwn ? getTeamRoster(league.id, teamId) : (allRosters[teamId] || []);
     setRoster(rosterData);
     const lineupData = getTeamLineup(league.id, teamId);
     setLineup(lineupData);
