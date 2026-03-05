@@ -1,13 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { updatePassword } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="auth-page">
+        <div className="auth-card">
+          <div style={{
+            padding: "16px 20px",
+            background: "rgba(245, 158, 11, 0.1)",
+            border: "1px solid rgba(245, 158, 11, 0.3)",
+            borderRadius: "var(--radius-md)",
+            fontSize: 14,
+            color: "#fbbf24",
+            textAlign: "center",
+            lineHeight: 1.6,
+          }}>
+            Verifying reset link...
+          </div>
+        </div>
+      </div>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
+
+function ResetPasswordContent() {
   const { t } = useLang();
   const router = useRouter();
   const [password, setPassword] = useState("");
