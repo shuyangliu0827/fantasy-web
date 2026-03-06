@@ -432,7 +432,16 @@ export default function RosterPage() {
 
   // Get game-day box score stats for a player (if they played on the selected date)
   function getGameDayStatsForPlayer(player: RosterPlayer): PlayerGameStats | null {
-    return gameDayStats[player.id] || null;
+    // Try direct roster ID match
+    const direct = gameDayStats[player.id];
+    if (direct) return direct;
+    // Use stats cache to find BDL ID (handles "p1" → numeric BDL ID mapping via name match)
+    const cached = getStatsForPlayer(player);
+    if (cached) {
+      const byBdlId = gameDayStats[String(cached.id)];
+      if (byBdlId) return byBdlId;
+    }
+    return null;
   }
 
   // Check if the selected date has a completed or in-progress game for this player
