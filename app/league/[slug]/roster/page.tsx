@@ -44,6 +44,24 @@ type CachedPlayerStats = {
   fptsAvg: number;
 };
 
+type PlayerGameStats = {
+  min: number;
+  fgm: number;
+  fga: number;
+  fg3m: number;
+  ftm: number;
+  fta: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  pts: number;
+  fpts: number;
+};
+
+type DateStatsMap = Record<string, PlayerGameStats>;
+
 // ── Constants ──
 
 const SLOT_LABELS: Record<string, { label: string; labelEn: string; type: "starter" | "bench" }> = {
@@ -112,6 +130,7 @@ export default function RosterPage() {
   const [selectedDate, setSelectedDate] = useState<string>(formatDateStr(new Date()));
   const [teamGames, setTeamGames] = useState<TeamGamesMap>({});
   const [playerStats, setPlayerStats] = useState<Map<string, CachedPlayerStats>>(new Map());
+  const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
   const [gamesLoading, setGamesLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -126,6 +145,10 @@ export default function RosterPage() {
   useEffect(() => {
     fetchGames(weekStart);
   }, [weekStart]);
+
+  useEffect(() => {
+    fetchGameDayStats(selectedDate);
+  }, [selectedDate]);
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -191,6 +214,20 @@ export default function RosterPage() {
       console.error("Failed to fetch games:", err);
     } finally {
       setGamesLoading(false);
+    }
+  }
+
+  async function fetchGameDayStats(date: string) {
+    try {
+      const res = await fetch(`/api/nba-game-stats?date=${date}`);
+      const data = await res.json();
+      if (data.status === "success" && data.stats) {
+        setGameDayStats(data.stats);
+      } else {
+        setGameDayStats({});
+      }
+    } catch {
+      setGameDayStats({});
     }
   }
 
@@ -281,8 +318,15 @@ export default function RosterPage() {
 
   // ── Schedule & stats helpers ──
 
+  // Get the live/current team for a player from the stats cache
+  function getLiveTeam(player: RosterPlayer): string {
+    const stats = getStatsForPlayer(player);
+    return stats?.team || player.team;
+  }
+
   function getGameForPlayer(player: RosterPlayer): GameInfo | null {
-    const teamSchedule = teamGames[player.team];
+    const team = getLiveTeam(player);
+    const teamSchedule = teamGames[team];
     if (!teamSchedule) return null;
     return teamSchedule[selectedDate] || null;
   }
@@ -319,11 +363,30 @@ export default function RosterPage() {
   const benchSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
   const unassigned = getUnassignedPlayers();
 
-  // Calculate starter totals from live stats
+  // Calculate starter totals (use game-day stats when available, averages otherwise)
   const starterTotals = starterSlots.reduce(
     (acc, slot) => {
       const player = getPlayerInSlot(slot);
       if (!player) return acc;
+      const dayStats = getGameDayStatsForPlayer(player);
+      const played = hasPlayedGame(player);
+      if (played && dayStats) {
+        return {
+          min: acc.min + dayStats.min,
+          fgm: acc.fgm + dayStats.fgm,
+          fga: acc.fga + dayStats.fga,
+          ftm: acc.ftm + dayStats.ftm,
+          fta: acc.fta + dayStats.fta,
+          fg3m: acc.fg3m + dayStats.fg3m,
+          reb: acc.reb + dayStats.reb,
+          ast: acc.ast + dayStats.ast,
+          stl: acc.stl + dayStats.stl,
+          blk: acc.blk + dayStats.blk,
+          tov: acc.tov + dayStats.tov,
+          pts: acc.pts + dayStats.pts,
+          fpts: acc.fpts + dayStats.fpts,
+        };
+      }
       const stats = getStatsForPlayer(player);
       if (!stats) return acc;
       const a = stats.averages;
@@ -367,9 +430,27 @@ export default function RosterPage() {
     );
   }
 
+  // Get game-day box score stats for a player (if they played on the selected date)
+  function getGameDayStatsForPlayer(player: RosterPlayer): PlayerGameStats | null {
+    return gameDayStats[player.id] || null;
+  }
+
+  // Check if the selected date has a completed or in-progress game for this player
+  function hasPlayedGame(player: RosterPlayer): boolean {
+    const game = getGameForPlayer(player);
+    if (!game) return false;
+    // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
+    const status = game.status.toLowerCase();
+    return status === "final" || (status !== "" && status !== "scheduled" && !status.includes("scheduled"));
+  }
+
   function renderStatCells(player: RosterPlayer | undefined) {
     const stats = player ? getStatsForPlayer(player) : null;
-    if (!stats) {
+    const dayStats = player ? getGameDayStatsForPlayer(player) : null;
+    const played = player ? hasPlayedGame(player) : false;
+    const useGameDay = played && dayStats;
+
+    if (!stats && !dayStats) {
       return (
         <>
           <div className="col-stat detail">-</div>
@@ -385,7 +466,26 @@ export default function RosterPage() {
         </>
       );
     }
-    const a = stats.averages;
+
+    if (useGameDay) {
+      const g = dayStats;
+      return (
+        <>
+          <div className="col-stat detail live">{g.min.toFixed(0)}</div>
+          <div className="col-stat detail compound live">{g.fgm}/{g.fga}</div>
+          <div className="col-stat detail compound live">{g.ftm}/{g.fta}</div>
+          <div className="col-stat detail live">{g.fg3m}</div>
+          <div className="col-stat detail live">{g.reb}</div>
+          <div className="col-stat detail live">{g.ast}</div>
+          <div className="col-stat detail live">{g.stl}</div>
+          <div className="col-stat detail live">{g.blk}</div>
+          <div className="col-stat detail tov live">{g.tov}</div>
+          <div className="col-stat detail pts live">{g.pts}</div>
+        </>
+      );
+    }
+
+    const a = stats!.averages;
     return (
       <>
         <div className="col-stat detail">{a.min.toFixed(1)}</div>
@@ -403,6 +503,13 @@ export default function RosterPage() {
   }
 
   function renderFptsCell(player: RosterPlayer | undefined) {
+    const dayStats = player ? getGameDayStatsForPlayer(player) : null;
+    const played = player ? hasPlayedGame(player) : false;
+
+    if (played && dayStats) {
+      return <div className="col-fpts live">{dayStats.fpts.toFixed(1)}</div>;
+    }
+
     const stats = player ? getStatsForPlayer(player) : null;
     if (!stats) return <div className="col-fpts">-</div>;
     return <div className="col-fpts">{stats.fptsAvg.toFixed(1)}</div>;
@@ -424,7 +531,7 @@ export default function RosterPage() {
           {player ? (
             <div className="player-info">
               <span className="player-name">{player.name}</span>
-              <span className="player-meta">{player.team} · {player.position}</span>
+              <span className="player-meta">{getLiveTeam(player)} · {player.position}</span>
             </div>
           ) : (
             <span className="empty-slot">{t("空位", "Empty")}</span>
@@ -639,7 +746,7 @@ export default function RosterPage() {
                           <div className="col-player">
                             <div className="player-info">
                               <span className="player-name">{player.name}</span>
-                              <span className="player-meta">{player.team} · {player.position}</span>
+                              <span className="player-meta">{getLiveTeam(player)} · {player.position}</span>
                             </div>
                           </div>
                           {renderGameCell(player)}
@@ -876,10 +983,11 @@ const styles = `
   .lineup-table {
     background: #111;
     min-width: 900px;
+    width: 100%;
   }
   .lineup-header {
     display: grid;
-    grid-template-columns: 56px 160px 90px 48px 64px 64px 42px 42px 42px 42px 42px 42px 48px 60px;
+    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     background: #1a1a1a;
     border-bottom: 1px solid #222;
@@ -891,7 +999,7 @@ const styles = `
   }
   .lineup-row {
     display: grid;
-    grid-template-columns: 56px 160px 90px 48px 64px 64px 42px 42px 42px 42px 42px 42px 48px 60px;
+    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     border-bottom: 1px solid #1a1a1a;
     align-items: center;
@@ -976,6 +1084,9 @@ const styles = `
   }
   .col-stat.tov { color: #ef4444; }
   .col-stat.pts { color: #fff; font-weight: 600; }
+  .col-stat.live { color: #22c55e; }
+  .col-stat.live.tov { color: #ef4444; }
+  .col-stat.live.pts { color: #22c55e; font-weight: 600; }
 
   /* FPTS column */
   .col-fpts {
@@ -983,6 +1094,9 @@ const styles = `
     font-weight: 700;
     color: #f59e0b;
     text-align: center;
+  }
+  .col-fpts.live {
+    color: #22c55e;
   }
 
   /* Data loading */
