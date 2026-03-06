@@ -357,13 +357,14 @@ export default function RosterPage() {
 
   // ── Computed values ──
 
+  const isPastDate = selectedDate < todayStr;
   const isOwner = user && league && league.commissioner_id === user.id;
   const isMyTeam = viewTeamId === myTeam?.id;
   const starterSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "starter");
   const benchSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
   const unassigned = getUnassignedPlayers();
 
-  // Calculate starter totals (use game-day stats when available, averages otherwise)
+  // Calculate starter totals (past dates: only game-day stats; today/future: game-day or averages)
   const starterTotals = starterSlots.reduce(
     (acc, slot) => {
       const player = getPlayerInSlot(slot);
@@ -387,6 +388,8 @@ export default function RosterPage() {
           fpts: acc.fpts + dayStats.fpts,
         };
       }
+      // Past dates: don't add season averages for players without game-day data
+      if (isPastDate) return acc;
       const stats = getStatsForPlayer(player);
       if (!stats) return acc;
       const a = stats.averages;
@@ -457,24 +460,49 @@ export default function RosterPage() {
     const stats = player ? getStatsForPlayer(player) : null;
     const dayStats = player ? getGameDayStatsForPlayer(player) : null;
     const played = player ? hasPlayedGame(player) : false;
+    const game = player ? getGameForPlayer(player) : null;
     const useGameDay = played && dayStats;
 
-    if (!stats && !dayStats) {
-      return (
-        <>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-          <div className="col-stat detail">-</div>
-        </>
-      );
+    const dashRow = (
+      <>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+      </>
+    );
+
+    // Past date: only show actual game-day stats, never season averages
+    if (isPastDate) {
+      if (useGameDay) {
+        const g = dayStats;
+        return (
+          <>
+            <div className="col-stat detail">{g.min.toFixed(0)}</div>
+            <div className="col-stat detail compound">{g.fgm}/{g.fga}</div>
+            <div className="col-stat detail compound">{g.ftm}/{g.fta}</div>
+            <div className="col-stat detail">{g.fg3m}</div>
+            <div className="col-stat detail">{g.reb}</div>
+            <div className="col-stat detail">{g.ast}</div>
+            <div className="col-stat detail">{g.stl}</div>
+            <div className="col-stat detail">{g.blk}</div>
+            <div className="col-stat detail tov">{g.tov}</div>
+            <div className="col-stat detail pts">{g.pts}</div>
+          </>
+        );
+      }
+      // Game existed but no stats (DNP/injured) or no game at all → show "--"
+      return dashRow;
     }
+
+    // Today or future: show live game-day stats (green) or fall back to season averages
+    if (!stats && !dayStats) return dashRow;
 
     if (useGameDay) {
       const g = dayStats;
@@ -515,12 +543,19 @@ export default function RosterPage() {
     const dayStats = player ? getGameDayStatsForPlayer(player) : null;
     const played = player ? hasPlayedGame(player) : false;
 
+    if (isPastDate) {
+      if (played && dayStats) {
+        return <div className="col-fpts">{dayStats.fpts.toFixed(1)}</div>;
+      }
+      return <div className="col-fpts">--</div>;
+    }
+
     if (played && dayStats) {
       return <div className="col-fpts live">{dayStats.fpts.toFixed(1)}</div>;
     }
 
     const stats = player ? getStatsForPlayer(player) : null;
-    if (!stats) return <div className="col-fpts">-</div>;
+    if (!stats) return <div className="col-fpts">--</div>;
     return <div className="col-fpts">{stats.fptsAvg.toFixed(1)}</div>;
   }
 
