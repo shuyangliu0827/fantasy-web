@@ -575,6 +575,37 @@ const styles = `
   .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .league-title { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-size: 20px; font-weight: 600; }
   .league-icon { font-size: 28px; }
+  .league-nav {
+    background: #111;
+    border-bottom: 1px solid #222;
+    position: sticky;
+    top: 60px;
+    z-index: 40;
+  }
+  .league-nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    gap: 4px;
+    padding: 0 16px;
+    overflow-x: auto;
+  }
+  .league-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 14px 16px;
+    color: #888;
+    text-decoration: none;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+  .league-nav-link:hover { color: #fff; }
+  .league-nav-link.active {
+    color: #f59e0b;
+    border-bottom-color: #f59e0b;
+  }
   .page-content { min-height: calc(100vh - 200px); background: #0a0a0a; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
