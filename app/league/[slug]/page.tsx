@@ -76,9 +76,13 @@ export default function LeaguePage() {
       if (!user) throw new Error("请先登录");
       const leagueData = league;
       if (!leagueData) throw new Error("联赛不存在");
+      const { count } = await storeSupa
+        .from("fantasy_teams")
+        .select("*", { count: "exact", head: true })
+        .eq("league_id", leagueData.id);
       const { data: team, error } = await storeSupa
         .from("fantasy_teams")
-        .insert({ league_id: leagueData.id, user_id: user.id, name: teamName.trim(), draft_position: teams.length + 1 })
+        .insert({ league_id: leagueData.id, user_id: user.id, name: teamName.trim(), draft_position: (count ?? 0) + 1 })
         .select()
         .single();
       if (error) throw error;
