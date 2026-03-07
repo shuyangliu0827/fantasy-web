@@ -1041,7 +1041,7 @@
    };
 
    // Fantasy basketball lineup slots
-   export const LINEUP_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"] as const;
+   export const LINEUP_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"] as const;
    export type LineupSlot = typeof LINEUP_SLOTS[number];
 
    // Which positions are eligible for which slot
@@ -1055,10 +1055,10 @@
      F: ["SF", "PF"],
      UTIL1: ["PG", "SG", "SF", "PF", "C"],
      UTIL2: ["PG", "SG", "SF", "PF", "C"],
+     UTIL3: ["PG", "SG", "SF", "PF", "C"],
      BE1: ["PG", "SG", "SF", "PF", "C"],
      BE2: ["PG", "SG", "SF", "PF", "C"],
      BE3: ["PG", "SG", "SF", "PF", "C"],
-     BE4: ["PG", "SG", "SF", "PF", "C"],
    };
 
    export function isEligibleForSlot(playerPosition: string, slot: string): boolean {
@@ -1184,7 +1184,7 @@
      const assigned = new Set<string>();
 
      // Auto-assign: go through slots in order, pick best available player
-     const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"];
+     const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
      for (const slot of slotOrder) {
        const eligible = roster
          .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
