@@ -6,21 +6,65 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getLeagueMembers,
-  getTeamRoster,
   getTeamLineup,
   setTeamLineup,
   autoSetLineup,
   isEligibleForSlot,
+  fetchTeamRosterFromDB,
+  fetchTeamLineupFromDB,
   League,
-  LeagueMember,
   RosterPlayer,
   LineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+
+// ── Types ──
+
+type GameInfo = {
+  opponent: string;
+  isHome: boolean;
+  status: string;
+  homeScore: number;
+  visitorScore: number;
+};
+
+type TeamGamesMap = Record<string, Record<string, GameInfo>>;
+
+type CachedPlayerStats = {
+  id: number;
+  name: string;
+  team: string;
+  averages: {
+    min: number; fgm: number; fga: number; fg3m: number;
+    ftm: number; fta: number; reb: number; ast: number;
+    stl: number; blk: number; tov: number; pts: number;
+  };
+  fptsAvg: number;
+};
+
+type PlayerGameStats = {
+  min: number;
+  fgm: number;
+  fga: number;
+  fg3m: number;
+  ftm: number;
+  fta: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  pts: number;
+  fpts: number;
+};
+
+type DateStatsMap = Record<string, PlayerGameStats>;
+
+// ── Constants ──
 
 const SLOT_LABELS: Record<string, { label: string; labelEn: string; type: "starter" | "bench" }> = {
   PG: { label: "控卫", labelEn: "PG", type: "starter" },
@@ -40,32 +84,79 @@ const SLOT_LABELS: Record<string, { label: string; labelEn: string; type: "start
 
 const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"];
 
+const DAY_NAMES_EN = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
+
+// ── Helpers ──
+
+function formatDateStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+function getWeekDates(start: Date): Date[] {
+  const dates: Date[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function getTodayStart(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+// ── Component ──
+
 export default function RosterPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const params = useParams();
   const slug = params.slug as string;
 
+  // Existing state
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
   const [lineup, setLineup] = useState<LineupMap>({});
   const [loading, setLoading] = useState(true);
-  const [swapSource, setSwapSource] = useState<string | null>(null); // slot name being swapped
+  const [swapSource, setSwapSource] = useState<string | null>(null);
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; user_id: string }[]>([]);
+
+  // New state for schedule & stats
+  const [weekStart, setWeekStart] = useState<Date>(getTodayStart());
+  const [selectedDate, setSelectedDate] = useState<string>(formatDateStr(new Date()));
+  const [teamGames, setTeamGames] = useState<TeamGamesMap>({});
+  const [playerStats, setPlayerStats] = useState<Map<string, CachedPlayerStats>>(new Map());
+  const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
+  const [gamesLoading, setGamesLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // ── Data fetching ──
 
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
+    fetchPlayerStats();
   }, [slug]);
+
+  useEffect(() => {
+    fetchGames(weekStart);
+  }, [weekStart]);
+
+  useEffect(() => {
+    fetchGameDayStats(selectedDate);
+  }, [selectedDate]);
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (!leagueData) { setLoading(false); return; }
     setLeague(leagueData);
 
-    // Get all teams in this league
     const { data: teamsData } = await supabase
       .from("fantasy_teams")
       .select("id, name, user_id")
@@ -79,9 +170,9 @@ export default function RosterPage() {
         setMyTeam(myT);
         const teamId = myT.id;
         setViewTeamId(teamId);
-        const rosterData = getTeamRoster(leagueData.id, teamId);
+        const rosterData = await fetchTeamRosterFromDB(leagueData.id, teamId);
         setRoster(rosterData);
-        let lineupData = getTeamLineup(leagueData.id, teamId);
+        let lineupData = await fetchTeamLineupFromDB(leagueData.id, teamId);
         if (Object.keys(lineupData).length === 0 && rosterData.length > 0) {
           lineupData = autoSetLineup(leagueData.id, teamId);
         }
@@ -91,12 +182,65 @@ export default function RosterPage() {
     setLoading(false);
   }
 
-  function switchViewTeam(teamId: string) {
+  async function fetchPlayerStats() {
+    try {
+      const res = await fetch("/api/nba-stats");
+      const data = await res.json();
+      if (data.status === "success" && data.players) {
+        const map = new Map<string, CachedPlayerStats>();
+        for (const p of data.players) {
+          map.set(String(p.id), p);
+        }
+        setPlayerStats(map);
+      }
+    } catch (err) {
+      console.error("Failed to fetch player stats:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+
+  async function fetchGames(start: Date) {
+    setGamesLoading(true);
+    const endDate = new Date(start);
+    endDate.setDate(start.getDate() + 6);
+    try {
+      const res = await fetch(
+        `/api/nba-games?start_date=${formatDateStr(start)}&end_date=${formatDateStr(endDate)}`
+      );
+      const data = await res.json();
+      if (data.status === "success" && data.games) {
+        setTeamGames(data.games);
+      }
+    } catch (err) {
+      console.error("Failed to fetch games:", err);
+    } finally {
+      setGamesLoading(false);
+    }
+  }
+
+  async function fetchGameDayStats(date: string) {
+    try {
+      const res = await fetch(`/api/nba-game-stats?date=${date}`);
+      const data = await res.json();
+      if (data.status === "success" && data.stats) {
+        setGameDayStats(data.stats);
+      } else {
+        setGameDayStats({});
+      }
+    } catch {
+      setGameDayStats({});
+    }
+  }
+
+  // ── Lineup logic (unchanged) ──
+
+  async function switchViewTeam(teamId: string) {
     if (!league) return;
     setViewTeamId(teamId);
-    const rosterData = getTeamRoster(league.id, teamId);
+    const rosterData = await fetchTeamRosterFromDB(league.id, teamId);
     setRoster(rosterData);
-    const lineupData = getTeamLineup(league.id, teamId);
+    const lineupData = await fetchTeamLineupFromDB(league.id, teamId);
     setLineup(lineupData);
     setSwapSource(null);
   }
@@ -113,25 +257,23 @@ export default function RosterPage() {
   }
 
   function handleSlotClick(slot: string) {
-    if (viewTeamId !== myTeam?.id) return; // Can only edit own team
+    if (viewTeamId !== myTeam?.id) return;
     if (swapSource === null) {
       setSwapSource(slot);
     } else if (swapSource === slot) {
       setSwapSource(null);
     } else {
-      // Swap the two slots
       if (!league || !myTeam) return;
       const newLineup = { ...lineup };
       const playerA = newLineup[swapSource];
       const playerB = newLineup[slot];
 
-      // Check eligibility
       const playerAData = roster.find(p => p.id === playerA);
       const playerBData = roster.find(p => p.id === playerB);
 
       let canSwap = true;
-      if (playerA && !isEligibleForSlot(playerAData?.position || "", slot)) canSwap = false;
-      if (playerB && !isEligibleForSlot(playerBData?.position || "", swapSource)) canSwap = false;
+      if (playerA && !isEligibleForSlot(playerAData ? getPlayerPosition(playerAData) : "", slot)) canSwap = false;
+      if (playerB && !isEligibleForSlot(playerBData ? getPlayerPosition(playerBData) : "", swapSource)) canSwap = false;
 
       if (!canSwap) {
         alert(t("位置不符合要求，无法交换", "Position not eligible for this slot"));
@@ -142,7 +284,6 @@ export default function RosterPage() {
       newLineup[swapSource] = playerB || "";
       newLineup[slot] = playerA || "";
 
-      // Remove empty entries
       for (const k of Object.keys(newLineup)) {
         if (!newLineup[k]) delete newLineup[k];
       }
@@ -157,11 +298,10 @@ export default function RosterPage() {
     if (!league || !myTeam || !swapSource) return;
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
-    if (!isEligibleForSlot(player.position, swapSource)) {
+    if (!isEligibleForSlot(getPlayerPosition(player), swapSource)) {
       alert(t("位置不符合要求", "Position not eligible"));
       return;
     }
-    // Remove from old slot if exists
     const newLineup = { ...lineup };
     for (const [slot, pid] of Object.entries(newLineup)) {
       if (pid === playerId) delete newLineup[slot];
@@ -178,8 +318,284 @@ export default function RosterPage() {
     setLineup(newLineup);
   }
 
+  // ── Schedule & stats helpers ──
+
+  // Get the live/current team for a player from the stats cache
+  function getLiveTeam(player: RosterPlayer): string {
+    const stats = getStatsForPlayer(player);
+    return stats?.team || player.team;
+  }
+
+  // Get accurate multi-position for a player (override map takes priority)
+  function getPlayerPosition(player: RosterPlayer): string {
+    return PLAYER_POSITIONS[player.name] || player.position;
+  }
+
+  function getGameForPlayer(player: RosterPlayer): GameInfo | null {
+    const team = getLiveTeam(player);
+    const teamSchedule = teamGames[team];
+    if (!teamSchedule) return null;
+    return teamSchedule[selectedDate] || null;
+  }
+
+  function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
+    // Try direct ID match first
+    const byId = playerStats.get(player.id);
+    if (byId) return byId;
+    // Fallback: match by name (in case IDs don't align)
+    for (const s of playerStats.values()) {
+      if (s.name === player.name) return s;
+    }
+    return null;
+  }
+
+  // ── Date navigation ──
+
+  const weekDates = getWeekDates(weekStart);
+  const todayStr = formatDateStr(new Date());
+
+  function shiftWeek(direction: number) {
+    const next = new Date(weekStart);
+    next.setDate(weekStart.getDate() + direction * 7);
+    setWeekStart(next);
+    // Select the first day of the new week
+    setSelectedDate(formatDateStr(next));
+  }
+
+  // ── Computed values ──
+
+  const isPastDate = selectedDate < todayStr;
   const isOwner = user && league && league.commissioner_id === user.id;
   const isMyTeam = viewTeamId === myTeam?.id;
+  const starterSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "starter");
+  const benchSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
+  const unassigned = getUnassignedPlayers();
+
+  // Calculate starter totals (past dates: only game-day stats; today/future: game-day or averages)
+  const starterTotals = starterSlots.reduce(
+    (acc, slot) => {
+      const player = getPlayerInSlot(slot);
+      if (!player) return acc;
+      const dayStats = getGameDayStatsForPlayer(player);
+      const played = hasPlayedGame(player);
+      if (played && dayStats) {
+        return {
+          min: acc.min + dayStats.min,
+          fgm: acc.fgm + dayStats.fgm,
+          fga: acc.fga + dayStats.fga,
+          ftm: acc.ftm + dayStats.ftm,
+          fta: acc.fta + dayStats.fta,
+          fg3m: acc.fg3m + dayStats.fg3m,
+          reb: acc.reb + dayStats.reb,
+          ast: acc.ast + dayStats.ast,
+          stl: acc.stl + dayStats.stl,
+          blk: acc.blk + dayStats.blk,
+          tov: acc.tov + dayStats.tov,
+          pts: acc.pts + dayStats.pts,
+          fpts: acc.fpts + dayStats.fpts,
+        };
+      }
+      // Past dates: don't add season averages for players without game-day data
+      if (isPastDate) return acc;
+      const stats = getStatsForPlayer(player);
+      if (!stats) return acc;
+      const a = stats.averages;
+      return {
+        min: acc.min + a.min,
+        fgm: acc.fgm + a.fgm,
+        fga: acc.fga + a.fga,
+        ftm: acc.ftm + a.ftm,
+        fta: acc.fta + a.fta,
+        fg3m: acc.fg3m + a.fg3m,
+        reb: acc.reb + a.reb,
+        ast: acc.ast + a.ast,
+        stl: acc.stl + a.stl,
+        blk: acc.blk + a.blk,
+        tov: acc.tov + a.tov,
+        pts: acc.pts + a.pts,
+        fpts: acc.fpts + stats.fptsAvg,
+      };
+    },
+    { min: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, fg3m: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0 }
+  );
+
+  // ── Render helpers ──
+
+  function renderGameCell(player: RosterPlayer | undefined) {
+    if (!player) return <div className="col-schedule dim">--</div>;
+    const game = getGameForPlayer(player);
+    if (!game) return <div className="col-schedule dim">--</div>;
+
+    const label = game.isHome ? `vs ${game.opponent}` : `@${game.opponent}`;
+    const isFinal = game.status === "Final";
+    const score = isFinal
+      ? `${game.isHome ? game.homeScore : game.visitorScore}-${game.isHome ? game.visitorScore : game.homeScore}`
+      : null;
+
+    return (
+      <div className="col-schedule">
+        <span className="opp-label">{label}</span>
+        {score && <span className="game-score">{score}</span>}
+      </div>
+    );
+  }
+
+  // Get game-day box score stats for a player (if they played on the selected date)
+  function getGameDayStatsForPlayer(player: RosterPlayer): PlayerGameStats | null {
+    // Try direct roster ID match
+    const direct = gameDayStats[player.id];
+    if (direct) return direct;
+    // Use stats cache to find BDL ID (handles "p1" → numeric BDL ID mapping via name match)
+    const cached = getStatsForPlayer(player);
+    if (cached) {
+      const byBdlId = gameDayStats[String(cached.id)];
+      if (byBdlId) return byBdlId;
+    }
+    return null;
+  }
+
+  // Check if the selected date has a completed or in-progress game for this player
+  function hasPlayedGame(player: RosterPlayer): boolean {
+    const game = getGameForPlayer(player);
+    if (!game) return false;
+    // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
+    const status = game.status.toLowerCase();
+    return status === "final" || (status !== "" && status !== "scheduled" && !status.includes("scheduled"));
+  }
+
+  function renderStatCells(player: RosterPlayer | undefined) {
+    const stats = player ? getStatsForPlayer(player) : null;
+    const dayStats = player ? getGameDayStatsForPlayer(player) : null;
+    const played = player ? hasPlayedGame(player) : false;
+    const game = player ? getGameForPlayer(player) : null;
+    const useGameDay = played && dayStats;
+
+    const dashRow = (
+      <>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+        <div className="col-stat detail">--</div>
+      </>
+    );
+
+    // Past date: only show actual game-day stats, never season averages
+    if (isPastDate) {
+      if (useGameDay) {
+        const g = dayStats;
+        return (
+          <>
+            <div className="col-stat detail">{g.min.toFixed(0)}</div>
+            <div className="col-stat detail compound">{g.fgm}/{g.fga}</div>
+            <div className="col-stat detail compound">{g.ftm}/{g.fta}</div>
+            <div className="col-stat detail">{g.fg3m}</div>
+            <div className="col-stat detail">{g.reb}</div>
+            <div className="col-stat detail">{g.ast}</div>
+            <div className="col-stat detail">{g.stl}</div>
+            <div className="col-stat detail">{g.blk}</div>
+            <div className="col-stat detail tov">{g.tov}</div>
+            <div className="col-stat detail pts">{g.pts}</div>
+          </>
+        );
+      }
+      // Game existed but no stats (DNP/injured) or no game at all → show "--"
+      return dashRow;
+    }
+
+    // Today or future: show live game-day stats (green) or fall back to season averages
+    if (!stats && !dayStats) return dashRow;
+
+    if (useGameDay) {
+      const g = dayStats;
+      return (
+        <>
+          <div className="col-stat detail live">{g.min.toFixed(0)}</div>
+          <div className="col-stat detail compound live">{g.fgm}/{g.fga}</div>
+          <div className="col-stat detail compound live">{g.ftm}/{g.fta}</div>
+          <div className="col-stat detail live">{g.fg3m}</div>
+          <div className="col-stat detail live">{g.reb}</div>
+          <div className="col-stat detail live">{g.ast}</div>
+          <div className="col-stat detail live">{g.stl}</div>
+          <div className="col-stat detail live">{g.blk}</div>
+          <div className="col-stat detail tov live">{g.tov}</div>
+          <div className="col-stat detail pts live">{g.pts}</div>
+        </>
+      );
+    }
+
+    const a = stats!.averages;
+    return (
+      <>
+        <div className="col-stat detail">{a.min.toFixed(1)}</div>
+        <div className="col-stat detail compound">{a.fgm.toFixed(1)}/{a.fga.toFixed(1)}</div>
+        <div className="col-stat detail compound">{a.ftm.toFixed(1)}/{a.fta.toFixed(1)}</div>
+        <div className="col-stat detail">{a.fg3m.toFixed(1)}</div>
+        <div className="col-stat detail">{a.reb.toFixed(1)}</div>
+        <div className="col-stat detail">{a.ast.toFixed(1)}</div>
+        <div className="col-stat detail">{a.stl.toFixed(1)}</div>
+        <div className="col-stat detail">{a.blk.toFixed(1)}</div>
+        <div className="col-stat detail tov">{a.tov.toFixed(1)}</div>
+        <div className="col-stat detail pts">{a.pts.toFixed(1)}</div>
+      </>
+    );
+  }
+
+  function renderFptsCell(player: RosterPlayer | undefined) {
+    const dayStats = player ? getGameDayStatsForPlayer(player) : null;
+    const played = player ? hasPlayedGame(player) : false;
+
+    if (isPastDate) {
+      if (played && dayStats) {
+        return <div className="col-fpts">{dayStats.fpts.toFixed(1)}</div>;
+      }
+      return <div className="col-fpts">--</div>;
+    }
+
+    if (played && dayStats) {
+      return <div className="col-fpts live">{dayStats.fpts.toFixed(1)}</div>;
+    }
+
+    const stats = player ? getStatsForPlayer(player) : null;
+    if (!stats) return <div className="col-fpts">--</div>;
+    return <div className="col-fpts">{stats.fptsAvg.toFixed(1)}</div>;
+  }
+
+  function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {
+    const slotInfo = SLOT_LABELS[slot];
+    const isSwapTarget = swapSource === slot;
+    return (
+      <div
+        key={slot}
+        className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${isMyTeam ? "clickable" : ""}`}
+        onClick={() => isMyTeam && handleSlotClick(slot)}
+      >
+        <div className="col-slot">
+          <span className={`slot-badge ${badgeType}`}>{slotInfo?.labelEn || "-"}</span>
+        </div>
+        <div className="col-player">
+          {player ? (
+            <div className="player-info">
+              <span className="player-name">{player.name}</span>
+              <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
+            </div>
+          ) : (
+            <span className="empty-slot">{t("空位", "Empty")}</span>
+          )}
+        </div>
+        {renderGameCell(player)}
+        {renderStatCells(player)}
+        {renderFptsCell(player)}
+      </div>
+    );
+  }
+
+  // ── Loading / Error states ──
 
   if (loading) {
     return (
@@ -201,9 +617,7 @@ export default function RosterPage() {
     );
   }
 
-  const starters = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "starter");
-  const bench = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
-  const unassigned = getUnassignedPlayers();
+  // ── Main render ──
 
   return (
     <div className="app">
@@ -225,8 +639,8 @@ export default function RosterPage() {
           <div className="page-header">
             <div className="page-header-top">
               <div>
-                <h1>📋 {t("阵容管理", "Roster")}</h1>
-                <p>{t("管理你的首发和板凳阵容", "Manage your starting lineup and bench")}</p>
+                <h1>{t("阵容管理", "My Team")}</h1>
+                <p>{t("设置阵容 · 查看赛程和数据", "Set Lineup · Schedule & Stats")}</p>
               </div>
               {isMyTeam && (
                 <button className="auto-btn" onClick={handleAutoLineup}>
@@ -252,6 +666,31 @@ export default function RosterPage() {
             </div>
           )}
 
+          {/* Date navigation */}
+          <div className="date-nav">
+            <button className="date-arrow" onClick={() => shiftWeek(-1)}>‹</button>
+            <div className="date-tabs">
+              {weekDates.map((d) => {
+                const ds = formatDateStr(d);
+                const isToday = ds === todayStr;
+                const isSelected = ds === selectedDate;
+                const dayName = lang === "zh" ? DAY_NAMES_ZH[d.getDay()] : DAY_NAMES_EN[d.getDay()];
+                return (
+                  <button
+                    key={ds}
+                    className={`date-tab ${isSelected ? "active" : ""} ${isToday ? "today" : ""}`}
+                    onClick={() => setSelectedDate(ds)}
+                  >
+                    <span className="date-day">{dayName}</span>
+                    <span className="date-num">{d.getMonth() + 1}/{d.getDate()}</span>
+                    {isToday && <span className="today-dot" />}
+                  </button>
+                );
+              })}
+            </div>
+            <button className="date-arrow" onClick={() => shiftWeek(1)}>›</button>
+          </div>
+
           {roster.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📋</div>
@@ -270,155 +709,113 @@ export default function RosterPage() {
               )}
 
               {/* Starters */}
-              <div className="section-label">{t("首发阵容", "Starting Lineup")} ({starters.length})</div>
-              <div className="lineup-table">
-                <div className="lineup-header">
-                  <div className="col-slot">{t("位置", "Slot")}</div>
-                  <div className="col-player">{t("球员", "Player")}</div>
-                  <div className="col-stat">PPG</div>
-                  <div className="col-stat">RPG</div>
-                  <div className="col-stat">APG</div>
-                  <div className="col-stat">SPG</div>
-                  <div className="col-stat">BPG</div>
-                  <div className="col-stat">FG%</div>
+              <div className="section-label">{t("首发阵容", "Starting Lineup")} ({starterSlots.length})</div>
+              <div className="table-wrapper">
+                <div className="lineup-table">
+                  <div className="lineup-header">
+                    <div className="col-slot">{t("位置", "SLOT")}</div>
+                    <div className="col-player">{t("球员", "PLAYER")}</div>
+                    <div className="col-schedule">{t("对阵", "OPP")}</div>
+                    <div className="col-stat detail">MIN</div>
+                    <div className="col-stat detail">FG</div>
+                    <div className="col-stat detail">FT</div>
+                    <div className="col-stat detail">3PM</div>
+                    <div className="col-stat detail">REB</div>
+                    <div className="col-stat detail">AST</div>
+                    <div className="col-stat detail">STL</div>
+                    <div className="col-stat detail">BLK</div>
+                    <div className="col-stat detail">TO</div>
+                    <div className="col-stat detail">PTS</div>
+                    <div className="col-fpts">FPTS</div>
+                  </div>
+                  {starterSlots.map(slot => {
+                    const player = getPlayerInSlot(slot);
+                    return renderRow(slot, "starter", player);
+                  })}
+                  {/* Starters totals row */}
+                  <div className="lineup-row totals-row">
+                    <div className="col-slot" />
+                    <div className="col-player"><span className="totals-label">TOTALS</span></div>
+                    <div className="col-schedule" />
+                    <div className="col-stat detail">{starterTotals.min.toFixed(1)}</div>
+                    <div className="col-stat detail compound">{starterTotals.fgm.toFixed(1)}/{starterTotals.fga.toFixed(1)}</div>
+                    <div className="col-stat detail compound">{starterTotals.ftm.toFixed(1)}/{starterTotals.fta.toFixed(1)}</div>
+                    <div className="col-stat detail">{starterTotals.fg3m.toFixed(1)}</div>
+                    <div className="col-stat detail">{starterTotals.reb.toFixed(1)}</div>
+                    <div className="col-stat detail">{starterTotals.ast.toFixed(1)}</div>
+                    <div className="col-stat detail">{starterTotals.stl.toFixed(1)}</div>
+                    <div className="col-stat detail">{starterTotals.blk.toFixed(1)}</div>
+                    <div className="col-stat detail tov">{starterTotals.tov.toFixed(1)}</div>
+                    <div className="col-stat detail pts">{starterTotals.pts.toFixed(1)}</div>
+                    <div className="col-fpts totals-fpts">{starterTotals.fpts.toFixed(1)}</div>
+                  </div>
                 </div>
-                {starters.map(slot => {
-                  const player = getPlayerInSlot(slot);
-                  const slotInfo = SLOT_LABELS[slot];
-                  const isSwapTarget = swapSource === slot;
-                  return (
-                    <div
-                      key={slot}
-                      className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${isMyTeam ? "clickable" : ""}`}
-                      onClick={() => isMyTeam && handleSlotClick(slot)}
-                    >
-                      <div className="col-slot">
-                        <span className="slot-badge starter">{slotInfo.labelEn}</span>
-                      </div>
-                      <div className="col-player">
-                        {player ? (
-                          <div className="player-info">
-                            <span className="player-name">{player.name}</span>
-                            <span className="player-meta">{player.team} · {player.position}</span>
-                          </div>
-                        ) : (
-                          <span className="empty-slot">{t("空位", "Empty")}</span>
-                        )}
-                      </div>
-                      <div className="col-stat">{player ? player.ppg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.rpg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.apg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.spg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.bpg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.fg.toFixed(1) : "-"}</div>
-                    </div>
-                  );
-                })}
               </div>
 
               {/* Bench */}
-              <div className="section-label">{t("板凳", "Bench")} ({bench.length})</div>
-              <div className="lineup-table">
-                <div className="lineup-header">
-                  <div className="col-slot">{t("位置", "Slot")}</div>
-                  <div className="col-player">{t("球员", "Player")}</div>
-                  <div className="col-stat">PPG</div>
-                  <div className="col-stat">RPG</div>
-                  <div className="col-stat">APG</div>
-                  <div className="col-stat">SPG</div>
-                  <div className="col-stat">BPG</div>
-                  <div className="col-stat">FG%</div>
+              <div className="section-label">{t("板凳", "Bench")} ({benchSlots.length})</div>
+              <div className="table-wrapper">
+                <div className="lineup-table">
+                  <div className="lineup-header">
+                    <div className="col-slot">{t("位置", "SLOT")}</div>
+                    <div className="col-player">{t("球员", "PLAYER")}</div>
+                    <div className="col-schedule">{t("对阵", "OPP")}</div>
+                    <div className="col-stat detail">MIN</div>
+                    <div className="col-stat detail">FG</div>
+                    <div className="col-stat detail">FT</div>
+                    <div className="col-stat detail">3PM</div>
+                    <div className="col-stat detail">REB</div>
+                    <div className="col-stat detail">AST</div>
+                    <div className="col-stat detail">STL</div>
+                    <div className="col-stat detail">BLK</div>
+                    <div className="col-stat detail">TO</div>
+                    <div className="col-stat detail">PTS</div>
+                    <div className="col-fpts">FPTS</div>
+                  </div>
+                  {benchSlots.map(slot => {
+                    const player = getPlayerInSlot(slot);
+                    return renderRow(slot, "bench", player);
+                  })}
                 </div>
-                {bench.map(slot => {
-                  const player = getPlayerInSlot(slot);
-                  const slotInfo = SLOT_LABELS[slot];
-                  const isSwapTarget = swapSource === slot;
-                  return (
-                    <div
-                      key={slot}
-                      className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${isMyTeam ? "clickable" : ""}`}
-                      onClick={() => isMyTeam && handleSlotClick(slot)}
-                    >
-                      <div className="col-slot">
-                        <span className="slot-badge bench">{slotInfo.labelEn}</span>
-                      </div>
-                      <div className="col-player">
-                        {player ? (
-                          <div className="player-info">
-                            <span className="player-name">{player.name}</span>
-                            <span className="player-meta">{player.team} · {player.position}</span>
-                          </div>
-                        ) : (
-                          <span className="empty-slot">{t("空位", "Empty")}</span>
-                        )}
-                      </div>
-                      <div className="col-stat">{player ? player.ppg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.rpg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.apg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.spg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.bpg.toFixed(1) : "-"}</div>
-                      <div className="col-stat">{player ? player.fg.toFixed(1) : "-"}</div>
-                    </div>
-                  );
-                })}
               </div>
 
               {/* Unassigned players */}
               {unassigned.length > 0 && isMyTeam && (
                 <>
                   <div className="section-label">{t("未分配球员", "Unassigned")} ({unassigned.length})</div>
-                  <div className="lineup-table">
-                    {unassigned.map(player => (
-                      <div
-                        key={player.id}
-                        className={`lineup-row ${swapSource ? "clickable highlight" : ""}`}
-                        onClick={() => swapSource && handleAssignPlayer(player.id)}
-                      >
-                        <div className="col-slot">
-                          <span className="slot-badge unassigned">-</span>
-                        </div>
-                        <div className="col-player">
-                          <div className="player-info">
-                            <span className="player-name">{player.name}</span>
-                            <span className="player-meta">{player.team} · {player.position}</span>
+                  <div className="table-wrapper">
+                    <div className="lineup-table">
+                      {unassigned.map(player => (
+                        <div
+                          key={player.id}
+                          className={`lineup-row ${swapSource ? "clickable highlight" : ""}`}
+                          onClick={() => swapSource && handleAssignPlayer(player.id)}
+                        >
+                          <div className="col-slot">
+                            <span className="slot-badge unassigned">-</span>
                           </div>
+                          <div className="col-player">
+                            <div className="player-info">
+                              <span className="player-name">{player.name}</span>
+                              <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
+                            </div>
+                          </div>
+                          {renderGameCell(player)}
+                          {renderStatCells(player)}
+                          {renderFptsCell(player)}
                         </div>
-                        <div className="col-stat">{player.ppg.toFixed(1)}</div>
-                        <div className="col-stat">{player.rpg.toFixed(1)}</div>
-                        <div className="col-stat">{player.apg.toFixed(1)}</div>
-                        <div className="col-stat">{player.spg.toFixed(1)}</div>
-                        <div className="col-stat">{player.bpg.toFixed(1)}</div>
-                        <div className="col-stat">{player.fg.toFixed(1)}</div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </>
               )}
 
-              {/* Team totals */}
-              <div className="section-label">{t("球队总计", "Team Totals")}</div>
-              <div className="totals-card">
-                <div className="total-item">
-                  <span className="total-value">{roster.reduce((s, p) => s + p.ppg, 0).toFixed(1)}</span>
-                  <span className="total-label">PPG</span>
+              {/* Loading indicator for stats */}
+              {(statsLoading || gamesLoading) && (
+                <div className="data-loading">
+                  {t("正在加载数据...", "Loading stats & schedule...")}
                 </div>
-                <div className="total-item">
-                  <span className="total-value">{roster.reduce((s, p) => s + p.rpg, 0).toFixed(1)}</span>
-                  <span className="total-label">RPG</span>
-                </div>
-                <div className="total-item">
-                  <span className="total-value">{roster.reduce((s, p) => s + p.apg, 0).toFixed(1)}</span>
-                  <span className="total-label">APG</span>
-                </div>
-                <div className="total-item">
-                  <span className="total-value">{roster.reduce((s, p) => s + p.spg, 0).toFixed(1)}</span>
-                  <span className="total-label">SPG</span>
-                </div>
-                <div className="total-item">
-                  <span className="total-value">{roster.reduce((s, p) => s + p.bpg, 0).toFixed(1)}</span>
-                  <span className="total-label">BPG</span>
-                </div>
-              </div>
+              )}
             </>
           )}
         </div>
@@ -435,7 +832,7 @@ const styles = `
     border-bottom: 1px solid #283593;
   }
   .league-header-inner {
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 16px;
   }
@@ -449,47 +846,16 @@ const styles = `
     font-weight: 600;
   }
   .league-icon { font-size: 28px; }
-  .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
-    position: sticky;
-    top: 60px;
-    z-index: 40;
-  }
-  .league-nav-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    gap: 4px;
-    padding: 0 16px;
-    overflow-x: auto;
-  }
-  .league-nav-link {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 16px;
-    color: #888;
-    text-decoration: none;
-    font-size: 14px;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-  }
-  .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active {
-    color: #f59e0b;
-    border-bottom-color: #f59e0b;
-  }
   .page-content {
     min-height: calc(100vh - 200px);
     background: #0a0a0a;
     padding: 24px 16px;
   }
   .container {
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
   }
-  .page-header { margin-bottom: 24px; }
+  .page-header { margin-bottom: 20px; }
   .page-header-top {
     display: flex;
     justify-content: space-between;
@@ -499,7 +865,7 @@ const styles = `
     font-size: 24px;
     font-weight: 700;
     color: #fff;
-    margin: 0 0 8px 0;
+    margin: 0 0 6px 0;
   }
   .page-header p {
     font-size: 14px;
@@ -517,10 +883,12 @@ const styles = `
     cursor: pointer;
   }
   .auto-btn:hover { opacity: 0.9; }
+
+  /* Team selector */
   .team-selector {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     overflow-x: auto;
     padding-bottom: 4px;
   }
@@ -550,6 +918,81 @@ const styles = `
     font-size: 10px;
     font-weight: 700;
   }
+
+  /* Date navigation */
+  .date-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 20px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 10px;
+    padding: 6px;
+  }
+  .date-arrow {
+    width: 32px;
+    height: 40px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #888;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .date-arrow:hover { color: #fff; border-color: #555; }
+  .date-tabs {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    overflow-x: auto;
+  }
+  .date-tab {
+    flex: 1;
+    min-width: 60px;
+    padding: 8px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: #888;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    position: relative;
+  }
+  .date-tab:hover { background: rgba(255,255,255,0.05); }
+  .date-tab.active {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: #f59e0b;
+    color: #f59e0b;
+  }
+  .date-tab.today .date-day { color: #3b82f6; }
+  .today-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #3b82f6;
+    position: absolute;
+    bottom: 4px;
+  }
+  .date-day {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .date-num {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  /* Swap hint */
   .swap-hint {
     background: rgba(59, 130, 246, 0.15);
     border: 1px solid rgba(59, 130, 246, 0.3);
@@ -571,6 +1014,8 @@ const styles = `
     cursor: pointer;
     font-size: 13px;
   }
+
+  /* Section labels */
   .section-label {
     font-size: 14px;
     font-weight: 600;
@@ -579,27 +1024,34 @@ const styles = `
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+
+  /* Table */
+  .table-wrapper {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #222;
+  }
   .lineup-table {
     background: #111;
-    border: 1px solid #222;
-    border-radius: 12px;
-    overflow: hidden;
+    min-width: 900px;
+    width: 100%;
   }
   .lineup-header {
     display: grid;
-    grid-template-columns: 70px 1fr 60px 60px 60px 60px 60px 60px;
-    padding: 12px 16px;
+    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    padding: 10px 12px;
     background: #1a1a1a;
     border-bottom: 1px solid #222;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    color: #888;
+    color: #666;
     text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
   .lineup-row {
     display: grid;
-    grid-template-columns: 70px 1fr 60px 60px 60px 60px 60px 60px;
-    padding: 12px 16px;
+    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    padding: 10px 12px;
     border-bottom: 1px solid #1a1a1a;
     align-items: center;
     transition: background 0.15s;
@@ -612,6 +1064,27 @@ const styles = `
     border-color: rgba(59, 130, 246, 0.2);
   }
   .lineup-row.highlight { background: rgba(245, 158, 11, 0.05); }
+
+  /* Totals row */
+  .totals-row {
+    background: #1a1a1a !important;
+    border-top: 2px solid #333;
+    cursor: default !important;
+  }
+  .totals-row:hover { background: #1a1a1a !important; }
+  .totals-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .totals-fpts {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+  }
+
+  /* Columns */
   .col-slot { display: flex; align-items: center; }
   .slot-badge {
     padding: 4px 8px;
@@ -622,32 +1095,70 @@ const styles = `
   .slot-badge.starter { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
   .slot-badge.bench { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
   .slot-badge.unassigned { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
-  .col-player { padding: 0 8px; }
-  .player-info { display: flex; flex-direction: column; gap: 2px; }
-  .player-name { font-size: 14px; font-weight: 500; color: #fff; }
-  .player-meta { font-size: 12px; color: #888; }
-  .col-stat { font-size: 13px; color: #ccc; text-align: center; }
-  .empty-slot { font-size: 13px; color: #555; font-style: italic; }
-  .totals-card {
-    display: flex;
-    gap: 24px;
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 12px;
-    padding: 20px;
-    margin-top: 8px;
-    flex-wrap: wrap;
+
+  .col-player { padding: 0 8px; min-width: 0; }
+  .player-info { display: flex; flex-direction: column; gap: 1px; }
+  .player-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .total-item {
+  .player-meta { font-size: 11px; color: #666; }
+  .empty-slot { font-size: 13px; color: #444; font-style: italic; }
+
+  /* Schedule column */
+  .col-schedule {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    flex: 1;
-    min-width: 60px;
+    gap: 1px;
+    font-size: 12px;
+    color: #ccc;
+    text-align: center;
   }
-  .total-value { font-size: 20px; font-weight: 700; color: #f59e0b; }
-  .total-label { font-size: 12px; color: #888; }
+  .col-schedule.dim { color: #444; }
+  .opp-label { font-weight: 600; font-size: 12px; }
+  .game-score { font-size: 10px; color: #888; }
+
+  /* Stats columns */
+  .col-stat {
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
+  }
+  .col-stat.compound {
+    font-size: 10px;
+    letter-spacing: -0.3px;
+  }
+  .col-stat.tov { color: #ef4444; }
+  .col-stat.pts { color: #fff; font-weight: 600; }
+  .col-stat.live { color: #22c55e; }
+  .col-stat.live.tov { color: #ef4444; }
+  .col-stat.live.pts { color: #22c55e; font-weight: 600; }
+
+  /* FPTS column */
+  .col-fpts {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f59e0b;
+    text-align: center;
+  }
+  .col-fpts.live {
+    color: #22c55e;
+  }
+
+  /* Data loading */
+  .data-loading {
+    text-align: center;
+    padding: 12px;
+    color: #666;
+    font-size: 13px;
+  }
+
+  /* Empty & error states */
   .empty-state {
     text-align: center;
     padding: 80px 20px;
@@ -671,13 +1182,22 @@ const styles = `
     justify-content: center;
     color: #888;
   }
+
+  /* Mobile responsive */
   @media (max-width: 768px) {
-    .lineup-header, .lineup-row {
-      grid-template-columns: 50px 1fr 45px 45px 45px 45px 45px 45px;
-      padding: 10px 8px;
-      font-size: 12px;
+    .container { max-width: 100%; }
+    .lineup-header .col-stat.detail,
+    .lineup-row .col-stat.detail {
+      display: none;
     }
-    .col-stat { font-size: 11px; }
-    .totals-card { gap: 12px; padding: 16px; }
+    .lineup-header, .lineup-row {
+      grid-template-columns: 48px 1fr 72px 56px;
+      padding: 8px;
+    }
+    .date-tab { min-width: 48px; padding: 6px 4px; }
+    .date-day { font-size: 9px; }
+    .date-num { font-size: 11px; }
+    .player-name { font-size: 12px; }
+    .player-meta { font-size: 10px; }
   }
 `;

@@ -6,11 +6,14 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getTeamRoster,
   getLeagueTrades,
+  getLeagueRosters,
+  fetchTeamRosterFromDB,
+  fetchLeagueRostersFromDB,
   proposeTrade,
   respondToTrade,
   cancelTrade,
@@ -21,6 +24,13 @@ import {
 import { supabase } from "@/lib/supabase";
 
 type TeamInfo = { id: string; name: string; user_id: string };
+
+type LivePlayerStats = {
+  id: number;
+  name: string;
+  averages: { pts: number; reb: number; ast: number; stl: number; blk: number; tov: number; fg3m: number };
+  fptsAvg: number;
+};
 
 export default function TradePage() {
   const { t } = useLang();
@@ -38,7 +48,7 @@ export default function TradePage() {
 
   // Check URL params for default tab (from email link)
   const defaultTab = searchParams.get("tab") === "pending" ? "pending" : "propose";
-  const [tab, setTab] = useState<"propose" | "pending" | "history">(defaultTab as any);
+  const [tab, setTab] = useState<"propose" | "pending" | "history">(defaultTab as "propose" | "pending" | "history");
 
   // Propose trade state
   const [targetTeamId, setTargetTeamId] = useState<string | null>(null);
@@ -48,35 +58,44 @@ export default function TradePage() {
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
   const [tradeMessage, setTradeMessage] = useState("");
 
-  useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+  // Live stats from BDL API
+  const [liveStats, setLiveStats] = useState<Map<string, LivePlayerStats>>(new Map());
+  // All league rosters cache (loaded from DB for name lookups)
+  const [allRostersCache, setAllRostersCache] = useState<Record<string, RosterPlayer[]>>({});
 
-  // Real-time subscription for trade updates
-  useEffect(() => {
-    if (!league) return;
-    const channel = supabase
-      .channel(`trade_page_${league.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "trade_proposals",
-          filter: `league_id=eq.${league.id}`,
-        },
-        () => {
-          // Reload trades on any change
-          reloadTrades();
+  // ── Helper functions (declared before hooks that reference them) ──
+
+  function getLivePPG(player: RosterPlayer): string {
+    const stats = liveStats.get(player.id) || liveStats.get(player.name);
+    if (stats) return stats.averages.pts.toFixed(1);
+    return player.ppg.toFixed(1);
+  }
+
+  function getLiveFPTS(player: RosterPlayer): string {
+    const stats = liveStats.get(player.id) || liveStats.get(player.name);
+    if (stats) return stats.fptsAvg.toFixed(1);
+    return "-";
+  }
+
+  // ── Data loading functions ──
+
+  async function fetchLiveStats() {
+    try {
+      const res = await fetch("/api/nba-stats");
+      const data = await res.json();
+      if (data.status === "success" && data.players) {
+        const map = new Map<string, LivePlayerStats>();
+        for (const p of data.players) {
+          map.set(String(p.id), p);
+          // Also key by name for fallback matching
+          map.set(p.name, p);
         }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [league?.id]);
+        setLiveStats(map);
+      }
+    } catch (err) {
+      console.error("Failed to fetch live stats:", err);
+    }
+  }
 
   async function reloadTrades() {
     if (!league) return;
@@ -100,19 +119,61 @@ export default function TradePage() {
       const myT = teamsData.find((t: TeamInfo) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
-        setMyRoster(getTeamRoster(leagueData.id, myT.id));
+        setMyRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id));
       }
     }
+
+    // Load all rosters from DB for player name lookups
+    const rostersData = await fetchLeagueRostersFromDB(leagueData.id);
+    setAllRostersCache(rostersData);
 
     const tradeData = await getLeagueTrades(leagueData.id);
     setTrades(tradeData);
     setLoading(false);
   }
 
-  function selectTargetTeam(teamId: string) {
+  // ── Effects (after function declarations) ──
+
+  const [initialized, setInitialized] = useState(false);
+  if (!initialized) {
+    setUser(getSessionUser());
+    setInitialized(true);
+  }
+
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => {
+    loadData();
+    fetchLiveStats();
+  }, [slug]);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    if (!league) return;
+    const channel = supabase
+      .channel(`trade_page_${league.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "trade_proposals",
+          filter: `league_id=eq.${league.id}`,
+        },
+        () => {
+          reloadTrades();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [league?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function selectTargetTeam(teamId: string) {
     if (!league) return;
     setTargetTeamId(teamId);
-    setTargetRoster(getTeamRoster(league.id, teamId));
+    setTargetRoster(await fetchTeamRosterFromDB(league.id, teamId));
     setOfferedIds(new Set());
     setRequestedIds(new Set());
     setTradeMessage("");
@@ -171,11 +232,11 @@ export default function TradePage() {
       if (targetUser?.email) {
         const offeredNames = Array.from(offeredIds).map(id => {
           const p = myRoster.find(r => r.id === id);
-          return p ? `${p.name} (${p.ppg} PPG)` : id;
+          return p ? `${p.name} (${getLivePPG(p)} PPG)` : id;
         });
         const requestedNames = Array.from(requestedIds).map(id => {
           const p = targetRoster.find(r => r.id === id);
-          return p ? `${p.name} (${p.ppg} PPG)` : id;
+          return p ? `${p.name} (${getLivePPG(p)} PPG)` : id;
         });
 
         fetch("/api/trade-email", {
@@ -219,9 +280,18 @@ export default function TradePage() {
       return;
     }
 
+    // Reload trades and BOTH rosters after acceptance
     const tradeData = await getLeagueTrades(league.id);
     setTrades(tradeData);
-    if (myTeam) setMyRoster(getTeamRoster(league.id, myTeam.id));
+    if (myTeam) {
+      setMyRoster(await fetchTeamRosterFromDB(league.id, myTeam.id));
+    }
+    // Also refresh target roster if we're viewing one
+    if (targetTeamId) {
+      setTargetRoster(await fetchTeamRosterFromDB(league.id, targetTeamId));
+    }
+    // Refresh all rosters cache for name lookups
+    setAllRostersCache(await fetchLeagueRostersFromDB(league.id));
     setSubmitting(false);
   }
 
@@ -236,10 +306,32 @@ export default function TradePage() {
     setSubmitting(false);
   }
 
-  function getPlayerName(playerId: string, teamId: string): string {
+  // BUG FIX: Search ALL rosters in the league for the player name.
+  // After a trade is accepted, players move to the other team, so looking
+  // only on the original team would fail and show raw IDs.
+  function getPlayerName(playerId: string): string {
     if (!league) return playerId;
-    const roster = getTeamRoster(league.id, teamId);
-    return roster.find(p => p.id === playerId)?.name || playerId;
+    for (const roster of Object.values(allRostersCache)) {
+      const found = roster.find((p: RosterPlayer) => p.id === playerId);
+      if (found) return found.name;
+    }
+    // Fallback: check live stats by ID
+    const stats = liveStats.get(playerId);
+    if (stats) return stats.name;
+    return playerId;
+  }
+
+  function getPlayerPPGById(playerId: string): string {
+    // Try live stats first
+    const stats = liveStats.get(playerId);
+    if (stats) return stats.averages.pts.toFixed(1);
+    // Fallback to roster data
+    if (!league) return "-";
+    for (const roster of Object.values(allRostersCache)) {
+      const found = roster.find((p: RosterPlayer) => p.id === playerId);
+      if (found) return found.ppg.toFixed(1);
+    }
+    return "-";
   }
 
   const isOwner = user && league && league.commissioner_id === user.id;
@@ -315,7 +407,7 @@ export default function TradePage() {
                   <p className="select-label">{t("选择交易对手：", "Select a team to trade with:")}</p>
                   <div className="team-grid">
                     {otherTeams.map(team => {
-                      const teamRoster = getTeamRoster(league.id, team.id);
+                      const teamRoster = allRostersCache[team.id] || [];
                       return (
                         <div key={team.id} className="team-card" onClick={() => selectTargetTeam(team.id)}>
                           <div className="team-card-name">{team.name}</div>
@@ -348,9 +440,12 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {p.position}</span>
+                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
-                            <span className="tp-ppg">{p.ppg} PPG</span>
+                            <div className="tp-stats">
+                              <span className="tp-ppg">{getLivePPG(p)} PPG</span>
+                              <span className="tp-fpts">{getLiveFPTS(p)} FPTS</span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -371,9 +466,12 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {p.position}</span>
+                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
-                            <span className="tp-ppg">{p.ppg} PPG</span>
+                            <div className="tp-stats">
+                              <span className="tp-ppg">{getLivePPG(p)} PPG</span>
+                              <span className="tp-fpts">{getLiveFPTS(p)} FPTS</span>
+                            </div>
                           </div>
                         ))}
                         {targetRoster.length === 0 && (
@@ -392,7 +490,7 @@ export default function TradePage() {
                           <div className="summary-label">{t("送出", "You Send")}:</div>
                           {Array.from(offeredIds).map(id => {
                             const p = myRoster.find(r => r.id === id);
-                            return p && <div key={id} className="summary-player out">{p.name} ({p.ppg} PPG)</div>;
+                            return p && <div key={id} className="summary-player out">{p.name} ({getLivePPG(p)} PPG)</div>;
                           })}
                           {offeredIds.size === 0 && <div className="summary-empty">{t("未选择", "None")}</div>}
                         </div>
@@ -401,7 +499,7 @@ export default function TradePage() {
                           <div className="summary-label">{t("获得", "You Get")}:</div>
                           {Array.from(requestedIds).map(id => {
                             const p = targetRoster.find(r => r.id === id);
-                            return p && <div key={id} className="summary-player in">{p.name} ({p.ppg} PPG)</div>;
+                            return p && <div key={id} className="summary-player in">{p.name} ({getLivePPG(p)} PPG)</div>;
                           })}
                           {requestedIds.size === 0 && <div className="summary-empty">{t("未选择", "None")}</div>}
                         </div>
@@ -447,13 +545,19 @@ export default function TradePage() {
                         <div className="tc-side">
                           <div className="tc-label">{t("对方送出", "They Send")}:</div>
                           {trade.offeredPlayerIds.map(id => (
-                            <div key={id} className="tc-player">{getPlayerName(id, trade.fromTeamId)}</div>
+                            <div key={id} className="tc-player">
+                              {getPlayerName(id)}
+                              <span className="tc-player-ppg">{getPlayerPPGById(id)} PPG</span>
+                            </div>
                           ))}
                         </div>
                         <div className="tc-side">
                           <div className="tc-label">{t("对方想要", "They Want")}:</div>
                           {trade.requestedPlayerIds.map(id => (
-                            <div key={id} className="tc-player">{getPlayerName(id, trade.toTeamId)}</div>
+                            <div key={id} className="tc-player">
+                              {getPlayerName(id)}
+                              <span className="tc-player-ppg">{getPlayerPPGById(id)} PPG</span>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -486,13 +590,19 @@ export default function TradePage() {
                         <div className="tc-side">
                           <div className="tc-label">{t("送出", "Sending")}:</div>
                           {trade.offeredPlayerIds.map(id => (
-                            <div key={id} className="tc-player">{getPlayerName(id, trade.fromTeamId)}</div>
+                            <div key={id} className="tc-player">
+                              {getPlayerName(id)}
+                              <span className="tc-player-ppg">{getPlayerPPGById(id)} PPG</span>
+                            </div>
                           ))}
                         </div>
                         <div className="tc-side">
                           <div className="tc-label">{t("获得", "Getting")}:</div>
                           {trade.requestedPlayerIds.map(id => (
-                            <div key={id} className="tc-player">{getPlayerName(id, trade.toTeamId)}</div>
+                            <div key={id} className="tc-player">
+                              {getPlayerName(id)}
+                              <span className="tc-player-ppg">{getPlayerPPGById(id)} PPG</span>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -541,13 +651,13 @@ export default function TradePage() {
                       <div className="tc-side">
                         <div className="tc-label">{t("送出", "Sent")}:</div>
                         {trade.offeredPlayerIds.map(id => (
-                          <div key={id} className="tc-player">{getPlayerName(id, trade.fromTeamId)}</div>
+                          <div key={id} className="tc-player">{getPlayerName(id)}</div>
                         ))}
                       </div>
                       <div className="tc-side">
                         <div className="tc-label">{t("获得", "Got")}:</div>
                         {trade.requestedPlayerIds.map(id => (
-                          <div key={id} className="tc-player">{getPlayerName(id, trade.toTeamId)}</div>
+                          <div key={id} className="tc-player">{getPlayerName(id)}</div>
                         ))}
                       </div>
                     </div>
@@ -621,7 +731,9 @@ const styles = `
   .tp-info { display: flex; flex-direction: column; gap: 2px; }
   .tp-name { font-size: 14px; color: #fff; font-weight: 500; }
   .tp-meta { font-size: 12px; color: #888; }
+  .tp-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .tp-ppg { font-size: 13px; color: #f59e0b; font-weight: 600; }
+  .tp-fpts { font-size: 11px; color: #888; }
 
   .trade-summary {
     background: #111; border: 1px solid #f59e0b; border-radius: 12px;
@@ -665,7 +777,8 @@ const styles = `
   .tc-body { display: flex; gap: 20px; padding: 16px; }
   .tc-side { flex: 1; }
   .tc-label { font-size: 12px; color: #888; margin-bottom: 6px; }
-  .tc-player { font-size: 14px; color: #fff; padding: 3px 0; }
+  .tc-player { font-size: 14px; color: #fff; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; }
+  .tc-player-ppg { font-size: 12px; color: #f59e0b; font-weight: 600; }
   .tc-message { padding: 0 16px 12px; font-size: 13px; color: #888; font-style: italic; }
   .tc-actions { padding: 12px 16px; border-top: 1px solid #222; display: flex; gap: 8px; align-items: center; }
   .accept-btn {

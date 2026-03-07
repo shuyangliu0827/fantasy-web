@@ -6,11 +6,13 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
   getUndraftedPlayers,
   getTeamRoster,
+  fetchTeamRosterFromDB,
   addFreeAgent,
   dropPlayer,
   League,
@@ -55,7 +57,7 @@ export default function FreeAgentsPage() {
       const myT = teamsData?.find((t: { user_id: string }) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
-        setMyRoster(getTeamRoster(leagueData.id, myT.id));
+        setMyRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id));
       }
     }
 
@@ -290,7 +292,7 @@ export default function FreeAgentsPage() {
                         onClick={() => setDropPlayerId(p.id)}
                       >
                         <span className="drop-name">{p.name}</span>
-                        <span className="drop-meta">{p.position} · {p.ppg} PPG</span>
+                        <span className="drop-meta">{PLAYER_POSITIONS[p.name] || p.position} · {p.ppg} PPG</span>
                       </div>
                     ))}
                   </div>
