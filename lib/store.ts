@@ -1070,6 +1070,8 @@
      const all = getLeagueRosters(leagueId);
      all[teamId] = roster;
      localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+     // Sync to Supabase (fire-and-forget)
+     supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
    }
 
    // Lineup: { PG: playerId, SG: playerId, ... }
@@ -1085,6 +1087,79 @@
    export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
      if (!canUseStorage()) return;
      localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
+     // Sync to Supabase (fire-and-forget)
+     supabase.from("fantasy_teams").update({ lineup_data: lineup }).eq("id", teamId).then(() => {});
+   }
+
+   // Fetch roster from Supabase (shared across users), falls back to localStorage
+   export async function fetchTeamRosterFromDB(leagueId: string, teamId: string): Promise<RosterPlayer[]> {
+     const { data, error } = await supabase
+       .from("fantasy_teams")
+       .select("roster_data")
+       .eq("id", teamId)
+       .single();
+     if (!error && data?.roster_data && Array.isArray(data.roster_data) && data.roster_data.length > 0) {
+       const roster = data.roster_data as RosterPlayer[];
+       // Update localStorage cache
+       if (canUseStorage()) {
+         const all = getLeagueRosters(leagueId);
+         all[teamId] = roster;
+         localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+       }
+       return roster;
+     }
+     // Fallback to localStorage (e.g. data was drafted before migration)
+     const local = getTeamRoster(leagueId, teamId);
+     if (local.length > 0) {
+       // Backfill Supabase with localStorage data
+       supabase.from("fantasy_teams").update({ roster_data: local }).eq("id", teamId).then(() => {});
+     }
+     return local;
+   }
+
+   // Fetch lineup from Supabase (shared across users), falls back to localStorage
+   export async function fetchTeamLineupFromDB(leagueId: string, teamId: string): Promise<LineupMap> {
+     const { data, error } = await supabase
+       .from("fantasy_teams")
+       .select("lineup_data")
+       .eq("id", teamId)
+       .single();
+     if (!error && data?.lineup_data && typeof data.lineup_data === "object" && Object.keys(data.lineup_data as object).length > 0) {
+       const lineup = data.lineup_data as LineupMap;
+       // Update localStorage cache
+       if (canUseStorage()) {
+         localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
+       }
+       return lineup;
+     }
+     // Fallback to localStorage
+     const local = getTeamLineup(leagueId, teamId);
+     if (Object.keys(local).length > 0) {
+       // Backfill Supabase
+       supabase.from("fantasy_teams").update({ lineup_data: local }).eq("id", teamId).then(() => {});
+     }
+     return local;
+   }
+
+   // Fetch all league rosters from Supabase
+   export async function fetchLeagueRostersFromDB(leagueId: string): Promise<Record<string, RosterPlayer[]>> {
+     const { data, error } = await supabase
+       .from("fantasy_teams")
+       .select("id, roster_data")
+       .eq("league_id", leagueId);
+     if (error || !data) return getLeagueRosters(leagueId);
+     const result: Record<string, RosterPlayer[]> = {};
+     for (const team of data) {
+       const roster = (team.roster_data && Array.isArray(team.roster_data) && team.roster_data.length > 0)
+         ? team.roster_data as RosterPlayer[]
+         : getTeamRoster(leagueId, team.id);
+       result[team.id] = roster;
+     }
+     // Update localStorage cache
+     if (canUseStorage()) {
+       localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(result));
+     }
+     return result;
    }
 
    export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
@@ -1298,9 +1373,9 @@
      const trade = mapTradeRow(row);
 
      if (accept) {
-       // Execute the trade: swap players between rosters (localStorage)
-       const fromRoster = getTeamRoster(leagueId, trade.fromTeamId);
-       const toRoster = getTeamRoster(leagueId, trade.toTeamId);
+       // Execute the trade: swap players between rosters (fetch from Supabase for accuracy)
+       const fromRoster = await fetchTeamRosterFromDB(leagueId, trade.fromTeamId);
+       const toRoster = await fetchTeamRosterFromDB(leagueId, trade.toTeamId);
 
        const offeredPlayers = fromRoster.filter(p => trade.offeredPlayerIds.includes(p.id));
        const requestedPlayers = toRoster.filter(p => trade.requestedPlayerIds.includes(p.id));
@@ -1329,7 +1404,7 @@
 
        // Clean up lineups for traded players
        for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
-         const lineup = getTeamLineup(leagueId, teamId);
+         const lineup = await fetchTeamLineupFromDB(leagueId, teamId);
          const roster = teamId === trade.fromTeamId ? newFromRoster : newToRoster;
          const rosterIds = new Set(roster.map(p => p.id));
          for (const [slot, pid] of Object.entries(lineup)) {

@@ -327,6 +327,11 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       }
       localStorage.setItem(`bp_league_rosters_${league.id}`, JSON.stringify(rostersByTeam));
 
+      // Sync each team's roster to Supabase so all users can see them
+      for (const [teamId, roster] of Object.entries(rostersByTeam)) {
+        supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
+      }
+
       // Update league status to active
       supabase.from("leagues").update({ status: "active" }).eq("id", league.id).then(() => {});
     } catch (e) {

@@ -9,11 +9,12 @@ import { useLang } from "@/lib/lang";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getTeamRoster,
   getTeamLineup,
   setTeamLineup,
   autoSetLineup,
   isEligibleForSlot,
+  fetchTeamRosterFromDB,
+  fetchTeamLineupFromDB,
   League,
   RosterPlayer,
   LineupMap,
@@ -168,9 +169,9 @@ export default function RosterPage() {
         setMyTeam(myT);
         const teamId = myT.id;
         setViewTeamId(teamId);
-        const rosterData = getTeamRoster(leagueData.id, teamId);
+        const rosterData = await fetchTeamRosterFromDB(leagueData.id, teamId);
         setRoster(rosterData);
-        let lineupData = getTeamLineup(leagueData.id, teamId);
+        let lineupData = await fetchTeamLineupFromDB(leagueData.id, teamId);
         if (Object.keys(lineupData).length === 0 && rosterData.length > 0) {
           lineupData = autoSetLineup(leagueData.id, teamId);
         }
@@ -233,12 +234,12 @@ export default function RosterPage() {
 
   // ── Lineup logic (unchanged) ──
 
-  function switchViewTeam(teamId: string) {
+  async function switchViewTeam(teamId: string) {
     if (!league) return;
     setViewTeamId(teamId);
-    const rosterData = getTeamRoster(league.id, teamId);
+    const rosterData = await fetchTeamRosterFromDB(league.id, teamId);
     setRoster(rosterData);
-    const lineupData = getTeamLineup(league.id, teamId);
+    const lineupData = await fetchTeamLineupFromDB(league.id, teamId);
     setLineup(lineupData);
     setSwapSource(null);
   }

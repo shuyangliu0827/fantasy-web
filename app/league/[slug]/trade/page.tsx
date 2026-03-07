@@ -9,9 +9,10 @@ import { useLang } from "@/lib/lang";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getTeamRoster,
   getLeagueTrades,
   getLeagueRosters,
+  fetchTeamRosterFromDB,
+  fetchLeagueRostersFromDB,
   proposeTrade,
   respondToTrade,
   cancelTrade,
@@ -58,6 +59,8 @@ export default function TradePage() {
 
   // Live stats from BDL API
   const [liveStats, setLiveStats] = useState<Map<string, LivePlayerStats>>(new Map());
+  // All league rosters cache (loaded from DB for name lookups)
+  const [allRostersCache, setAllRostersCache] = useState<Record<string, RosterPlayer[]>>({});
 
   // ── Helper functions (declared before hooks that reference them) ──
 
@@ -115,9 +118,13 @@ export default function TradePage() {
       const myT = teamsData.find((t: TeamInfo) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
-        setMyRoster(getTeamRoster(leagueData.id, myT.id));
+        setMyRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id));
       }
     }
+
+    // Load all rosters from DB for player name lookups
+    const rostersData = await fetchLeagueRostersFromDB(leagueData.id);
+    setAllRostersCache(rostersData);
 
     const tradeData = await getLeagueTrades(leagueData.id);
     setTrades(tradeData);
@@ -162,10 +169,10 @@ export default function TradePage() {
     };
   }, [league?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function selectTargetTeam(teamId: string) {
+  async function selectTargetTeam(teamId: string) {
     if (!league) return;
     setTargetTeamId(teamId);
-    setTargetRoster(getTeamRoster(league.id, teamId));
+    setTargetRoster(await fetchTeamRosterFromDB(league.id, teamId));
     setOfferedIds(new Set());
     setRequestedIds(new Set());
     setTradeMessage("");
@@ -276,12 +283,14 @@ export default function TradePage() {
     const tradeData = await getLeagueTrades(league.id);
     setTrades(tradeData);
     if (myTeam) {
-      setMyRoster(getTeamRoster(league.id, myTeam.id));
+      setMyRoster(await fetchTeamRosterFromDB(league.id, myTeam.id));
     }
     // Also refresh target roster if we're viewing one
     if (targetTeamId) {
-      setTargetRoster(getTeamRoster(league.id, targetTeamId));
+      setTargetRoster(await fetchTeamRosterFromDB(league.id, targetTeamId));
     }
+    // Refresh all rosters cache for name lookups
+    setAllRostersCache(await fetchLeagueRostersFromDB(league.id));
     setSubmitting(false);
   }
 
@@ -301,8 +310,7 @@ export default function TradePage() {
   // only on the original team would fail and show raw IDs.
   function getPlayerName(playerId: string): string {
     if (!league) return playerId;
-    const allRosters = getLeagueRosters(league.id);
-    for (const roster of Object.values(allRosters)) {
+    for (const roster of Object.values(allRostersCache)) {
       const found = roster.find((p: RosterPlayer) => p.id === playerId);
       if (found) return found.name;
     }
@@ -318,8 +326,7 @@ export default function TradePage() {
     if (stats) return stats.averages.pts.toFixed(1);
     // Fallback to roster data
     if (!league) return "-";
-    const allRosters = getLeagueRosters(league.id);
-    for (const roster of Object.values(allRosters)) {
+    for (const roster of Object.values(allRostersCache)) {
       const found = roster.find((p: RosterPlayer) => p.id === playerId);
       if (found) return found.ppg.toFixed(1);
     }
@@ -399,7 +406,7 @@ export default function TradePage() {
                   <p className="select-label">{t("选择交易对手：", "Select a team to trade with:")}</p>
                   <div className="team-grid">
                     {otherTeams.map(team => {
-                      const teamRoster = getTeamRoster(league.id, team.id);
+                      const teamRoster = allRostersCache[team.id] || [];
                       return (
                         <div key={team.id} className="team-card" onClick={() => selectTargetTeam(team.id)}>
                           <div className="team-card-name">{team.name}</div>

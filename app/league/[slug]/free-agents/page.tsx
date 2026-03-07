@@ -11,6 +11,7 @@ import {
   getLeagueBySlug,
   getUndraftedPlayers,
   getTeamRoster,
+  fetchTeamRosterFromDB,
   addFreeAgent,
   dropPlayer,
   League,
@@ -55,7 +56,7 @@ export default function FreeAgentsPage() {
       const myT = teamsData?.find((t: { user_id: string }) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
-        setMyRoster(getTeamRoster(leagueData.id, myT.id));
+        setMyRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id));
       }
     }
 
