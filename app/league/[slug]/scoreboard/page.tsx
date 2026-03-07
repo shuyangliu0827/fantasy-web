@@ -46,25 +46,63 @@ export default function ScoreboardPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // 生成模拟对阵
-  const generateMatchups = () => {
-    const matchups = [];
-    for (let i = 0; i < members.length; i += 2) {
-      if (members[i + 1]) {
-        matchups.push({
-          id: i,
-          home: members[i],
-          away: members[i + 1],
-          homeScore: 0,
-          awayScore: 0,
-          status: "scheduled",
-        });
-      }
+  // Seeded shuffle for consistent random initial ordering per league
+  function seededShuffle<T>(arr: T[], seed: number): T[] {
+    const result = [...arr];
+    let s = seed;
+    for (let i = result.length - 1; i > 0; i--) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const j = s % (i + 1);
+      [result[i], result[j]] = [result[j], result[i]];
     }
-    return matchups;
+    return result;
+  }
+
+  // Round-robin circle method:
+  // Week 1 uses seeded-random pairing (same every reload).
+  // Subsequent weeks rotate: team[0] cycles through all opponents,
+  // remaining pairs are filled symmetrically. Repeats after n-1 weeks.
+  const generateMatchupsForWeek = (week: number) => {
+    const n = members.length;
+    if (n < 2 || n % 2 !== 0) return [];
+
+    const sorted = [...members].sort((a, b) => a.user_id.localeCompare(b.user_id));
+    const seed = (league?.id || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const shuffled = seededShuffle(sorted, seed);
+
+    const fixed = shuffled[0];
+    const rotating = shuffled.slice(1); // n-1 elements
+    const numRounds = n - 1;
+    const round = (week - 1) % numRounds;
+    const half = (n - 2) / 2;
+
+    const result = [];
+    let id = 0;
+
+    result.push({
+      id: id++,
+      home: fixed,
+      away: rotating[round],
+      homeScore: 0,
+      awayScore: 0,
+      status: "scheduled",
+    });
+
+    for (let i = 1; i <= half; i++) {
+      result.push({
+        id: id++,
+        home: rotating[(round + i) % (n - 1)],
+        away: rotating[(round + n - 1 - i) % (n - 1)],
+        homeScore: 0,
+        awayScore: 0,
+        status: "scheduled",
+      });
+    }
+
+    return result;
   };
 
-  const matchups = generateMatchups();
+  const matchups = generateMatchupsForWeek(selectedWeek);
   const weeks = Array.from({ length: 20 }, (_, i) => i + 1);
 
   if (loading) {
@@ -177,7 +215,7 @@ export default function ScoreboardPage() {
                   </div>
 
                   <div className="matchup-footer">
-                    <Link href={`/league/${slug}/matchup/${matchup.id}`} className="view-matchup">
+                    <Link href={`/league/${slug}/matchup/${selectedWeek}-${matchup.id}`} className="view-matchup">
                       {t("查看详情", "View Matchup")} →
                     </Link>
                   </div>

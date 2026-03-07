@@ -210,9 +210,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Only commissioner can start the draft" }, { status: 403 });
       }
 
-      // 检查队伍数量
-      if (league.teams.length < 2) {
-        return NextResponse.json({ error: "Need at least 2 teams to start draft" }, { status: 400 });
+      // 检查队伍数量（必须是偶数且至少2支）
+      if (league.teams.length < 2 || league.teams.length % 2 !== 0) {
+        return NextResponse.json({ error: "Need an even number of teams (min 2) to start draft" }, { status: 400 });
       }
 
       // 创建选秀房间

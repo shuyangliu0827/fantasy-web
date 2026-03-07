@@ -152,7 +152,7 @@ export default function LeaguePage() {
   }
 
   const isCommissioner = currentUser?.id === league.commissioner_id;
-  const canStartDraft = isCommissioner && teams.length >= 2 && league.status === 'draft_pending';
+  const canStartDraft = isCommissioner && teams.length >= 2 && teams.length % 2 === 0 && league.status === 'draft_pending';
 
   return (
     <div style={{ 
@@ -262,7 +262,7 @@ export default function LeaguePage() {
             fontSize: '14px',
             fontWeight: 500
           }}>
-            💡 提示：已有{teams.length}支队伍加入，可以开始选秀了！
+            💡 提示：已有{teams.length}支队伍加入（偶数），可以开始选秀了！
           </div>
         )}
       </div>
