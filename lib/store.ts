@@ -1081,13 +1081,14 @@
      return all[teamId] || [];
    }
 
-   export function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]) {
-     if (!canUseStorage()) return;
-     const all = getLeagueRosters(leagueId);
-     all[teamId] = roster;
-     localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
-     // Sync to Supabase (fire-and-forget)
-     supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
+   export function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
+     if (canUseStorage()) {
+       const all = getLeagueRosters(leagueId);
+       all[teamId] = roster;
+       localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+     }
+     // Return the Supabase promise so callers can await if needed
+     return supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
    }
 
    // Lineup: { PG: playerId, SG: playerId, ... }
@@ -1396,11 +1397,11 @@
        const offeredPlayers = fromRoster.filter(p => trade.offeredPlayerIds.includes(p.id));
        const requestedPlayers = toRoster.filter(p => trade.requestedPlayerIds.includes(p.id));
 
-       if (offeredPlayers.length !== trade.offeredPlayerIds.length) {
-         return { ok: false, error: "Some offered players not found on roster" };
+       if (offeredPlayers.length === 0 && trade.offeredPlayerIds.length > 0) {
+         return { ok: false, error: "Offered players not found on roster. The roster data may not have synced yet — please try again." };
        }
-       if (requestedPlayers.length !== trade.requestedPlayerIds.length) {
-         return { ok: false, error: "Some requested players not found on roster" };
+       if (requestedPlayers.length === 0 && trade.requestedPlayerIds.length > 0) {
+         return { ok: false, error: "Requested players not found on roster. The roster data may not have synced yet — please try again." };
        }
 
        // Remove from original rosters
@@ -1415,8 +1416,11 @@
          newFromRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
        }
 
-       setTeamRoster(leagueId, trade.fromTeamId, newFromRoster);
-       setTeamRoster(leagueId, trade.toTeamId, newToRoster);
+       // Await both roster saves to Supabase before updating trade status
+       await Promise.all([
+         setTeamRoster(leagueId, trade.fromTeamId, newFromRoster),
+         setTeamRoster(leagueId, trade.toTeamId, newToRoster),
+       ]);
 
        // Clean up lineups for traded players
        for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
