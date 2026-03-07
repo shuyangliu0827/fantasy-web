@@ -44,6 +44,7 @@ type CachedPlayerStats = {
     stl: number; blk: number; tov: number; pts: number;
   };
   fptsAvg: number;
+  injury?: string;
 };
 
 type PlayerGameStats = {
@@ -423,8 +424,22 @@ export default function RosterPage() {
 
   function renderGameCell(player: RosterPlayer | undefined) {
     if (!player) return <div className="col-schedule dim">--</div>;
+
+    const cached = getStatsForPlayer(player);
     const game = getGameForPlayer(player);
-    if (!game) return <div className="col-schedule dim">--</div>;
+
+    // No game today — check for injury note
+    if (!game) {
+      if (cached?.injury) {
+        return (
+          <div className="col-schedule">
+            <span className="status-badge inj">INJ</span>
+            <span className="status-reason">{cached.injury}</span>
+          </div>
+        );
+      }
+      return <div className="col-schedule dim">--</div>;
+    }
 
     const label = game.isHome ? `vs ${game.opponent}` : `@${game.opponent}`;
     const isFinal = game.status === "Final";
@@ -432,10 +447,16 @@ export default function RosterPage() {
       ? `${game.isHome ? game.homeScore : game.visitorScore}-${game.isHome ? game.visitorScore : game.homeScore}`
       : null;
 
+    // Game finished but no box score stats → DNP
+    const dayStats = getGameDayStatsForPlayer(player);
+    const isDnp = isFinal && !dayStats;
+
     return (
       <div className="col-schedule">
         <span className="opp-label">{label}</span>
         {score && <span className="game-score">{score}</span>}
+        {isDnp && <span className="status-badge dnp">DNP</span>}
+        {!isFinal && cached?.injury && <span className="status-badge inj">INJ</span>}
       </div>
     );
   }
@@ -1128,6 +1149,17 @@ const styles = `
   .col-schedule.dim { color: #444; }
   .opp-label { font-weight: 600; font-size: 12px; }
   .game-score { font-size: 10px; color: #888; }
+  .status-badge {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .status-badge.dnp { background: rgba(100,116,139,0.25); color: #94a3b8; }
+  .status-badge.inj { background: rgba(239,68,68,0.2); color: #fca5a5; }
+  .status-reason { font-size: 10px; color: #ef4444; display: block; }
 
   /* Stats columns */
   .col-stat {
