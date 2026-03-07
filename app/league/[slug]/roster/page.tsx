@@ -76,13 +76,13 @@ const SLOT_LABELS: Record<string, { label: string; labelEn: string; type: "start
   F: { label: "前锋", labelEn: "F", type: "starter" },
   UTIL1: { label: "机动1", labelEn: "UTIL", type: "starter" },
   UTIL2: { label: "机动2", labelEn: "UTIL", type: "starter" },
+  UTIL3: { label: "机动3", labelEn: "UTIL", type: "starter" },
   BE1: { label: "板凳1", labelEn: "BE", type: "bench" },
   BE2: { label: "板凳2", labelEn: "BE", type: "bench" },
   BE3: { label: "板凳3", labelEn: "BE", type: "bench" },
-  BE4: { label: "板凳4", labelEn: "BE", type: "bench" },
 };
 
-const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "BE1", "BE2", "BE3", "BE4"];
+const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
 
 const DAY_NAMES_EN = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
@@ -395,8 +395,8 @@ export default function RosterPage() {
           fpts: acc.fpts + dayStats.fpts,
         };
       }
-      // Past dates: don't add season averages for players without game-day data
-      if (isPastDate) return acc;
+      // Past or today: don't add season averages for players without game-day data
+      if (isPastDate || selectedDate === todayStr) return acc;
       const stats = getStatsForPlayer(player);
       if (!stats) return acc;
       const a = stats.averages;
@@ -529,6 +529,9 @@ export default function RosterPage() {
       );
     }
 
+    // Today with no game stats → "--"
+    if (selectedDate === todayStr) return dashRow;
+
     const a = stats!.averages;
     return (
       <>
@@ -560,6 +563,9 @@ export default function RosterPage() {
     if (played && dayStats) {
       return <div className="col-fpts live">{dayStats.fpts.toFixed(1)}</div>;
     }
+
+    // Today with no game stats → "--"
+    if (selectedDate === todayStr) return <div className="col-fpts">--</div>;
 
     const stats = player ? getStatsForPlayer(player) : null;
     if (!stats) return <div className="col-fpts">--</div>;
