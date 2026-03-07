@@ -1081,14 +1081,14 @@
      return all[teamId] || [];
    }
 
-   export function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
+   export async function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
      if (canUseStorage()) {
        const all = getLeagueRosters(leagueId);
        all[teamId] = roster;
        localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
      }
-     // Return the Supabase promise so callers can await if needed
-     return supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
+     // Return real Promise so callers can await if needed
+     await supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId);
    }
 
    // Lineup: { PG: playerId, SG: playerId, ... }
