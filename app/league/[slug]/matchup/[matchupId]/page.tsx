@@ -45,12 +45,54 @@ function playerFptsAvg(p: RosterPlayer): number {
   return Math.max(0, p.ppg + p.rpg + p.apg + p.spg * 2 + p.bpg * 2 - (p.tov || 0));
 }
 
-// Deterministic per-player-per-day score (~50% play rate, ±35% variance)
+type DayStats = {
+  min: number; fgm: number; fga: number; ftm: number; fta: number;
+  fg3m: number; reb: number; ast: number; stl: number; blk: number;
+  tov: number; pts: number; fpts: number;
+};
+
+// Returns full stat line for that day, or null if player had no game
+function simulateDayStats(p: RosterPlayer, week: number, day: number): DayStats | null {
+  const fptsAvg = playerFptsAvg(p);
+  if (!fptsAvg) return null;
+  let h = p.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  h = ((h * 31 + week * 97 + day * 13) * 1103515245 + 12345) & 0x7fffffff;
+  if (h % 100 > 50) return null; // no game
+  h = (h * 1103515245 + 12345) & 0x7fffffff;
+  const v = 0.6 + (h % 70) / 100;
+  const pts  = Math.round(p.ppg * v);
+  const reb  = Math.round(p.rpg * v);
+  const ast  = Math.round(p.apg * v);
+  const stl  = Math.round(p.spg * v * 10) / 10;
+  const blk  = Math.round(p.bpg * v * 10) / 10;
+  const tov  = Math.round((p.tov || 0) * v);
+  const fga  = Math.round((pts / 2) / Math.max(0.01, (p.fg || 45) / 100));
+  const fgm  = Math.round(fga * (p.fg || 45) / 100);
+  const fta  = Math.round(pts * 0.2);
+  const ftm  = Math.round(fta * (p.ft || 75) / 100);
+  const fg3m = Math.max(0, Math.round((pts - fgm * 2 - ftm) / 3));
+  const min  = Math.round(32 * v);
+  const fpts = pts + reb + ast + Math.round(stl) * 2 + Math.round(blk) * 2 + fg3m - tov;
+  return { min, fgm, fga, ftm, fta, fg3m, reb, ast, stl, blk, tov, pts, fpts };
+}
+
+// Which day index (0-6) within the matchup week is today?
+function getTodayDayIndex(week: number): number {
+  const start = new Date("2025-10-21");
+  start.setDate(start.getDate() + (week - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  return Math.min(6, Math.max(0, diff));
+}
+
+// Daily score used for the banner totals (accumulated across all days)
 function playerDayScore(playerId: string, week: number, day: number, fptsAvg: number): number {
   if (!fptsAvg) return 0;
   let h = playerId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
   h = ((h * 31 + week * 97 + day * 13) * 1103515245 + 12345) & 0x7fffffff;
-  if (h % 100 > 50) return 0; // no game that day
+  if (h % 100 > 50) return 0;
   h = (h * 1103515245 + 12345) & 0x7fffffff;
   const variance = 0.6 + (h % 70) / 100;
   return Math.round(fptsAvg * variance);
@@ -159,20 +201,32 @@ export default function MatchupDetailPage() {
   // ── Box score renderer ────────────────────────────────────────────────────
 
   const renderBoxScore = (roster: RosterPlayer[], teamName: string) => {
-    const rows = roster.map((p) => ({ p, fpts: calcPlayerWeekFpts(p) }));
+    const todayDay = getTodayDayIndex(week);
+    const rows = roster.map((p) => ({
+      p,
+      stats: simulateDayStats(p, week, todayDay),
+    }));
 
     const totals = rows.reduce(
-      (acc, { p, fpts }) => ({
-        ppg:  acc.ppg  + p.ppg,
-        rpg:  acc.rpg  + p.rpg,
-        apg:  acc.apg  + p.apg,
-        spg:  acc.spg  + p.spg,
-        bpg:  acc.bpg  + p.bpg,
-        tov:  acc.tov  + (p.tov || 0),
-        fpts: acc.fpts + fpts,
+      (acc, { stats }) => ({
+        min:  acc.min  + (stats?.min  ?? 0),
+        fgm:  acc.fgm  + (stats?.fgm  ?? 0),
+        fga:  acc.fga  + (stats?.fga  ?? 0),
+        ftm:  acc.ftm  + (stats?.ftm  ?? 0),
+        fta:  acc.fta  + (stats?.fta  ?? 0),
+        fg3m: acc.fg3m + (stats?.fg3m ?? 0),
+        reb:  acc.reb  + (stats?.reb  ?? 0),
+        ast:  acc.ast  + (stats?.ast  ?? 0),
+        stl:  acc.stl  + (stats?.stl  ?? 0),
+        blk:  acc.blk  + (stats?.blk  ?? 0),
+        tov:  acc.tov  + (stats?.tov  ?? 0),
+        pts:  acc.pts  + (stats?.pts  ?? 0),
+        fpts: acc.fpts + (stats?.fpts ?? 0),
       }),
-      { ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, tov: 0, fpts: 0 }
+      { min:0, fgm:0, fga:0, ftm:0, fta:0, fg3m:0, reb:0, ast:0, stl:0, blk:0, tov:0, pts:0, fpts:0 }
     );
+
+    const D = "--";
 
     return (
       <div className="box-score-section">
@@ -186,27 +240,31 @@ export default function MatchupDetailPage() {
               <tr>
                 <th className="col-player">{t("球员", "PLAYER")}</th>
                 <th>POS</th>
-                <th>PTS</th>
+                <th>MIN</th>
+                <th>FGM</th>
+                <th>FGA</th>
+                <th>FTM</th>
+                <th>FTA</th>
+                <th>3PM</th>
                 <th>REB</th>
                 <th>AST</th>
                 <th>STL</th>
                 <th>BLK</th>
-                <th>TOV</th>
-                <th>FG%</th>
-                <th>FT%</th>
+                <th>TO</th>
+                <th>PTS</th>
                 <th className="col-fpts">FPTS</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="empty-row">
+                  <td colSpan={15} className="empty-row">
                     {t("还未选秀 — 暂无球员数据", "No players drafted yet")}
                   </td>
                 </tr>
               ) : (
-                rows.map(({ p, fpts }) => (
-                  <tr key={p.id}>
+                rows.map(({ p, stats }) => (
+                  <tr key={p.id} className={stats ? "row-played" : "row-no-game"}>
                     <td className="col-player">
                       <div className="player-cell">
                         <span className="player-name">{p.name}</span>
@@ -214,29 +272,37 @@ export default function MatchupDetailPage() {
                       </div>
                     </td>
                     <td>{p.position}</td>
-                    <td>{p.ppg.toFixed(1)}</td>
-                    <td>{p.rpg.toFixed(1)}</td>
-                    <td>{p.apg.toFixed(1)}</td>
-                    <td>{p.spg.toFixed(1)}</td>
-                    <td>{p.bpg.toFixed(1)}</td>
-                    <td>{(p.tov || 0).toFixed(1)}</td>
-                    <td>{(p.fg  || 0).toFixed(1)}%</td>
-                    <td>{(p.ft  || 0).toFixed(1)}%</td>
-                    <td className="col-fpts">{fpts}</td>
+                    <td>{stats ? stats.min  : D}</td>
+                    <td>{stats ? stats.fgm  : D}</td>
+                    <td>{stats ? stats.fga  : D}</td>
+                    <td>{stats ? stats.ftm  : D}</td>
+                    <td>{stats ? stats.fta  : D}</td>
+                    <td>{stats ? stats.fg3m : D}</td>
+                    <td>{stats ? stats.reb  : D}</td>
+                    <td>{stats ? stats.ast  : D}</td>
+                    <td>{stats ? stats.stl  : D}</td>
+                    <td>{stats ? stats.blk  : D}</td>
+                    <td>{stats ? stats.tov  : D}</td>
+                    <td>{stats ? stats.pts  : D}</td>
+                    <td className="col-fpts">{stats ? stats.fpts : 0}</td>
                   </tr>
                 ))
               )}
               {rows.length > 0 && (
                 <tr className="totals-row">
                   <td colSpan={2}><strong>TOTALS</strong></td>
-                  <td>{totals.ppg.toFixed(1)}</td>
-                  <td>{totals.rpg.toFixed(1)}</td>
-                  <td>{totals.apg.toFixed(1)}</td>
-                  <td>{totals.spg.toFixed(1)}</td>
-                  <td>{totals.bpg.toFixed(1)}</td>
-                  <td>{totals.tov.toFixed(1)}</td>
-                  <td>—</td>
-                  <td>—</td>
+                  <td>{totals.min}</td>
+                  <td>{totals.fgm}</td>
+                  <td>{totals.fga}</td>
+                  <td>{totals.ftm}</td>
+                  <td>{totals.fta}</td>
+                  <td>{totals.fg3m}</td>
+                  <td>{totals.reb}</td>
+                  <td>{totals.ast}</td>
+                  <td>{totals.stl.toFixed(1)}</td>
+                  <td>{totals.blk.toFixed(1)}</td>
+                  <td>{totals.tov}</td>
+                  <td>{totals.pts}</td>
                   <td className="col-fpts"><strong>{totals.fpts}</strong></td>
                 </tr>
               )}
@@ -587,6 +653,12 @@ const styles = `
   .player-cell { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; }
   .player-name { font-size: 14px; font-weight: 600; color: #fff; }
   .player-team-label { font-size: 11px; color: #666; }
+
+  .row-played td { color: #4ade80; }
+  .row-played .player-name { color: #fff; }
+  .row-played .player-team-label { color: #888; }
+  .row-no-game td { color: #444; }
+  .row-no-game .player-name { color: #888; }
 
   .totals-row td {
     background: #161616;
