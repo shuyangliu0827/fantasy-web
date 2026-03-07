@@ -8,6 +8,7 @@
    import { supabase } from "./supabase";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
+   import { PLAYER_POSITIONS } from "./player-positions";
    
    // ==================== Types ====================
    
@@ -798,7 +799,10 @@
    
    // ==================== Players (localStorage) ====================
    
-   const DEFAULT_PLAYERS: Player[] = ALL_PLAYERS as Player[];
+   const DEFAULT_PLAYERS: Player[] = (ALL_PLAYERS as Player[]).map(p => {
+     const pos = PLAYER_POSITIONS[p.name];
+     return pos ? { ...p, position: pos } : p;
+   });
    
    export function getPlayers(): Player[] {
      if (!canUseStorage()) return DEFAULT_PLAYERS;

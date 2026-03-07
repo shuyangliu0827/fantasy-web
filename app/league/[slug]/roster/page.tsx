@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -271,8 +272,8 @@ export default function RosterPage() {
       const playerBData = roster.find(p => p.id === playerB);
 
       let canSwap = true;
-      if (playerA && !isEligibleForSlot(playerAData?.position || "", slot)) canSwap = false;
-      if (playerB && !isEligibleForSlot(playerBData?.position || "", swapSource)) canSwap = false;
+      if (playerA && !isEligibleForSlot(playerAData ? getPlayerPosition(playerAData) : "", slot)) canSwap = false;
+      if (playerB && !isEligibleForSlot(playerBData ? getPlayerPosition(playerBData) : "", swapSource)) canSwap = false;
 
       if (!canSwap) {
         alert(t("位置不符合要求，无法交换", "Position not eligible for this slot"));
@@ -297,7 +298,7 @@ export default function RosterPage() {
     if (!league || !myTeam || !swapSource) return;
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
-    if (!isEligibleForSlot(player.position, swapSource)) {
+    if (!isEligibleForSlot(getPlayerPosition(player), swapSource)) {
       alert(t("位置不符合要求", "Position not eligible"));
       return;
     }
@@ -323,6 +324,11 @@ export default function RosterPage() {
   function getLiveTeam(player: RosterPlayer): string {
     const stats = getStatsForPlayer(player);
     return stats?.team || player.team;
+  }
+
+  // Get accurate multi-position for a player (override map takes priority)
+  function getPlayerPosition(player: RosterPlayer): string {
+    return PLAYER_POSITIONS[player.name] || player.position;
   }
 
   function getGameForPlayer(player: RosterPlayer): GameInfo | null {
@@ -576,7 +582,7 @@ export default function RosterPage() {
           {player ? (
             <div className="player-info">
               <span className="player-name">{player.name}</span>
-              <span className="player-meta">{getLiveTeam(player)} · {player.position}</span>
+              <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
             </div>
           ) : (
             <span className="empty-slot">{t("空位", "Empty")}</span>
@@ -791,7 +797,7 @@ export default function RosterPage() {
                           <div className="col-player">
                             <div className="player-info">
                               <span className="player-name">{player.name}</span>
-                              <span className="player-meta">{getLiveTeam(player)} · {player.position}</span>
+                              <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
                             </div>
                           </div>
                           {renderGameCell(player)}

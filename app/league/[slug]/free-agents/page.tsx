@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -291,7 +292,7 @@ export default function FreeAgentsPage() {
                         onClick={() => setDropPlayerId(p.id)}
                       >
                         <span className="drop-name">{p.name}</span>
-                        <span className="drop-meta">{p.position} · {p.ppg} PPG</span>
+                        <span className="drop-meta">{PLAYER_POSITIONS[p.name] || p.position} · {p.ppg} PPG</span>
                       </div>
                     ))}
                   </div>

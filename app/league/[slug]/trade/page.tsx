@@ -6,6 +6,7 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -439,7 +440,7 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {p.position}</span>
+                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>
@@ -465,7 +466,7 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {p.position}</span>
+                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>
