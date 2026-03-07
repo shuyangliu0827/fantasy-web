@@ -244,11 +244,23 @@
 
      if (!authError && authData.user) {
        // Supabase Auth succeeded — fetch user profile
-       const { data: user, error } = await supabase
+       let { data: user } = await supabase
          .from("users")
          .select("*")
          .eq("email", email)
          .single();
+
+       // If public.users row is missing, auto-create it so FK constraints work
+       if (!user) {
+         const username = email.split("@")[0];
+         const name = authData.user.user_metadata?.name || username;
+         const { data: newUser } = await supabase
+           .from("users")
+           .upsert({ id: authData.user.id, name, email, username }, { onConflict: "id" })
+           .select()
+           .single();
+         user = newUser;
+       }
 
        if (user) {
          setSessionUser(user);
