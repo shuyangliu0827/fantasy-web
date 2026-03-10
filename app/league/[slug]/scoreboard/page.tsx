@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -10,9 +10,40 @@ import {
   getSessionUser,
   getLeagueBySlug,
   getLeagueMembers,
+  getTeamRoster,
+  fetchTeamRosterFromDB,
+  supabase,
   League,
   LeagueMember,
+  RosterPlayer,
 } from "@/lib/store";
+import {
+  getWeekDateStrings,
+  getWeekStatus,
+  getTodayStr,
+} from "@/lib/week-utils";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type CachedPlayerStats = {
+  id: number;
+  name: string;
+  team: string;
+  averages: Record<string, number>;
+  fptsAvg: number;
+  injury?: string;
+};
+
+type PlayerGameStats = {
+  min: number; fgm: number; fga: number; fg3m: number;
+  ftm: number; fta: number; reb: number; ast: number;
+  stl: number; blk: number; tov: number; pts: number;
+  fpts: number;
+};
+
+type DateStatsMap = Record<string, PlayerGameStats>;
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScoreboardPage() {
   const { t } = useLang();
@@ -25,6 +56,12 @@ export default function ScoreboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(1);
 
+  // Real data state
+  const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
+  const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
+  const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
+  const [scoresLoading, setScoresLoading] = useState(false);
+
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
@@ -36,9 +73,88 @@ export default function ScoreboardPage() {
       setLeague(leagueData);
       const membersData = await getLeagueMembers(leagueData.id);
       setMembers(membersData);
+
+      // Fetch all fantasy team rosters
+      const { data: teamsData } = await supabase
+        .from("fantasy_teams")
+        .select("id, user_id, name, roster_data, wins, losses")
+        .eq("league_id", leagueData.id);
+
+      if (teamsData) {
+        const rosters: Record<string, RosterPlayer[]> = {};
+        for (const team of teamsData) {
+          if (team.roster_data && Array.isArray(team.roster_data)) {
+            rosters[team.user_id] = team.roster_data as RosterPlayer[];
+          } else {
+            rosters[team.user_id] = getTeamRoster(leagueData.id, team.id);
+          }
+        }
+        setTeamRosters(rosters);
+      }
+
+      // Fetch player stats cache for name -> BDL ID mapping
+      try {
+        const res = await fetch("/api/nba-stats");
+        const data = await res.json();
+        if (data.status === "success" && data.players) {
+          const map = new Map<string, CachedPlayerStats>();
+          for (const p of data.players) {
+            map.set(String(p.id), p);
+          }
+          setPlayerStatsCache(map);
+        }
+      } catch (err) {
+        console.error("Failed to fetch player stats:", err);
+      }
     }
     setLoading(false);
   }
+
+  // Fetch week stats when selectedWeek changes
+  const fetchWeekStats = useCallback(async (week: number) => {
+    setScoresLoading(true);
+    const dateStrings = getWeekDateStrings(week);
+    const todayStr = getTodayStr();
+    const pastOrTodayDates = dateStrings.filter(d => d <= todayStr);
+
+    if (pastOrTodayDates.length === 0) {
+      setWeekDayStats({});
+      setScoresLoading(false);
+      return;
+    }
+
+    try {
+      const dayStatsResults = await Promise.all(
+        pastOrTodayDates.map(date =>
+          fetch(`/api/nba-game-stats?date=${date}`)
+            .then(r => r.json())
+            .then(data => ({
+              date,
+              stats: data.status === "success" ? (data.stats as DateStatsMap) : {},
+            }))
+            .catch(() => ({ date, stats: {} as DateStatsMap }))
+        )
+      );
+
+      const allDayStats: Record<string, DateStatsMap> = {};
+      for (const { date, stats } of dayStatsResults) {
+        allDayStats[date] = stats;
+      }
+      setWeekDayStats(allDayStats);
+    } catch (err) {
+      console.error("Failed to fetch week stats:", err);
+    } finally {
+      setScoresLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!loading && league) {
+      fetchWeekStats(selectedWeek);
+    }
+  }, [selectedWeek, loading, league, fetchWeekStats]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
   const isOwner = user && league && league.commissioner_id === user.id;
 
@@ -46,7 +162,6 @@ export default function ScoreboardPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // Seeded shuffle for consistent random initial ordering per league
   function seededShuffle<T>(arr: T[], seed: number): T[] {
     const result = [...arr];
     let s = seed;
@@ -58,10 +173,36 @@ export default function ScoreboardPage() {
     return result;
   }
 
-  // Round-robin circle method:
-  // Week 1 uses seeded-random pairing (same every reload).
-  // Subsequent weeks rotate: team[0] cycles through all opponents,
-  // remaining pairs are filled symmetrically. Repeats after n-1 weeks.
+  function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
+    const byId = playerStatsCache.get(player.id);
+    if (byId) return byId;
+    for (const s of playerStatsCache.values()) {
+      if (s.name === player.name) return s;
+    }
+    return null;
+  }
+
+  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+    const todayStr = getTodayStr();
+    if (dateStr > todayStr) return null;
+    const dayMap = weekDayStats[dateStr];
+    if (!dayMap) return null;
+    if (dayMap[player.id]) return dayMap[player.id];
+    const cached = getStatsForPlayer(player);
+    if (cached && dayMap[String(cached.id)]) return dayMap[String(cached.id)];
+    return null;
+  }
+
+  function calcWeekTotalForRoster(roster: RosterPlayer[]): number {
+    const dateStrings = getWeekDateStrings(selectedWeek);
+    return dateStrings.reduce((total, dateStr) => {
+      return total + roster.reduce((sum, p) => {
+        const stats = getPlayerDayStats(p, dateStr);
+        return sum + (stats?.fpts || 0);
+      }, 0);
+    }, 0);
+  }
+
   const generateMatchupsForWeek = (week: number) => {
     const n = members.length;
     if (n < 2 || n % 2 !== 0) return [];
@@ -71,7 +212,7 @@ export default function ScoreboardPage() {
     const shuffled = seededShuffle(sorted, seed);
 
     const fixed = shuffled[0];
-    const rotating = shuffled.slice(1); // n-1 elements
+    const rotating = shuffled.slice(1);
     const numRounds = n - 1;
     const round = (week - 1) % numRounds;
     const half = (n - 2) / 2;
@@ -79,23 +220,28 @@ export default function ScoreboardPage() {
     const result = [];
     let id = 0;
 
+    const homeRoster = teamRosters[fixed.user_id] || [];
+    const awayRoster = teamRosters[rotating[round].user_id] || [];
+
     result.push({
       id: id++,
       home: fixed,
       away: rotating[round],
-      homeScore: 0,
-      awayScore: 0,
-      status: "scheduled",
+      homeScore: calcWeekTotalForRoster(homeRoster),
+      awayScore: calcWeekTotalForRoster(awayRoster),
     });
 
     for (let i = 1; i <= half; i++) {
+      const hm = rotating[(round + i) % (n - 1)];
+      const aw = rotating[(round + n - 1 - i) % (n - 1)];
+      const hRoster = teamRosters[hm.user_id] || [];
+      const aRoster = teamRosters[aw.user_id] || [];
       result.push({
         id: id++,
-        home: rotating[(round + i) % (n - 1)],
-        away: rotating[(round + n - 1 - i) % (n - 1)],
-        homeScore: 0,
-        awayScore: 0,
-        status: "scheduled",
+        home: hm,
+        away: aw,
+        homeScore: calcWeekTotalForRoster(hRoster),
+        awayScore: calcWeekTotalForRoster(aRoster),
       });
     }
 
@@ -104,6 +250,19 @@ export default function ScoreboardPage() {
 
   const matchups = generateMatchupsForWeek(selectedWeek);
   const weeks = Array.from({ length: 20 }, (_, i) => i + 1);
+  const weekStatus = getWeekStatus(selectedWeek);
+
+  function getStatusLabel() {
+    if (weekStatus === "past") return t("已结束", "Final");
+    if (weekStatus === "current") return t("进行中", "In Progress");
+    return t("已安排", "Scheduled");
+  }
+
+  function getStatusClass() {
+    if (weekStatus === "past") return "status-final";
+    if (weekStatus === "current") return "status-live";
+    return "status-scheduled";
+  }
 
   if (loading) {
     return (
@@ -132,7 +291,7 @@ export default function ScoreboardPage() {
   return (
     <div className="app">
       <Header />
-      
+
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
@@ -147,17 +306,17 @@ export default function ScoreboardPage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>📊 {t("记分板", "Scoreboard")}</h1>
+            <h1>{t("记分板", "Scoreboard")}</h1>
             <div className="week-selector">
-              <button 
-                className="week-nav" 
+              <button
+                className="week-nav"
                 onClick={() => setSelectedWeek(Math.max(1, selectedWeek - 1))}
                 disabled={selectedWeek === 1}
               >
                 ←
               </button>
-              <select 
-                value={selectedWeek} 
+              <select
+                value={selectedWeek}
                 onChange={(e) => setSelectedWeek(Number(e.target.value))}
                 className="week-dropdown"
               >
@@ -167,8 +326,8 @@ export default function ScoreboardPage() {
                   </option>
                 ))}
               </select>
-              <button 
-                className="week-nav" 
+              <button
+                className="week-nav"
                 onClick={() => setSelectedWeek(Math.min(20, selectedWeek + 1))}
                 disabled={selectedWeek === 20}
               >
@@ -188,27 +347,29 @@ export default function ScoreboardPage() {
               matchups.map((matchup) => (
                 <div key={matchup.id} className="matchup-card">
                   <div className="matchup-header">
-                    <span className="matchup-status">{t("已安排", "Scheduled")}</span>
+                    <span className={`matchup-status ${getStatusClass()}`}>{getStatusLabel()}</span>
                     <span className="matchup-week">{t(`第 ${selectedWeek} 周`, `Week ${selectedWeek}`)}</span>
                   </div>
-                  
+
                   <div className="matchup-teams">
                     <div className="team home">
                       <div className="team-avatar">{getMemberName(matchup.home)[0]?.toUpperCase()}</div>
                       <div className="team-info">
                         <span className="team-name">{getMemberName(matchup.home)}</span>
-                        <span className="team-record">0-0</span>
                       </div>
-                      <span className="team-score">{matchup.homeScore}</span>
+                      <span className="team-score">
+                        {scoresLoading ? "..." : Math.round(matchup.homeScore * 10) / 10}
+                      </span>
                     </div>
-                    
+
                     <div className="vs">VS</div>
-                    
+
                     <div className="team away">
-                      <span className="team-score">{matchup.awayScore}</span>
+                      <span className="team-score">
+                        {scoresLoading ? "..." : Math.round(matchup.awayScore * 10) / 10}
+                      </span>
                       <div className="team-info">
                         <span className="team-name">{getMemberName(matchup.away)}</span>
-                        <span className="team-record">0-0</span>
                       </div>
                       <div className="team-avatar">{getMemberName(matchup.away)[0]?.toUpperCase()}</div>
                     </div>
@@ -256,38 +417,6 @@ const styles = `
   .league-icon {
     font-size: 28px;
   }
-
-  .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
-    position: sticky;
-    top: 60px;
-    z-index: 40;
-  }
-
-  .league-nav-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    gap: 4px;
-    padding: 0 16px;
-    overflow-x: auto;
-  }
-
-  .league-nav-link {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 16px;
-    color: #888;
-    text-decoration: none;
-    font-size: 14px;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-  }
-
-  .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
 
   .page-content {
     min-height: calc(100vh - 200px);
@@ -378,9 +507,22 @@ const styles = `
   .matchup-status {
     font-size: 12px;
     padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .status-scheduled {
     background: rgba(245, 158, 11, 0.2);
     color: #f59e0b;
-    border-radius: 12px;
+  }
+
+  .status-live {
+    background: rgba(74, 222, 128, 0.2);
+    color: #4ade80;
+  }
+
+  .status-final {
+    background: rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
   }
 
   .matchup-week {
@@ -431,11 +573,6 @@ const styles = `
     font-size: 15px;
     font-weight: 600;
     color: #fff;
-  }
-
-  .team-record {
-    font-size: 12px;
-    color: #888;
   }
 
   .team-score {

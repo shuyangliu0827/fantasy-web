@@ -11,11 +11,63 @@ import {
   getLeagueBySlug,
   getLeagueMembers,
   getTeamRoster,
+  fetchTeamRosterFromDB,
   supabase,
   League,
   LeagueMember,
   RosterPlayer,
 } from "@/lib/store";
+import {
+  getWeekDates,
+  getWeekDateStrings,
+  formatDateStr,
+  getTodayStr,
+} from "@/lib/week-utils";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type GameInfo = {
+  opponent: string;
+  isHome: boolean;
+  status: string;
+  homeScore: number;
+  visitorScore: number;
+};
+
+type TeamGamesMap = Record<string, Record<string, GameInfo>>;
+
+type CachedPlayerStats = {
+  id: number;
+  name: string;
+  team: string;
+  averages: {
+    min: number; fgm: number; fga: number; fg3m: number;
+    ftm: number; fta: number; reb: number; ast: number;
+    stl: number; blk: number; tov: number; pts: number;
+  };
+  fptsAvg: number;
+  injury?: string;
+};
+
+type PlayerGameStats = {
+  min: number;
+  fgm: number;
+  fga: number;
+  fg3m: number;
+  ftm: number;
+  fta: number;
+  reb: number;
+  ast: number;
+  stl: number;
+  blk: number;
+  tov: number;
+  pts: number;
+  fpts: number;
+};
+
+type DateStatsMap = Record<string, PlayerGameStats>;
+
+type DayStats = PlayerGameStats;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -30,73 +82,10 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   return result;
 }
 
-// NBA season starts ~Oct 21, 2025
-function getWeekDayLabels(week: number): string[] {
-  const start = new Date("2025-10-21");
-  start.setDate(start.getDate() + (week - 1) * 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  });
-}
-
-function playerFptsAvg(p: RosterPlayer): number {
-  return Math.max(0, p.ppg + p.rpg + p.apg + p.spg * 2 + p.bpg * 2 - (p.tov || 0));
-}
-
-type DayStats = {
-  min: number; fgm: number; fga: number; ftm: number; fta: number;
-  fg3m: number; reb: number; ast: number; stl: number; blk: number;
-  tov: number; pts: number; fpts: number;
+const ZERO_STATS: DayStats = {
+  min: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, fg3m: 0,
+  reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0,
 };
-
-// Returns full stat line for that day, or null if player had no game
-function simulateDayStats(p: RosterPlayer, week: number, day: number): DayStats | null {
-  const fptsAvg = playerFptsAvg(p);
-  if (!fptsAvg) return null;
-  let h = p.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  h = ((h * 31 + week * 97 + day * 13) * 1103515245 + 12345) & 0x7fffffff;
-  if (h % 100 > 50) return null; // no game
-  h = (h * 1103515245 + 12345) & 0x7fffffff;
-  const v = 0.6 + (h % 70) / 100;
-  const pts  = Math.round(p.ppg * v);
-  const reb  = Math.round(p.rpg * v);
-  const ast  = Math.round(p.apg * v);
-  const stl  = Math.round(p.spg * v * 10) / 10;
-  const blk  = Math.round(p.bpg * v * 10) / 10;
-  const tov  = Math.round((p.tov || 0) * v);
-  const fga  = Math.round((pts / 2) / Math.max(0.01, (p.fg || 45) / 100));
-  const fgm  = Math.round(fga * (p.fg || 45) / 100);
-  const fta  = Math.round(pts * 0.2);
-  const ftm  = Math.round(fta * (p.ft || 75) / 100);
-  const fg3m = Math.max(0, Math.round((pts - fgm * 2 - ftm) / 3));
-  const min  = Math.round(32 * v);
-  const fpts = pts + reb + ast + Math.round(stl) * 2 + Math.round(blk) * 2 + fg3m - tov;
-  return { min, fgm, fga, ftm, fta, fg3m, reb, ast, stl, blk, tov, pts, fpts };
-}
-
-// Which day index (0-6) within the matchup week is today?
-function getTodayDayIndex(week: number): number {
-  const start = new Date("2025-10-21");
-  start.setDate(start.getDate() + (week - 1) * 7);
-  start.setHours(0, 0, 0, 0);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-  return Math.min(6, Math.max(0, diff));
-}
-
-// Daily score used for the banner totals (accumulated across all days)
-function playerDayScore(playerId: string, week: number, day: number, fptsAvg: number): number {
-  if (!fptsAvg) return 0;
-  let h = playerId.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  h = ((h * 31 + week * 97 + day * 13) * 1103515245 + 12345) & 0x7fffffff;
-  if (h % 100 > 50) return 0;
-  h = (h * 1103515245 + 12345) & 0x7fffffff;
-  const variance = 0.6 + (h % 70) / 100;
-  return Math.round(fptsAvg * variance);
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -104,11 +93,15 @@ export default function MatchupDetailPage() {
   const { t } = useLang();
   const params = useParams();
   const slug = params.slug as string;
-  const matchupId = params.matchupId as string; // "week-index"
+  const matchupId = params.matchupId as string;
 
   const parts = matchupId.split("-").map(Number);
   const week = parts[0] || 1;
   const matchupIdx = parts[1] ?? 0;
+
+  const weekDates = getWeekDates(week);
+  const dateStrings = getWeekDateStrings(week);
+  const todayStr = getTodayStr();
 
   const [league, setLeague] = useState<League | null>(null);
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
@@ -117,6 +110,15 @@ export default function MatchupDetailPage() {
   const [homeRoster, setHomeRoster] = useState<RosterPlayer[]>([]);
   const [awayRoster, setAwayRoster] = useState<RosterPlayer[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Real data state
+  const [teamGames, setTeamGames] = useState<TeamGamesMap>({});
+  const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
+  const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // View mode: "total" or a date string like "2026-03-09"
+  const [viewMode, setViewMode] = useState<string>("total");
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -167,10 +169,19 @@ export default function MatchupDetailPage() {
           const awayFT = (teamsData || []).find((t: any) => t.user_id === matchup.away.user_id);
           setHomeTeam({ member: matchup.home, fantasy: homeFT });
           setAwayTeam({ member: matchup.away, fantasy: awayFT });
-          if (homeFT) setHomeRoster(getTeamRoster(leagueData.id, homeFT.id));
-          if (awayFT) setAwayRoster(getTeamRoster(leagueData.id, awayFT.id));
+
+          // Fetch rosters from DB first, fallback to localStorage
+          const [hRoster, aRoster] = await Promise.all([
+            homeFT ? fetchTeamRosterFromDB(leagueData.id, homeFT.id).catch(() => getTeamRoster(leagueData.id, homeFT.id)) : Promise.resolve([]),
+            awayFT ? fetchTeamRosterFromDB(leagueData.id, awayFT.id).catch(() => getTeamRoster(leagueData.id, awayFT.id)) : Promise.resolve([]),
+          ]);
+          setHomeRoster(hRoster);
+          setAwayRoster(aRoster);
         }
       }
+
+      // Fetch real NBA data
+      await fetchRealData();
     } catch (err) {
       console.error(err);
     } finally {
@@ -178,33 +189,165 @@ export default function MatchupDetailPage() {
     }
   }
 
+  async function fetchRealData() {
+    setStatsLoading(true);
+    try {
+      // 1. Fetch player stats cache (for name -> BDL ID mapping)
+      const statsPromise = fetch("/api/nba-stats").then(r => r.json());
+
+      // 2. Fetch game schedule for the week
+      const gamesPromise = fetch(
+        `/api/nba-games?start_date=${dateStrings[0]}&end_date=${dateStrings[6]}`
+      ).then(r => r.json());
+
+      const [statsRes, gamesRes] = await Promise.all([statsPromise, gamesPromise]);
+
+      // Build player stats cache map
+      if (statsRes.status === "success" && statsRes.players) {
+        const map = new Map<string, CachedPlayerStats>();
+        for (const p of statsRes.players) {
+          map.set(String(p.id), p);
+        }
+        setPlayerStatsCache(map);
+      }
+
+      // Set team games
+      if (gamesRes.status === "success" && gamesRes.games) {
+        setTeamGames(gamesRes.games);
+      }
+
+      // 3. Fetch game-day stats for past/today dates in parallel
+      const pastOrTodayDates = dateStrings.filter(d => d <= todayStr);
+      if (pastOrTodayDates.length > 0) {
+        const dayStatsResults = await Promise.all(
+          pastOrTodayDates.map(date =>
+            fetch(`/api/nba-game-stats?date=${date}`)
+              .then(r => r.json())
+              .then(data => ({
+                date,
+                stats: data.status === "success" ? (data.stats as DateStatsMap) : {},
+              }))
+              .catch(() => ({ date, stats: {} as DateStatsMap }))
+          )
+        );
+
+        const allDayStats: Record<string, DateStatsMap> = {};
+        for (const { date, stats } of dayStatsResults) {
+          allDayStats[date] = stats;
+        }
+        setWeekDayStats(allDayStats);
+      }
+    } catch (err) {
+      console.error("Failed to fetch real data:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+
+  // ── Player stat helpers ──────────────────────────────────────────────────
+
+  function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
+    const byId = playerStatsCache.get(player.id);
+    if (byId) return byId;
+    for (const s of playerStatsCache.values()) {
+      if (s.name === player.name) return s;
+    }
+    return null;
+  }
+
+  function getLiveTeam(player: RosterPlayer): string {
+    const stats = getStatsForPlayer(player);
+    return stats?.team || player.team;
+  }
+
+  function getGameForPlayerOnDate(player: RosterPlayer, dateStr: string): GameInfo | null {
+    const team = getLiveTeam(player);
+    const teamSchedule = teamGames[team];
+    if (!teamSchedule) return null;
+    return teamSchedule[dateStr] || null;
+  }
+
+  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+    // Future date: no stats
+    if (dateStr > todayStr) return null;
+
+    const dayMap = weekDayStats[dateStr];
+    if (!dayMap) return null;
+
+    // Direct ID lookup
+    if (dayMap[player.id]) return dayMap[player.id];
+
+    // BDL ID lookup via name match
+    const cached = getStatsForPlayer(player);
+    if (cached && dayMap[String(cached.id)]) return dayMap[String(cached.id)];
+
+    return null;
+  }
+
+  // Get stats for a player for the current viewMode
+  function getPlayerViewStats(player: RosterPlayer): DayStats | null {
+    if (viewMode === "total") {
+      return calcPlayerWeekTotals(player);
+    }
+    // Single day view
+    const game = getGameForPlayerOnDate(player, viewMode);
+    if (!game) return null; // No game scheduled
+    if (viewMode > todayStr) return null; // Future game
+    const status = game.status.toLowerCase();
+    if (status !== "final" && status !== "" && !status.includes("q") && !status.includes("half")) {
+      // Game scheduled but not started or final
+      if (status === "scheduled" || status.includes("scheduled")) return null;
+    }
+    return getPlayerDayStats(player, viewMode);
+  }
+
+  function calcPlayerWeekTotals(player: RosterPlayer): DayStats | null {
+    const totals = { ...ZERO_STATS };
+    let gamesPlayed = 0;
+    for (const dateStr of dateStrings) {
+      const dayStats = getPlayerDayStats(player, dateStr);
+      if (dayStats) {
+        gamesPlayed++;
+        totals.min += dayStats.min;
+        totals.fgm += dayStats.fgm;
+        totals.fga += dayStats.fga;
+        totals.ftm += dayStats.ftm;
+        totals.fta += dayStats.fta;
+        totals.fg3m += dayStats.fg3m;
+        totals.reb += dayStats.reb;
+        totals.ast += dayStats.ast;
+        totals.stl += dayStats.stl;
+        totals.blk += dayStats.blk;
+        totals.tov += dayStats.tov;
+        totals.pts += dayStats.pts;
+        totals.fpts += dayStats.fpts;
+      }
+    }
+    return gamesPlayed > 0 ? totals : null;
+  }
+
   // ── Score helpers ─────────────────────────────────────────────────────────
 
   const getMemberName = (m: LeagueMember) =>
     m.user?.username || m.user?.name || "Anonymous";
 
-  const calcDailyTeamScore = (roster: RosterPlayer[], day: number) =>
-    roster.reduce((sum, p) => sum + playerDayScore(p.id, week, day, playerFptsAvg(p)), 0);
-
-  const calcWeekTotal = (roster: RosterPlayer[]) => {
-    let total = 0;
-    for (let d = 0; d < 7; d++) total += calcDailyTeamScore(roster, d);
-    return total;
+  const calcDailyTeamScore = (roster: RosterPlayer[], dateStr: string): number => {
+    return roster.reduce((sum, p) => {
+      const stats = getPlayerDayStats(p, dateStr);
+      return sum + (stats?.fpts || 0);
+    }, 0);
   };
 
-  const calcPlayerWeekFpts = (p: RosterPlayer) => {
-    let total = 0;
-    for (let d = 0; d < 7; d++) total += playerDayScore(p.id, week, d, playerFptsAvg(p));
-    return total;
+  const calcWeekTotal = (roster: RosterPlayer[]): number => {
+    return dateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, dateStr), 0);
   };
 
   // ── Box score renderer ────────────────────────────────────────────────────
 
   const renderBoxScore = (roster: RosterPlayer[], teamName: string) => {
-    const todayDay = getTodayDayIndex(week);
     const rows = roster.map((p) => ({
       p,
-      stats: simulateDayStats(p, week, todayDay),
+      stats: getPlayerViewStats(p),
     }));
 
     const totals = rows.reduce(
@@ -223,10 +366,10 @@ export default function MatchupDetailPage() {
         pts:  acc.pts  + (stats?.pts  ?? 0),
         fpts: acc.fpts + (stats?.fpts ?? 0),
       }),
-      { min:0, fgm:0, fga:0, ftm:0, fta:0, fg3m:0, reb:0, ast:0, stl:0, blk:0, tov:0, pts:0, fpts:0 }
+      { ...ZERO_STATS }
     );
 
-    const D = "--";
+    const D = "---";
 
     return (
       <div className="box-score-section">
@@ -272,26 +415,26 @@ export default function MatchupDetailPage() {
                       </div>
                     </td>
                     <td>{p.position}</td>
-                    <td>{stats ? stats.min  : D}</td>
-                    <td>{stats ? stats.fgm  : D}</td>
-                    <td>{stats ? stats.fga  : D}</td>
-                    <td>{stats ? stats.ftm  : D}</td>
-                    <td>{stats ? stats.fta  : D}</td>
+                    <td>{stats ? Math.round(stats.min) : D}</td>
+                    <td>{stats ? stats.fgm : D}</td>
+                    <td>{stats ? stats.fga : D}</td>
+                    <td>{stats ? stats.ftm : D}</td>
+                    <td>{stats ? stats.fta : D}</td>
                     <td>{stats ? stats.fg3m : D}</td>
-                    <td>{stats ? stats.reb  : D}</td>
-                    <td>{stats ? stats.ast  : D}</td>
-                    <td>{stats ? stats.stl  : D}</td>
-                    <td>{stats ? stats.blk  : D}</td>
-                    <td>{stats ? stats.tov  : D}</td>
-                    <td>{stats ? stats.pts  : D}</td>
-                    <td className="col-fpts">{stats ? stats.fpts : 0}</td>
+                    <td>{stats ? stats.reb : D}</td>
+                    <td>{stats ? stats.ast : D}</td>
+                    <td>{stats ? stats.stl : D}</td>
+                    <td>{stats ? stats.blk : D}</td>
+                    <td>{stats ? stats.tov : D}</td>
+                    <td>{stats ? stats.pts : D}</td>
+                    <td className="col-fpts">{stats ? Math.round(stats.fpts * 10) / 10 : D}</td>
                   </tr>
                 ))
               )}
               {rows.length > 0 && (
                 <tr className="totals-row">
                   <td colSpan={2}><strong>TOTALS</strong></td>
-                  <td>{totals.min}</td>
+                  <td>{Math.round(totals.min)}</td>
                   <td>{totals.fgm}</td>
                   <td>{totals.fga}</td>
                   <td>{totals.ftm}</td>
@@ -299,11 +442,11 @@ export default function MatchupDetailPage() {
                   <td>{totals.fg3m}</td>
                   <td>{totals.reb}</td>
                   <td>{totals.ast}</td>
-                  <td>{totals.stl.toFixed(1)}</td>
-                  <td>{totals.blk.toFixed(1)}</td>
+                  <td>{totals.stl}</td>
+                  <td>{totals.blk}</td>
                   <td>{totals.tov}</td>
                   <td>{totals.pts}</td>
-                  <td className="col-fpts"><strong>{totals.fpts}</strong></td>
+                  <td className="col-fpts"><strong>{Math.round(totals.fpts * 10) / 10}</strong></td>
                 </tr>
               )}
             </tbody>
@@ -337,7 +480,6 @@ export default function MatchupDetailPage() {
 
   const homeScore  = calcWeekTotal(homeRoster);
   const awayScore  = calcWeekTotal(awayRoster);
-  const dayLabels  = getWeekDayLabels(week);
   const homeName   = homeTeam.fantasy?.name || getMemberName(homeTeam.member);
   const awayName   = awayTeam.fantasy?.name || getMemberName(awayTeam.member);
   const homeOwner  = getMemberName(homeTeam.member);
@@ -345,6 +487,11 @@ export default function MatchupDetailPage() {
   const homeRecord = `${homeTeam.fantasy?.wins || 0}-${homeTeam.fantasy?.losses || 0}`;
   const awayRecord = `${awayTeam.fantasy?.wins || 0}-${awayTeam.fantasy?.losses || 0}`;
   const isOwner    = user && league.commissioner_id === user.id;
+
+  // Day labels for the daily breakdown table header
+  const dayLabels = weekDates.map((d) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  );
 
   return (
     <div className="app">
@@ -385,11 +532,11 @@ export default function MatchupDetailPage() {
               <div className="banner-center">
                 <div className="scores-row">
                   <span className={`big-score ${homeScore >= awayScore ? "score-winning" : "score-losing"}`}>
-                    {homeScore}
+                    {statsLoading ? "..." : Math.round(homeScore * 10) / 10}
                   </span>
                   <span className="score-divider">-</span>
                   <span className={`big-score ${awayScore >= homeScore ? "score-winning" : "score-losing"}`}>
-                    {awayScore}
+                    {statsLoading ? "..." : Math.round(awayScore * 10) / 10}
                   </span>
                 </div>
                 <div className="week-label">{t(`第 ${week} 周`, `Week ${week}`)}</div>
@@ -420,24 +567,47 @@ export default function MatchupDetailPage() {
                   <tbody>
                     <tr>
                       <td className="col-team-name">{homeName}</td>
-                      {Array.from({ length: 7 }, (_, d) => {
-                        const v = calcDailyTeamScore(homeRoster, d);
-                        return <td key={d}>{v > 0 ? v : <span className="zero">-</span>}</td>;
+                      {dateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(homeRoster, dateStr) * 10) / 10;
+                        return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
-                      <td className="col-total"><strong>{homeScore}</strong></td>
+                      <td className="col-total"><strong>{Math.round(homeScore * 10) / 10}</strong></td>
                     </tr>
                     <tr>
                       <td className="col-team-name">{awayName}</td>
-                      {Array.from({ length: 7 }, (_, d) => {
-                        const v = calcDailyTeamScore(awayRoster, d);
-                        return <td key={d}>{v > 0 ? v : <span className="zero">-</span>}</td>;
+                      {dateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(awayRoster, dateStr) * 10) / 10;
+                        return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
-                      <td className="col-total"><strong>{awayScore}</strong></td>
+                      <td className="col-total"><strong>{Math.round(awayScore * 10) / 10}</strong></td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
+          </div>
+
+          {/* ── View selector ── */}
+          <div className="view-selector">
+            <span className="view-label">{t("查看", "View")}</span>
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="view-dropdown"
+            >
+              <option value="total">
+                {viewMode === "total" ? "✓ " : ""}{t("总计", "Total")}
+              </option>
+              {weekDates.map((d, i) => {
+                const ds = dateStrings[i];
+                const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                return (
+                  <option key={ds} value={ds}>
+                    {viewMode === ds ? "✓ " : ""}{label}
+                  </option>
+                );
+              })}
+            </select>
           </div>
 
           {/* ── Box scores ── */}
@@ -587,6 +757,32 @@ const styles = `
   }
   .col-total { font-weight: 700; color: #f59e0b !important; }
   .zero { color: #444; }
+
+  /* ── View selector ── */
+  .view-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .view-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #888;
+  }
+  .view-dropdown {
+    padding: 8px 16px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    min-width: 140px;
+  }
+  .view-dropdown:hover {
+    border-color: #f59e0b;
+  }
 
   /* ── Box score ── */
   .box-score-section {
