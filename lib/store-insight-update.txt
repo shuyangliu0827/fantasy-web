@@ -1,0 +1,17 @@
+export type Insight = {
+  id: string;
+  title: string;
+  body: string;
+  leagueSlug?: string;
+  author: string;
+  authorId: string;
+  createdAt: number;
+  heat: number;
+  // New fields
+  coverImage?: string;
+  images?: string[];
+  tags?: string[];
+  likes: string[];  // user IDs who liked
+  commentsCount: number;
+  views: number;
+};
