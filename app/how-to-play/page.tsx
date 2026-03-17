@@ -1,183 +1,242 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import Header from "@/components/Header";
 import { useLang } from "@/lib/lang";
+import { useState } from "react";
+
+const NAV = [
+  { href: "/", zh: "首页", en: "Home" },
+  { href: "/rankings", zh: "球员排名", en: "Rankings" },
+  { href: "/league", zh: "公开联赛", en: "Leagues" },
+  { href: "/compare", zh: "球员对比", en: "Compare" },
+  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
+  { href: "/cheat-sheet", zh: "备忘单", en: "Cheat Sheet" },
+  { href: "/how-to-play", zh: "新手入门", en: "How To Play", active: true },
+];
+
+const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
+
+const JOURNEY = [
+  { zh: "了解规则", en: "Learn Rules" },
+  { zh: "加入联赛", en: "Join League" },
+  { zh: "参与选秀", en: "Draft" },
+  { zh: "管理球队", en: "Manage Team" },
+  { zh: "赢得联赛", en: "Win League" },
+];
+
+const CARDS = [
+  {
+    num: "01",
+    icon: "📋",
+    iconBg: "#dbeafe",
+    titleZh: "什么是幻想篮球?",
+    titleEn: "What is Fantasy Basketball?",
+    descZh: "你扮演一支NBA球队的GM，通过选秀挑选真实球员组建梦之队。球员在现实比赛中的表现直接转化为你的幻想得分。",
+    descEn: "You're the GM of an NBA team, drafting real players to build your dream squad. Real game performances convert directly to your fantasy points.",
+  },
+  {
+    num: "02",
+    icon: "🎯",
+    iconBg: "#fef3c7",
+    titleZh: "蛇形选秀机制",
+    titleEn: "Snake Draft System",
+    descZh: "选秀按照蛇形顺序进行：奇数轮从1号位开始，偶数轮从最后一位开始，确保每个参与者机会均等。",
+    descEn: "Drafts follow snake order: odd rounds go from pick 1, even rounds reverse, ensuring every participant gets fair opportunities.",
+  },
+  {
+    num: "03",
+    icon: "📊",
+    iconBg: "#dbeafe",
+    titleZh: "积分是怎么算的?",
+    titleEn: "How is Scoring Calculated?",
+    descZh: "得分、篮板、助攻、抢断、盖帽各项均有对应分值。球员真实比赛数据实时转化，每场比赛结束后自动更新。",
+    descEn: "Points, rebounds, assists, steals, blocks all have assigned values. Player stats convert in real time, updating automatically after each game.",
+  },
+  {
+    num: "04",
+    icon: "🔄",
+    iconBg: "#fef3c7",
+    titleZh: "赛季管理",
+    titleEn: "Season Management",
+    descZh: "赛季期间可通过转会市场补强阵容，交易伤病球员，或从 Waiver Wire 捡漏新秀突破球员。",
+    descEn: "During the season, strengthen your roster through the trade market, drop injured players, or pick up breakout rookies from the Waiver Wire.",
+  },
+  {
+    num: "05",
+    icon: "🏆",
+    iconBg: "#fef3c7",
+    titleZh: "如何赢得联赛?",
+    titleEn: "How to Win the League?",
+    descZh: "常规赛积累胜场进入季后赛，通过对抗制决出最终冠军。9个统计类别中赢得更多类别即为胜利。",
+    descEn: "Accumulate wins in the regular season to reach playoffs, then win the championship through head-to-head matchups. Win more of the 9 stat categories to beat your opponent.",
+  },
+];
 
 export default function HowToPlayPage() {
-  const { t } = useLang();
-  const [activeStep, setActiveStep] = useState(1);
-
-  const steps = [
-    {
-      id: 1,
-      icon: "🏀",
-      title: t("创建或加入联赛", "Create or Join a League"),
-      content: t(
-        "第一步是找到一个联赛加入，或者创建你自己的联赛。公共联赛可以在「加入公共联赛」页面找到；私人联赛需要邀请朋友一起玩；联赛设置包括人数（8-14人）、计分方式、选秀日期等。",
-        "First, find a league to join or create your own. Public leagues can be found on the 'Join Public League' page; Private leagues require inviting friends; League settings include team count (8-14), scoring type, draft date, etc."
-      ),
-      tips: [
-        t("新手建议先加入 10-12 人的联赛", "Beginners should start with 10-12 team leagues"),
-        t("H2H Categories 是最常见的计分方式", "H2H Categories is the most common format"),
-        t("选秀日期最好选在 NBA 赛季开始前 1-2 周", "Draft date should be 1-2 weeks before NBA season")
-      ]
-    },
-    {
-      id: 2,
-      icon: "📋",
-      title: t("选秀准备", "Prepare for Draft"),
-      content: t(
-        "选秀是 Fantasy 篮球最重要的环节！研究球员排名，了解每个球员的价值；建立关注列表，标记你喜欢的球员；学习策略，阅读选秀指南；在正式选秀前多做几次模拟选秀练习。",
-        "The draft is the most important part! Study player rankings to understand each player's value; Build a watchlist of players you like; Learn strategies by reading the draft guide; Practice with mock drafts before your real draft."
-      ),
-      tips: [
-        t("至少做 3-5 次模拟选秀", "Do at least 3-5 mock drafts"),
-        t("准备一份 Cheat Sheet（备忘单）", "Prepare a Cheat Sheet"),
-        t("了解你的选秀位置，制定相应策略", "Know your draft position and plan accordingly")
-      ]
-    },
-    {
-      id: 3,
-      icon: "🎯",
-      title: t("参加选秀", "Join the Draft"),
-      content: t(
-        "选秀当天，按照你的准备来选择球员。蛇形选秀按顺序轮流选人，选秀顺序每轮反转；拍卖选秀用虚拟货币竞拍球员；每轮通常有 60-90 秒选人时间。选人优先级：前三轮选稳定的球星，中间轮次找价值洼地，后轮补充位置需求。",
-        "On draft day, follow your preparation. Snake drafts alternate picks with order reversing each round; Auction drafts use virtual currency to bid; Each pick usually has 60-90 seconds. Priority: Draft stable stars in rounds 1-3, find value in middle rounds, fill roster needs late."
-      ),
-      tips: [
-        t("不要慌，60秒够用了", "Don't panic, 60 seconds is enough"),
-        t("如果你喜欢的球员被选走，看下一个", "If your target is taken, move to the next"),
-        t("注意平衡各个位置", "Balance all positions")
-      ]
-    },
-    {
-      id: 4,
-      icon: "📊",
-      title: t("管理阵容", "Manage Your Roster"),
-      content: t(
-        "赛季开始后，每天/每周管理你的阵容。设置首发：每天把要比赛的球员放到首发位置；关注伤病：受伤球员放到 IR 位，从弃用区找替补；弃用区淘金：关注近期表现好的弃用区球员；交易：与其他玩家交易，补强你的弱项。",
-        "After the season starts, manage your roster daily/weekly. Set lineups: Put playing players in starting slots each day; Monitor injuries: Move injured players to IR, find replacements; Waiver wire: Watch for hot free agents; Trading: Trade with others to improve weaknesses."
-      ),
-      tips: [
-        t("养成每天看阵容的习惯", "Make checking lineups a daily habit"),
-        t("关注 streaming 策略", "Learn streaming strategies"),
-        t("不要因为一两周的表现就放弃球员", "Don't drop players after 1-2 bad weeks")
-      ]
-    },
-    {
-      id: 5,
-      icon: "⚔️",
-      title: t("每周对决", "Weekly Matchups"),
-      content: t(
-        "大多数联赛采用每周对决制。H2H Categories 每周比拼各项数据类别，赢的类别多的人获胜；H2H Points 每周比总得分；Rotisserie 全赛季累计排名。获胜技巧：关注对手的阵容构成，在自己的强项类别巩固优势，在接近的类别尝试反超。",
-        "Most leagues use weekly matchups. H2H Categories: Compare stats category by category, most wins takes the week; H2H Points: Compare total points; Rotisserie: Season-long cumulative rankings. Tips: Study opponent's roster, strengthen your dominant categories, push close categories."
-      ),
-      tips: [
-        t("每周初期就设置好阵容", "Set lineups early each week"),
-        t("周末多场比赛，确保首发满的", "Weekends have more games, ensure full lineups"),
-        t("关注对手的 streaming 策略", "Watch opponent's streaming moves")
-      ]
-    }
-  ];
-
-  const currentStep = steps.find(s => s.id === activeStep) || steps[0];
+  const { t, lang, setLang } = useLang();
+  const [langToggleHov, setLangToggleHov] = useState(false);
 
   return (
-    <div className="app">
-      <Header />
+    <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
 
-      <main className="page-content">
-        <div className="page-header">
-          <h1 className="page-title">{t("新手入门", "How To Play")}</h1>
-          <p className="page-desc">{t("5 步带你玩转 Fantasy 篮球", "5 steps to master Fantasy basketball")}</p>
-        </div>
-
-        <div className="steps-progress">
-          {steps.map(step => (
-            <button
-              key={step.id}
-              className={`step-dot ${activeStep >= step.id ? "active" : ""} ${activeStep === step.id ? "current" : ""}`}
-              onClick={() => setActiveStep(step.id)}
-            >
-              <span className="step-icon">{step.icon}</span>
-              <span className="step-number">Step {step.id}</span>
-            </button>
-          ))}
-          <div className="progress-line">
-            <div className="progress-fill" style={{ width: `${((activeStep - 1) / 4) * 100}%` }}></div>
-          </div>
-        </div>
-
-        <div className="step-content">
-          <div className="step-header">
-            <span className="step-badge">Step {currentStep.id}</span>
-            <h2 className="step-title">{currentStep.title}</h2>
-          </div>
-
-          <div className="step-body">
-            <p>{currentStep.content}</p>
-          </div>
-
-          <div className="step-tips">
-            <h4>💡 {t("小贴士", "Tips")}</h4>
-            <ul>
-              {currentStep.tips.map((tip, i) => (
-                <li key={i}>{tip}</li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="step-navigation">
-            <button 
-              className="btn btn-ghost" 
-              onClick={() => setActiveStep(Math.max(1, activeStep - 1))}
-              disabled={activeStep === 1}
-            >
-              ← {t("上一步", "Previous")}
-            </button>
-            {activeStep < 5 ? (
-              <button 
-                className="btn btn-primary"
-                onClick={() => setActiveStep(activeStep + 1)}
-              >
-                {t("下一步", "Next")} →
-              </button>
-            ) : (
-              <Link href="/mock-draft" className="btn btn-primary">
-                {t("开始模拟选秀", "Start Mock Draft")} →
+      {/* Header */}
+      <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", height: 60, display: "flex", alignItems: "center", gap: 40 }}>
+          <Link href="/" style={{ textDecoration: "none", flexShrink: 0 }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: "#1e3a8a" }}>蓝本·</span>
+          </Link>
+          <nav style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, overflow: "hidden" }}>
+            {NAV.map(item => (
+              <Link key={item.href} href={item.href} style={{
+                padding: "6px 12px", fontSize: 13, fontWeight: item.active ? 600 : 400,
+                color: item.active ? "#1e3a8a" : "#6b7280", textDecoration: "none",
+                borderBottom: item.active ? "2px solid #f59e0b" : "2px solid transparent",
+                whiteSpace: "nowrap",
+              }}>
+                {t(item.zh, item.en)}
               </Link>
-            )}
+            ))}
+          </nav>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+              onMouseEnter={() => setLangToggleHov(true)}
+              onMouseLeave={() => setLangToggleHov(false)}
+              style={{ padding: "5px 11px", fontSize: 13, color: "#4b5563", background: langToggleHov ? "#e5e7eb" : "#f3f4f6", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500, transition: "background 0.15s" }}
+            >
+              中 / EN
+            </button>
+            <Link href="/auth/login" style={{ padding: "6px 14px", fontSize: 13, fontWeight: 500, color: "#374151", textDecoration: "none", border: "1.5px solid #e5e7eb", borderRadius: 7 }}>
+              {t("登录", "Login")}
+            </Link>
+            <Link href="/auth/signup" style={{ padding: "6px 14px", fontSize: 13, fontWeight: 600, color: "#fff", textDecoration: "none", background: "#1e3a8a", borderRadius: 7 }}>
+              {t("注册", "Sign Up")}
+            </Link>
           </div>
         </div>
+      </header>
 
-        <div className="quick-links">
-          <h3>{t("相关页面", "Related Pages")}</h3>
-          <div className="links-grid">
-            <Link href="/rankings" className="quick-link-card">
-              <span className="quick-link-icon">📊</span>
-              <span className="quick-link-title">{t("球员排名", "Rankings")}</span>
-              <span className="quick-link-desc">{t("查看完整球员排名", "View full player rankings")}</span>
-            </Link>
-            <Link href="/draft-guide" className="quick-link-card">
-              <span className="quick-link-icon">📖</span>
-              <span className="quick-link-title">{t("选秀指南", "Draft Guide")}</span>
-              <span className="quick-link-desc">{t("深入了解选秀策略", "Learn draft strategies")}</span>
-            </Link>
-            <Link href="/mock-draft" className="quick-link-card">
-              <span className="quick-link-icon">🎯</span>
-              <span className="quick-link-title">{t("模拟选秀", "Mock Draft")}</span>
-              <span className="quick-link-desc">{t("练习你的选秀技巧", "Practice your draft skills")}</span>
-            </Link>
-            <Link href="/cheat-sheet" className="quick-link-card">
-              <span className="quick-link-icon">📋</span>
-              <span className="quick-link-title">{t("选秀备忘单", "Cheat Sheet")}</span>
-              <span className="quick-link-desc">{t("选秀时的快速参考", "Quick reference for drafts")}</span>
+      {/* Hero */}
+      <div style={{ background: "#fff", padding: "56px 32px 48px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
+        <h1 style={{ fontSize: 40, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>
+          {t("欢迎来到幻想篮球", "Welcome to Fantasy Basketball")}
+        </h1>
+        <p style={{ fontSize: 16, color: "#6b7280", margin: "0 0 40px 0" }}>
+          {t("不懂也没关系，5分钟读懂规则，立刻开始你的第一次选秀。", "No experience needed — 5 minutes to learn the rules and start your first draft.")}
+        </p>
+
+        {/* Step progress */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: 0, maxWidth: 560, margin: "0 auto" }}>
+          {JOURNEY.map((step, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", width: "100%" }}>
+                {/* Left line */}
+                <div style={{ flex: 1, height: 2, background: i === 0 ? "#1e3a8a" : "#e5e7eb" }} />
+
+                {/* Circle */}
+                <div style={{
+                  width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: i === 0 ? 16 : 14, fontWeight: 700,
+                  background: i === 0 ? "#1e3a8a" : "#fff",
+                  color: i === 0 ? "#fff" : i === 1 ? "#1e3a8a" : "#9ca3af",
+                  border: i === 0 ? "none" : i === 1 ? "2.5px solid #1e3a8a" : "2px solid #d1d5db",
+                  transition: "all 0.2s",
+                }}>
+                  {i === 0 ? "✓" : i + 1}
+                </div>
+
+                {/* Right line */}
+                <div style={{ flex: 1, height: 2, background: "#e5e7eb" }} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: i <= 1 ? 600 : 400, color: i === 0 ? "#1e3a8a" : i === 1 ? "#1e3a8a" : "#9ca3af", marginTop: 8 }}>
+                {t(step.zh, step.en)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cards grid */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 32px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+
+          {/* Concept cards */}
+          {CARDS.map((card) => (
+            <div key={card.num} style={{
+              background: "#fff",
+              border: "1px solid #e5e7eb",
+              borderRadius: 16,
+              padding: "28px 24px",
+            }}>
+              {/* Icon */}
+              <div style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: card.iconBg,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 20, marginBottom: 12,
+              }}>
+                {card.icon}
+              </div>
+
+              {/* Number */}
+              <div style={{ fontSize: 40, fontWeight: 800, color: "#f3f4f6", lineHeight: 1, marginBottom: 8 }}>
+                {card.num}
+              </div>
+
+              {/* Title */}
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 10 }}>
+                {t(card.titleZh, card.titleEn)}
+              </div>
+
+              {/* Desc */}
+              <p style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.7, margin: 0 }}>
+                {t(card.descZh, card.descEn)}
+              </p>
+            </div>
+          ))}
+
+          {/* CTA card */}
+          <div style={{
+            background: "#1e3a8a",
+            borderRadius: 16,
+            padding: "28px 24px",
+            display: "flex",
+            flexDirection: "column",
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: "#2563eb",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 20, marginBottom: 12,
+            }}>
+              🚀
+            </div>
+            <div style={{ fontSize: 40, fontWeight: 800, color: "rgba(255,255,255,0.15)", lineHeight: 1, marginBottom: 8 }}>
+              GO
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 10 }}>
+              {t("准备好了?", "Ready to go?")}
+            </div>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 20px 0", flex: 1 }}>
+              {t("先去看看球员排名，或直接参加一场模拟选秀练手。", "Check the player rankings first, or jump straight into a mock draft.")}
+            </p>
+            <Link href="/mock-draft" style={{
+              display: "inline-block",
+              padding: "11px 20px",
+              fontSize: 14, fontWeight: 700,
+              color: "#fff",
+              background: "linear-gradient(90deg, #f59e0b, #f97316)",
+              borderRadius: 10,
+              textDecoration: "none",
+              textAlign: "center",
+            }}>
+              {t("开始模拟选秀 →", "Start Mock Draft →")}
             </Link>
           </div>
+
         </div>
-      </main>
+      </div>
     </div>
   );
 }
