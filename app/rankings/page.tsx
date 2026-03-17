@@ -160,7 +160,9 @@ export default function PlayerRankingsPage() {
     }
 
     if (positionFilter !== "all") {
-      result = result.filter((p) => p.position.includes(positionFilter));
+      const posMap: Record<string, string> = { PG: "G", SG: "G", SF: "F", PF: "F", C: "C" };
+      const apiPos = posMap[positionFilter] ?? positionFilter;
+      result = result.filter((p) => p.position.includes(apiPos));
     }
 
     if (minPts > 0) {
@@ -354,14 +356,16 @@ export default function PlayerRankingsPage() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[
               { label: t("全部", "All"), value: "all" },
-              { label: t("后卫", "Guard"), value: "G" },
-              { label: t("前锋", "Forward"), value: "F" },
-              { label: t("中锋", "Center"), value: "C" },
+              { label: t("PG 控球后卫", "PG"), value: "G", sub: "PG" },
+              { label: t("SG 得分后卫", "SG"), value: "G", sub: "SG" },
+              { label: t("SF 小前锋", "SF"), value: "F", sub: "SF" },
+              { label: t("PF 大前锋", "PF"), value: "F", sub: "PF" },
+              { label: t("C 中锋", "C"), value: "C", sub: "C" },
             ].map((pos) => (
               <Pill
-                key={pos.value}
-                active={positionFilter === pos.value}
-                onClick={() => { setPositionFilter(pos.value); setPage(1); }}
+                key={pos.sub ?? pos.value}
+                active={positionFilter === (pos.sub ?? pos.value)}
+                onClick={() => { setPositionFilter(pos.sub ?? pos.value); setPage(1); }}
               >
                 {pos.label}
               </Pill>
