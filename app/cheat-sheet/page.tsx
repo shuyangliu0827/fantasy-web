@@ -7,12 +7,38 @@ import { getPlayers, getWatchlist, Player } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
+const ROUND_COLS = [
+  { label: "第1-3轮 必选", labelEn: "Rounds 1-3 · Must-Have", from: 1, to: 5, color: "#1e3a8a", textColor: "#fff" },
+  { label: "第4-6轮 高价值", labelEn: "Rounds 4-6 · High Value", from: 6, to: 10, color: "#f59e0b", textColor: "#000" },
+  { label: "第7-9轮 潜力股", labelEn: "Rounds 7-9 · Upside", from: 11, to: 15, color: "#374151", textColor: "#fff" },
+  { label: "第10-11轮 稳健", labelEn: "Rounds 10-11 · Solid", from: 16, to: 20, color: "#9ca3af", textColor: "#fff" },
+  { label: "第12-13轮 捡漏", labelEn: "Rounds 12-13 · Sleeper", from: 21, to: 25, color: "#166534", textColor: "#fff" },
+];
+
+const POS_COLS = [
+  { pos: "PG", color: "#1e3a8a", textColor: "#fff" },
+  { pos: "SG", color: "#2563eb", textColor: "#fff" },
+  { pos: "SF", color: "#10b981", textColor: "#fff" },
+  { pos: "PF", color: "#f59e0b", textColor: "#000" },
+  { pos: "C",  color: "#166534", textColor: "#fff" },
+];
+
+function calcFpts(p: Player): number {
+  return p.ppg + p.rpg * 1.2 + p.apg * 1.5 + p.spg * 3 + p.bpg * 3 - p.tov;
+}
+
+function shortName(fullName: string): string {
+  const parts = fullName.trim().split(" ");
+  if (parts.length < 2) return fullName;
+  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
+}
+
 export default function CheatSheetPage() {
   const { t } = useLang();
   const [players, setPlayers] = useState<Player[]>([]);
   const [watchlist, setWatchlist] = useState<string[]>([]);
   const [drafted, setDrafted] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"tiers" | "positions">("tiers");
+  const [viewMode, setViewMode] = useState<"overall" | "positions">("overall");
 
   useEffect(() => {
     setPlayers(getPlayers());
@@ -35,21 +61,6 @@ export default function CheatSheetPage() {
     localStorage.removeItem("bp_cheatsheet_drafted");
   };
 
-  const getTier = (rank: number) => {
-    if (rank <= 5) return { tier: 1, label: t("Tier 1 - 精英", "Tier 1 - Elite"), color: "#1e3a8a", textColor: "#fff" };
-    if (rank <= 12) return { tier: 2, label: t("Tier 2 - 首轮", "Tier 2 - First Round"), color: "#2563eb", textColor: "#fff" };
-    if (rank <= 24) return { tier: 3, label: t("Tier 3 - 次轮", "Tier 3 - Second Round"), color: "#10b981", textColor: "#fff" };
-    if (rank <= 50) return { tier: 4, label: t("Tier 4 - 中轮", "Tier 4 - Mid Rounds"), color: "#f59e0b", textColor: "#000" };
-    return { tier: 5, label: t("Tier 5 - 后轮", "Tier 5 - Late Rounds"), color: "#64748b", textColor: "#fff" };
-  };
-
-  const playersByTier = players.reduce((acc, p) => {
-    const { tier } = getTier(p.rank);
-    if (!acc[tier]) acc[tier] = [];
-    acc[tier].push(p);
-    return acc;
-  }, {} as Record<number, Player[]>);
-
   const playersByPosition = players.reduce((acc, p) => {
     const mainPos = p.position.split("/")[0];
     if (!acc[mainPos]) acc[mainPos] = [];
@@ -57,160 +68,177 @@ export default function CheatSheetPage() {
     return acc;
   }, {} as Record<string, Player[]>);
 
+  function PlayerRow({ p, accentColor, last }: { p: Player; accentColor: string; last: boolean }) {
+    const isDrafted = drafted.includes(p.id);
+    const isWatchlist = watchlist.includes(p.id);
+    const fpts = calcFpts(p);
+    return (
+      <div
+        onClick={() => toggleDrafted(p.id)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "9px 14px",
+          borderBottom: last ? "none" : "1px solid #f3f4f6",
+          borderLeft: `3px solid ${isWatchlist ? accentColor : "transparent"}`,
+          cursor: "pointer",
+          background: isDrafted ? "#f9fafb" : "#fff",
+          opacity: isDrafted ? 0.4 : 1,
+          transition: "background 0.1s",
+        }}
+        onMouseEnter={e => { if (!isDrafted) e.currentTarget.style.background = "#f8fafc"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = isDrafted ? "#f9fafb" : "#fff"; }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 700, color: accentColor, minWidth: 18, textAlign: "right", flexShrink: 0 }}>
+          {p.rank}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 600,
+            color: isDrafted ? "#9ca3af" : "#111827",
+            textDecoration: isDrafted ? "line-through" : "none",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {shortName(p.name)}
+          </div>
+          <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1, letterSpacing: "0.2px" }}>
+            {p.team} · {p.position}
+          </div>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>
+          {fpts.toFixed(1)}
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
+    <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT }}>
       <LightHeader activeHref="/cheat-sheet" />
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 16px" }}>
-        {/* Page Header */}
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px 0" }}>
-            {t("选秀备忘单", "Draft Cheat Sheet")}
-          </h1>
-          <p style={{ fontSize: 14, color: "#6b7280", margin: 0 }}>
-            {t("实时选秀助手，点击球员名字标记为已被选走", "Live draft assistant. Click player names to mark as drafted")}
-          </p>
-        </div>
-
-        {/* Controls */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 24, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 20px" }}>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              onClick={() => setViewMode("tiers")}
-              style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid " + (viewMode === "tiers" ? "#1e3a8a" : "#e5e7eb"), background: viewMode === "tiers" ? "#1e3a8a" : "#fff", color: viewMode === "tiers" ? "#fff" : "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
-            >
-              {t("按 Tier 分组", "By Tier")}
-            </button>
-            <button
-              onClick={() => setViewMode("positions")}
-              style={{ padding: "8px 18px", borderRadius: 8, border: "1.5px solid " + (viewMode === "positions" ? "#1e3a8a" : "#e5e7eb"), background: viewMode === "positions" ? "#1e3a8a" : "#fff", color: viewMode === "positions" ? "#fff" : "#374151", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
-            >
-              {t("按位置分组", "By Position")}
-            </button>
+      <main style={{ maxWidth: 1300, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Page Header Row */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: "0 0 4px 0" }}>
+              {t("选秀备忘单", "Draft Cheat Sheet")}
+            </h1>
+            <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+              {t("实时选秀助手，点击球员名字标记为已被选走", "Live draft assistant. Click player to mark as drafted")}
+            </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>
-              {drafted.length} {t("人已被选", "drafted")}
-            </span>
-            <button
-              onClick={clearDrafted}
-              style={{ padding: "7px 14px", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: FONT }}
-            >
-              {t("清除标记", "Clear")}
-            </button>
+
+          {/* Controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {/* View toggle */}
+            <div style={{ display: "flex", border: "1.5px solid #d1d5db", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+              <button
+                onClick={() => setViewMode("positions")}
+                style={{
+                  padding: "9px 16px", border: "none",
+                  background: viewMode === "positions" ? "#f3f4f6" : "#fff",
+                  color: viewMode === "positions" ? "#1e3a8a" : "#6b7280",
+                  fontSize: 13, fontWeight: viewMode === "positions" ? 700 : 500,
+                  cursor: "pointer", fontFamily: FONT,
+                  borderRight: "1px solid #d1d5db",
+                }}
+              >
+                {t("按位置", "By Position")}
+              </button>
+              <button
+                onClick={() => setViewMode("overall")}
+                style={{
+                  padding: "9px 16px", border: "none",
+                  background: viewMode === "overall" ? "#1e3a8a" : "#fff",
+                  color: viewMode === "overall" ? "#fff" : "#6b7280",
+                  fontSize: 13, fontWeight: viewMode === "overall" ? 700 : 500,
+                  cursor: "pointer", fontFamily: FONT,
+                }}
+              >
+                {t("按综合分", "By Overall")}
+              </button>
+            </div>
+
+            {/* Drafted count */}
+            {drafted.length > 0 && (
+              <>
+                <span style={{ fontSize: 13, color: "#6b7280", padding: "0 4px" }}>
+                  {drafted.length} {t("人已被选", "drafted")}
+                </span>
+                <button
+                  onClick={clearDrafted}
+                  style={{ padding: "9px 14px", border: "1.5px solid #d1d5db", background: "#fff", color: "#374151", fontSize: 13, borderRadius: 8, cursor: "pointer", fontFamily: FONT }}
+                >
+                  {t("清除标记", "Clear")}
+                </button>
+              </>
+            )}
+
+            {/* Export PDF */}
             <button
               onClick={() => window.print()}
-              style={{ padding: "7px 14px", borderRadius: 8, border: "1.5px solid #e5e7eb", background: "#fff", color: "#374151", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: FONT }}
+              style={{ padding: "9px 16px", border: "none", background: "#f59e0b", color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer", borderRadius: 8, fontFamily: FONT, display: "flex", alignItems: "center", gap: 6 }}
             >
-              {t("打印", "Print")}
+              🖨 {t("导出PDF", "Export PDF")}
+            </button>
+
+            {/* Custom sort */}
+            <button
+              style={{ padding: "9px 16px", border: "none", background: "#1e3a8a", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", borderRadius: 8, fontFamily: FONT, display: "flex", alignItems: "center", gap: 6 }}
+            >
+              🔒 {t("自定义排序", "Custom Sort")}
             </button>
           </div>
         </div>
 
-        {viewMode === "tiers" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {[1, 2, 3, 4, 5].map(tier => {
-              const tierInfo = getTier(tier === 1 ? 1 : tier === 2 ? 6 : tier === 3 ? 13 : tier === 4 ? 25 : 51);
-              const tierPlayers = playersByTier[tier] || [];
-              return (
-                <div key={tier} style={{ background: "#fff", border: `1.5px solid ${tierInfo.color}`, borderRadius: 12, overflow: "hidden" }}>
-                  <div style={{ background: tierInfo.color, padding: "10px 20px" }}>
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: tierInfo.textColor }}>
-                      {tierInfo.label}
-                    </h3>
+        {/* 5-column grid */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, alignItems: "start" }}>
+          {viewMode === "overall"
+            ? ROUND_COLS.map((col) => {
+                const colPlayers = players.filter(p => p.rank >= col.from && p.rank <= col.to);
+                return (
+                  <div key={col.label} style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)" }}>
+                    <div style={{ background: col.color, padding: "11px 14px" }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: col.textColor, letterSpacing: "0.2px" }}>
+                        {t(col.label, col.labelEn)}
+                      </span>
+                    </div>
+                    {colPlayers.length === 0
+                      ? <div style={{ padding: "24px 14px", fontSize: 12, color: "#9ca3af", textAlign: "center" }}>{t("暂无数据", "No data")}</div>
+                      : colPlayers.map((p, idx) => (
+                          <PlayerRow key={p.id} p={p} accentColor={col.color} last={idx === colPlayers.length - 1} />
+                        ))
+                    }
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    {tierPlayers.map((p, idx) => {
-                      const isDrafted = drafted.includes(p.id);
-                      const isWatchlist = watchlist.includes(p.id);
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => toggleDrafted(p.id)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 12,
-                            padding: "10px 20px",
-                            background: isDrafted ? "#f3f4f6" : idx % 2 === 0 ? "#fff" : "#fafafa",
-                            borderTop: idx > 0 ? "1px solid #f3f4f6" : "none",
-                            cursor: "pointer",
-                            opacity: isDrafted ? 0.5 : 1,
-                            textDecoration: isDrafted ? "line-through" : "none",
-                          }}
-                        >
-                          <span style={{ width: 28, textAlign: "right", fontSize: 13, fontWeight: 700, color: tierInfo.color, flexShrink: 0 }}>
-                            {p.rank}
-                          </span>
-                          <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: "#111827" }}>{p.name}</span>
-                          <span style={{ fontSize: 12, color: "#6b7280", minWidth: 32 }}>{p.position}</span>
-                          <span style={{ fontSize: 12, color: "#9ca3af", minWidth: 40 }}>{p.team}</span>
-                          {isWatchlist && <span style={{ fontSize: 14, color: "#f59e0b" }}>★</span>}
-                        </div>
-                      );
-                    })}
-                    {tierPlayers.length === 0 && (
-                      <div style={{ padding: "16px 20px", fontSize: 13, color: "#9ca3af" }}>{t("暂无球员", "No players")}</div>
-                    )}
+                );
+              })
+            : POS_COLS.map(({ pos, color, textColor }) => {
+                const posPls = (playersByPosition[pos] || []).slice(0, 15);
+                return (
+                  <div key={pos} style={{ background: "#fff", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.07)" }}>
+                    <div style={{ background: color, padding: "11px 14px" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: textColor }}>{pos}</span>
+                    </div>
+                    {posPls.length === 0
+                      ? <div style={{ padding: "24px 14px", fontSize: 12, color: "#9ca3af", textAlign: "center" }}>{t("暂无数据", "No data")}</div>
+                      : posPls.map((p, idx) => (
+                          <PlayerRow key={p.id} p={p} accentColor={color} last={idx === posPls.length - 1} />
+                        ))
+                    }
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
-            {["PG", "SG", "SF", "PF", "C"].map((pos, posIdx) => {
-              const posColors = ["#1e3a8a", "#2563eb", "#10b981", "#f59e0b", "#64748b"];
-              const posTextColors = ["#fff", "#fff", "#fff", "#000", "#fff"];
-              const col = posColors[posIdx];
-              const tcol = posTextColors[posIdx];
-              return (
-                <div key={pos} style={{ background: "#fff", border: `1.5px solid ${col}`, borderRadius: 12, overflow: "hidden" }}>
-                  <div style={{ background: col, padding: "10px 16px" }}>
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: tcol }}>{pos}</h3>
-                  </div>
-                  <div>
-                    {(playersByPosition[pos] || []).slice(0, 15).map((p, idx) => {
-                      const isDrafted = drafted.includes(p.id);
-                      const isWatchlist = watchlist.includes(p.id);
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => toggleDrafted(p.id)}
-                          style={{
-                            display: "flex", alignItems: "center", gap: 8,
-                            padding: "9px 16px",
-                            background: isDrafted ? "#f3f4f6" : idx % 2 === 0 ? "#fff" : "#fafafa",
-                            borderTop: idx > 0 ? "1px solid #f3f4f6" : "none",
-                            cursor: "pointer",
-                            opacity: isDrafted ? 0.5 : 1,
-                            textDecoration: isDrafted ? "line-through" : "none",
-                          }}
-                        >
-                          <span style={{ fontSize: 12, fontWeight: 700, color: col, width: 22, flexShrink: 0 }}>{p.rank}</span>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: "#111827" }}>{p.name}</span>
-                          {isWatchlist && <span style={{ fontSize: 13, color: "#f59e0b" }}>★</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })
+          }
+        </div>
 
         {/* Legend */}
-        <div style={{ marginTop: 24, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "14px 20px", display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#f59e0b", display: "inline-block" }} />
-            <span style={{ fontSize: 13, color: "#374151" }}>{t("关注列表", "Watchlist")}</span>
+        <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ width: 3, height: 14, background: "#1e3a8a", borderRadius: 2 }} />
+            <span style={{ fontSize: 12, color: "#6b7280" }}>{t("关注列表", "Watchlist")}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 12, height: 12, borderRadius: "50%", background: "#d1d5db", display: "inline-block" }} />
-            <span style={{ fontSize: 13, color: "#374151" }}>{t("已被选走", "Drafted")}</span>
-          </div>
-          <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>
-            {t("点击球员名字可以标记/取消标记为已被选走，数据会自动保存", "Click player names to mark/unmark as drafted. Data saves automatically")}
-          </p>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>
+            {t("点击球员可标记为已被选走", "Click player to mark as drafted")}
+          </span>
         </div>
       </main>
     </div>
