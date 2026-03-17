@@ -65,7 +65,6 @@ type SortKey =
   | "fptsAvg"
   | "gamesPlayed";
 
-type LeagueType = "NBA" | "CBA" | "Fantasy";
 type HealthFilter = "all" | "healthy" | "questionable" | "injured";
 type ViewMode = "table" | "card";
 
@@ -101,7 +100,6 @@ export default function PlayerRankingsPage() {
   const [gamesLoaded, setGamesLoaded] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const [positionFilter, setPositionFilter] = useState<string>("all");
-  const [teamFilter, setTeamFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [statView] = useState<"averages" | "totals">("averages");
@@ -109,7 +107,6 @@ export default function PlayerRankingsPage() {
   const pageSize = 20;
 
   // --- new state ---
-  const [leagueType, setLeagueType] = useState<LeagueType>("NBA");
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
   const [minPts, setMinPts] = useState(0);
   const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
@@ -166,10 +163,6 @@ export default function PlayerRankingsPage() {
       result = result.filter((p) => p.position.includes(positionFilter));
     }
 
-    if (teamFilter !== "all") {
-      result = result.filter((p) => p.team === teamFilter);
-    }
-
     if (minPts > 0) {
       result = result.filter((p) => p.averages.pts >= minPts);
     }
@@ -212,7 +205,7 @@ export default function PlayerRankingsPage() {
     });
 
     return result;
-  }, [players, searchTerm, positionFilter, teamFilter, sortKey, sortOrder, statView, minPts, healthFilter]);
+  }, [players, searchTerm, positionFilter, sortKey, sortOrder, statView, minPts, healthFilter]);
 
   const paginatedPlayers = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -356,26 +349,14 @@ export default function PlayerRankingsPage() {
         <aside style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 24 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 20 }}>{t("筛选条件", "Filters")}</div>
 
-          {/* 联赛类型 */}
-          <div style={sectionLabelStyle}>{t("联赛类型", "League Type")}</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {(["NBA", "CBA", "Fantasy"] as LeagueType[]).map((lt) => (
-              <Pill key={lt} active={leagueType === lt} onClick={() => setLeagueType(lt)}>
-                {lt}
-              </Pill>
-            ))}
-          </div>
-
           {/* 位置 */}
           <div style={sectionLabelStyle}>{t("位置", "Position")}</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[
               { label: t("全部", "All"), value: "all" },
-              { label: "PG", value: "PG" },
-              { label: "SG", value: "SG" },
-              { label: "SF", value: "SF" },
-              { label: "PF", value: "PF" },
-              { label: "C", value: "C" },
+              { label: t("后卫", "Guard"), value: "G" },
+              { label: t("前锋", "Forward"), value: "F" },
+              { label: t("中锋", "Center"), value: "C" },
             ].map((pos) => (
               <Pill
                 key={pos.value}
@@ -383,27 +364,6 @@ export default function PlayerRankingsPage() {
                 onClick={() => { setPositionFilter(pos.value); setPage(1); }}
               >
                 {pos.label}
-              </Pill>
-            ))}
-          </div>
-
-          {/* 球队 */}
-          <div style={sectionLabelStyle}>{t("球队", "Team")}</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[
-              { label: t("全部", "All"), value: "all" },
-              { label: "LAL", value: "LAL" },
-              { label: "GSW", value: "GSW" },
-              { label: "MIL", value: "MIL" },
-              { label: "DEN", value: "DEN" },
-              { label: "BOS", value: "BOS" },
-            ].map((tm) => (
-              <Pill
-                key={tm.value}
-                active={teamFilter === tm.value}
-                onClick={() => { setTeamFilter(tm.value === "all" ? "all" : tm.value); setPage(1); }}
-              >
-                {tm.label}
               </Pill>
             ))}
           </div>
