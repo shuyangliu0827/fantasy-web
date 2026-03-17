@@ -25,9 +25,14 @@ export default function LeaguePage() {
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
   const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "history" | "draft" | "news" | "settings">("standings");
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     init();
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   async function init() {
@@ -193,7 +198,7 @@ export default function LeaguePage() {
         {/* ── Hero ── */}
         <div style={{
           background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 60%, #2563eb 100%)",
-          padding: "40px 32px 36px",
+          padding: isMobile ? "24px 12px 20px" : "40px 32px 36px",
           position: "relative",
           overflow: "hidden",
         }}>
@@ -201,7 +206,7 @@ export default function LeaguePage() {
           <div style={{ position: "absolute", right: -60, top: -60, width: 300, height: 300, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", right: 80, bottom: -80, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
 
-          <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", gap: 32, alignItems: "flex-start" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 32, alignItems: "flex-start" }}>
             {/* left content */}
             <div style={{ flex: 1 }}>
               {/* breadcrumb */}
@@ -224,7 +229,7 @@ export default function LeaguePage() {
               </div>
 
               {/* title */}
-              <h1 style={{ margin: "0 0 12px", fontSize: 32, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
+              <h1 style={{ margin: "0 0 12px", fontSize: isMobile ? 26 : 32, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
                 {league.name}
               </h1>
               <p style={{ margin: "0 0 28px", fontSize: 14, color: "rgba(255,255,255,0.75)", lineHeight: 1.7, maxWidth: 600 }}>
@@ -307,8 +312,8 @@ export default function LeaguePage() {
         </div>
 
         {/* ── Tab bar ── */}
-        <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 60, zIndex: 10 }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", display: "flex", gap: 0 }}>
+        <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
@@ -328,7 +333,7 @@ export default function LeaguePage() {
         </div>
 
         {/* ── Main content ── */}
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px", display: "flex", gap: 24, alignItems: "flex-start" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "18px 12px" : "28px 32px", display: "flex", flexDirection: isMobile ? "column" : "row", gap: 24, alignItems: "flex-start" }}>
 
           {/* ── Standings table ── */}
           {activeTab === "standings" && (
@@ -521,9 +526,9 @@ export default function LeaguePage() {
       <LightHeader activeHref="/league" />
 
       {/* League header */}
-      <div style={{ background: "#1e3a8a", padding: "32px 32px" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", gap: 24 }}>
-          <div style={{ width: 64, height: 64, background: "rgba(255,255,255,0.15)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, flexShrink: 0 }}>
+      <div style={{ background: "#1e3a8a", padding: isMobile ? "24px 12px" : "32px 32px" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", flexDirection: isMobile ? "column" : "row", gap: 24 }}>
+          <div style={{ width: 64, height: 64, background: "rgba(255,255,255,0.15)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isMobile ? 26 : 32, flexShrink: 0 }}>
             🏀
           </div>
           <div style={{ flex: 1 }}>
@@ -576,7 +581,7 @@ export default function LeaguePage() {
         </div>
 
         {/* Quick actions */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
           {[
             { href: `/league/${leagueId}/roster`, icon: "📋", title: "查看阵容", desc: "管理首发和板凳" },
             { href: `/league/${leagueId}/free-agents`, icon: "🔍", title: "自由市场", desc: "签约和放弃球员" },
@@ -612,7 +617,7 @@ export default function LeaguePage() {
             )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
             {teams.map(team => (
               <div key={team.id} style={{ background: myTeam?.id === team.id ? "#eff6ff" : "#f9fafb", padding: "18px", borderRadius: 12, display: "flex", alignItems: "center", gap: 14, border: myTeam?.id === team.id ? "2px solid #1e3a8a" : "2px solid transparent" }}>
                 <div style={{ width: 44, height: 44, background: "#1e3a8a", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
@@ -677,7 +682,7 @@ export default function LeaguePage() {
                 </ul>
               </div>
             </div>
-            <div style={{ padding: "16px 24px", borderTop: "1px solid #f3f4f6", display: "flex", gap: 12, justifyContent: "flex-end" }}>
+            <div style={{ padding: isMobile ? "14px 12px" : "16px 24px", borderTop: "1px solid #f3f4f6", display: "flex", gap: 12, justifyContent: isMobile ? "stretch" : "flex-end", flexDirection: isMobile ? "column" : "row" }}>
               <button onClick={() => setShowJoinModal(false)} style={{ padding: "10px 22px", border: "1.5px solid #e5e7eb", borderRadius: 10, background: "#fff", color: "#374151", fontWeight: 600, cursor: "pointer", fontSize: 14, fontFamily: FONT }}>
                 取消
               </button>
