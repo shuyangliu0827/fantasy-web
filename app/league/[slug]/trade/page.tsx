@@ -379,7 +379,7 @@ export default function TradePage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>🔄 {t("球员交易", "Trades")}</h1>
+            <h1>{t("球员交易", "Trades")}</h1>
             <p>{t("与其他队伍交换球员", "Trade players with other teams")}</p>
           </div>
 
@@ -685,7 +685,7 @@ const styles = `
   .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
-  .page-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 8px 0; }
+  .page-header h1 { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
   .page-header p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
@@ -707,19 +707,19 @@ const styles = `
     padding: 20px; cursor: pointer; transition: all 0.15s;
   }
   .team-card:hover { border-color: #1e3a8a; background: #f8fafc; }
-  .team-card-name { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .team-card-name { font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 4px; }
   .team-card-count { font-size: 13px; color: #6b7280; }
 
   .back-btn {
     padding: 8px 16px; background: #f9fafb; border: 1px solid #e5e7eb;
     border-radius: 8px; color: #6b7280; font-size: 13px; cursor: pointer; margin-bottom: 20px;
   }
-  .back-btn:hover { color: #fff; }
+  .back-btn:hover { background: #f3f4f6; color: #374151; }
 
   .trade-board { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 12px; align-items: start; }
   .trade-arrow { text-align: center; font-size: 24px; color: #1e3a8a; padding-top: 60px; }
   .trade-side { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
-  .side-header { padding: 14px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #fff; font-size: 14px; }
+  .side-header { padding: 14px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #111827; font-size: 14px; }
   .side-hint { padding: 8px 16px; margin: 0; font-size: 12px; color: #6b7280; }
   .player-list { max-height: 400px; overflow-y: auto; }
   .trade-player {
@@ -729,7 +729,7 @@ const styles = `
   .trade-player:hover { background: rgba(245, 158, 11, 0.03); }
   .trade-player.selected { background: #eff6ff; border-left: 3px solid #f59e0b; }
   .tp-info { display: flex; flex-direction: column; gap: 2px; }
-  .tp-name { font-size: 14px; color: #fff; font-weight: 500; }
+  .tp-name { font-size: 14px; color: #111827; font-weight: 500; }
   .tp-meta { font-size: 12px; color: #6b7280; }
   .tp-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
   .tp-ppg { font-size: 13px; color: #1e3a8a; font-weight: 600; }
@@ -745,13 +745,13 @@ const styles = `
   .summary-arrow { font-size: 20px; color: #1e3a8a; padding-top: 20px; }
   .summary-label { font-size: 12px; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; }
   .summary-player { padding: 6px 0; font-size: 14px; }
-  .summary-player.out { color: #fca5a5; }
-  .summary-player.in { color: #6ee7b7; }
+  .summary-player.out { color: #dc2626; }
+  .summary-player.in { color: #059669; }
   .summary-empty { color: #6b7280; font-size: 13px; }
   .trade-msg {
     width: 100%; margin-top: 16px; padding: 10px 14px;
     background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
-    color: #fff; font-size: 14px; resize: none; outline: none; box-sizing: border-box;
+    color: #111827; font-size: 14px; resize: none; outline: none; box-sizing: border-box;
   }
   .propose-btn {
     margin-top: 16px; width: 100%; padding: 14px;
@@ -770,37 +770,37 @@ const styles = `
     padding: 14px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
     display: flex; align-items: center; gap: 8px; font-size: 14px;
   }
-  .tc-from { color: #fff; font-weight: 600; }
+  .tc-from { color: #111827; font-weight: 600; }
   .tc-arrow { color: #1e3a8a; }
-  .tc-to { color: #fff; font-weight: 600; }
+  .tc-to { color: #111827; font-weight: 600; }
   .tc-time { margin-left: auto; color: #6b7280; font-size: 12px; }
   .tc-body { display: flex; gap: 20px; padding: 16px; }
   .tc-side { flex: 1; }
   .tc-label { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
-  .tc-player { font-size: 14px; color: #fff; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; }
+  .tc-player { font-size: 14px; color: #111827; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; }
   .tc-player-ppg { font-size: 12px; color: #1e3a8a; font-weight: 600; }
   .tc-message { padding: 0 16px 12px; font-size: 13px; color: #6b7280; font-style: italic; }
   .tc-actions { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; align-items: center; }
   .accept-btn {
-    padding: 8px 20px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: 6px; color: #6ee7b7; font-weight: 600; cursor: pointer;
+    padding: 8px 20px; background: #ecfdf5; border: 1px solid #6ee7b7;
+    border-radius: 6px; color: #059669; font-weight: 600; cursor: pointer;
   }
   .accept-btn:disabled, .reject-btn:disabled, .cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .reject-btn {
-    padding: 8px 20px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 6px; color: #fca5a5; font-weight: 600; cursor: pointer;
+    padding: 8px 20px; background: #fef2f2; border: 1px solid #fca5a5;
+    border-radius: 6px; color: #dc2626; font-weight: 600; cursor: pointer;
   }
   .cancel-btn {
-    padding: 8px 20px; background: #333; border: none;
+    padding: 8px 20px; background: #f3f4f6; border: 1px solid #e5e7eb;
     border-radius: 6px; color: #6b7280; cursor: pointer;
   }
   .pending-badge { font-size: 13px; color: #1e3a8a; }
   .status-badge {
     margin-left: auto; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
   }
-  .status-badge.accepted { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
-  .status-badge.rejected { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
-  .status-badge.cancelled { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
+  .status-badge.accepted { background: #ecfdf5; color: #059669; }
+  .status-badge.rejected { background: #fef2f2; color: #dc2626; }
+  .status-badge.cancelled { background: #f3f4f6; color: #6b7280; }
 
   .empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
   .empty-state.small { padding: 30px; }

@@ -130,7 +130,7 @@ export default function SettingsPage() {
 
       <main className="page-content">
         <div className="container">
-          <h1>⚙️ {t("联赛设置", "League Settings")}</h1>
+          <h1>{t("联赛设置", "League Settings")}</h1>
 
           <div className="settings-section">
             <h2>{t("基本设置", "Basic Settings")}</h2>
@@ -223,16 +223,16 @@ const styles = `
   .league-nav { background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 60px; z-index: 40; }
   .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
   .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #6b7280; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
-  .league-nav-link:hover { color: #fff; }
+  .league-nav-link:hover { color: #111827; }
   .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
   .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 700px; margin: 0 auto; }
-  h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 24px 0; }
+  h1 { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 24px 0; }
   .settings-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-  .settings-section h2 { font-size: 16px; font-weight: 600; color: #fff; margin: 0 0 20px 0; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+  .settings-section h2 { font-size: 16px; font-weight: 600; color: #111827; margin: 0 0 20px 0; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
   .form-group { margin-bottom: 20px; }
   .form-group label { display: block; font-size: 14px; color: #374151; margin-bottom: 8px; }
-  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; color: #fff; font-size: 14px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; color: #111827; font-size: 14px; }
   .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #1e3a8a; }
   .radio-group { display: flex; gap: 12px; }
   .radio-option { flex: 1; display: flex; align-items: center; gap: 10px; padding: 16px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer; }
@@ -247,6 +247,6 @@ const styles = `
   .delete-btn { padding: 12px 24px; background: transparent; border: 1px solid #ef4444; border-radius: 8px; color: #ef4444; cursor: pointer; }
   .delete-btn:hover { background: #ef4444; color: #fff; }
   .loading-container, .error-container { min-height: 50vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; }
-  .error-container h2 { color: #fff; margin-bottom: 16px; }
+  .error-container h2 { color: #111827; margin-bottom: 16px; }
   .back-link { color: #1e3a8a; }
 `;

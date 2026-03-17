@@ -144,7 +144,7 @@ export default function MembersPage() {
         <div className="container">
           <div className="page-header">
             <div>
-              <h1>👥 {t("成员管理", "Members")}</h1>
+              <h1>{t("成员管理", "Members")}</h1>
               <p>{members.length}/{(league as any).max_teams || 10} {t("队伍", "teams")}</p>
             </div>
             {isOwner && (
@@ -286,7 +286,7 @@ const styles = `
     white-space: nowrap;
   }
 
-  .league-nav-link:hover { color: #fff; }
+  .league-nav-link:hover { color: #111827; }
   .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
 
   .page-content {

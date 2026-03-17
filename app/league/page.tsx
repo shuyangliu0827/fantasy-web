@@ -176,13 +176,6 @@ export default function PublicLeaguesPage() {
           </div>
         )}
 
-        {/* Bottom tip */}
-        <div style={{ textAlign: "center", marginTop: 32, fontSize: 14, color: "#9ca3af" }}>
-          {t("想创建自己的联赛？", "Want to create your own league?")}{" "}
-          <Link href="/league/new" style={{ color: "#f59e0b", textDecoration: "none", fontWeight: 600 }}>
-            {t("点击这里创建", "Click here to create")}
-          </Link>
-        </div>
       </div>
     </div>
   );
