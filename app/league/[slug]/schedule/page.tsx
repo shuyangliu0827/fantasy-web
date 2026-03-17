@@ -98,7 +98,7 @@ export default function SchedulePage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -109,7 +109,7 @@ export default function SchedulePage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>📅 {t("赛程表", "Schedule")}</h1>
+            <h1> {t("赛程表", "Schedule")}</h1>
             <div className="view-toggle">
               <button 
                 className={`toggle-btn ${viewMode === "full" ? "active" : ""}`}
@@ -128,7 +128,7 @@ export default function SchedulePage() {
 
           {members.length < 2 ? (
             <div className="empty-state">
-              <div className="empty-icon">📅</div>
+              <div className="empty-icon"></div>
               <h3>{t("还没有赛程", "No schedule yet")}</h3>
               <p>{t("联赛需要至少2支队伍才能生成赛程", "League needs at least 2 teams to generate schedule")}</p>
             </div>
@@ -163,7 +163,7 @@ export default function SchedulePage() {
           )}
 
           <div className="schedule-note">
-            <p>💡 {t("赛程将在选秀完成后正式生成", "Schedule will be finalized after the draft")}</p>
+            <p> {t("赛程将在选秀完成后正式生成", "Schedule will be finalized after the draft")}</p>
           </div>
         </div>
       </main>

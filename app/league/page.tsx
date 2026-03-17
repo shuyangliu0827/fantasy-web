@@ -56,7 +56,7 @@ export default function PublicLeaguesPage() {
       <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
         <LightHeader activeHref="/league" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", gap: 12 }}>
-          <div style={{ fontSize: 40 }}>🏆</div>
+          <div style={{ fontSize: 40 }}></div>
           <p style={{ color: "#9ca3af", fontSize: 15 }}>{t("加载中...", "Loading...")}</p>
         </div>
       </div>
@@ -72,7 +72,7 @@ export default function PublicLeaguesPage() {
         <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
             <div style={{ width: 64, height: 64, background: "#fef3c7", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, flexShrink: 0 }}>
-              🏆
+              
             </div>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: "0 0 6px 0" }}>
@@ -94,7 +94,7 @@ export default function PublicLeaguesPage() {
         {/* Search bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
           <div style={{ flex: 1, maxWidth: 400, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12 }}>
-            <span style={{ fontSize: 15, color: "#9ca3af" }}>🔍</span>
+            <span style={{ fontSize: 15, color: "#9ca3af" }}></span>
             <input
               type="text"
               value={searchTerm}
@@ -114,7 +114,7 @@ export default function PublicLeaguesPage() {
         {/* Leagues grid */}
         {filteredLeagues.length === 0 ? (
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "72px 32px", textAlign: "center" }}>
-            <div style={{ fontSize: 52, marginBottom: 16 }}>{searchTerm ? "🔍" : "🏆"}</div>
+            <div style={{ fontSize: 52, marginBottom: 16 }}>{searchTerm ? "" : ""}</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 8px 0" }}>
               {searchTerm ? t("没有找到匹配的联赛", "No matching leagues found") : t("还没有公开联赛", "No public leagues yet")}
             </h3>
@@ -135,7 +135,7 @@ export default function PublicLeaguesPage() {
                 onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}>
                 <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
                   <div style={{ width: 52, height: 52, background: "#fef3c7", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, flexShrink: 0 }}>
-                    🏆
+                    
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 8px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -152,12 +152,12 @@ export default function PublicLeaguesPage() {
 
                 <div style={{ display: "flex", gap: 24, padding: "14px 0", borderTop: "1px solid #f3f4f6", borderBottom: "1px solid #f3f4f6", marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 15 }}>👥</span>
+                    <span style={{ fontSize: 15 }}></span>
                     <span style={{ fontSize: 13, color: "#6b7280" }}>{t("成员", "Members")}</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{league.memberCount}</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 15 }}>📝</span>
+                    <span style={{ fontSize: 15 }}></span>
                     <span style={{ fontSize: 13, color: "#6b7280" }}>{t("帖子", "Posts")}</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>0</span>
                   </div>

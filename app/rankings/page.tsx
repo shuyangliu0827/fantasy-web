@@ -255,7 +255,7 @@ export default function PlayerRankingsPage() {
   if (loading && players.length === 0) {
     return (
       <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <div style={{ fontSize: 48 }}>🏀</div>
+        <div style={{ fontSize: 48 }}></div>
         <p style={{ color: "#6b7280", fontSize: 16 }}>{t("加载中...", "Loading...")}</p>
       </div>
     );
@@ -265,7 +265,7 @@ export default function PlayerRankingsPage() {
   if (error && players.length === 0) {
     return (
       <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <p style={{ color: "#dc2626", fontSize: 18, fontWeight: 600 }}>❌ {t("加载失败", "Failed to Load")}</p>
+        <p style={{ color: "#dc2626", fontSize: 18, fontWeight: 600 }}> {t("加载失败", "Failed to Load")}</p>
         <p style={{ color: "#6b7280" }}>{error}</p>
         <button
           onClick={loadData}
@@ -488,7 +488,7 @@ export default function PlayerRankingsPage() {
               background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
               padding: "9px 14px", flex: 1, maxWidth: 340,
             }}>
-              <span style={{ fontSize: 14, color: "#9ca3af" }}>🔍</span>
+              <span style={{ fontSize: 14, color: "#9ca3af" }}></span>
               <input
                 type="text"
                 placeholder={t("搜索球员姓名...", "Search players...")}
@@ -601,7 +601,7 @@ export default function PlayerRankingsPage() {
                                 background: "#fff7ed", display: "flex", alignItems: "center",
                                 justifyContent: "center", fontSize: 18, flexShrink: 0,
                               }}>
-                                🏀
+                                
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
@@ -688,7 +688,7 @@ export default function PlayerRankingsPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={getRankCircleStyle(player.rank)}>{player.rank}</span>
                         <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#fff7ed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                          🏀
+                          
                         </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{abbreviateName(player.name)}</div>

@@ -217,7 +217,7 @@ export default function MockDraftPage() {
                 background: isMyPick() ? "#fef3c7" : "#f3f4f6",
                 color: isMyPick() ? "#92400e" : "#6b7280",
               }}>
-                {isMyPick() ? t("🎯 轮到你选了！", "🎯 Your Pick!") : t("⏳ AI 正在选择...", "⏳ AI Picking...")}
+                {isMyPick() ? t(" 轮到你选了！", " Your Pick!") : t("⏳ AI 正在选择...", "⏳ AI Picking...")}
               </span>
             )}
             <button onClick={() => { setDraftStarted(false); setMyDrafts(listDrafts()); }} style={{ padding: "7px 16px", fontSize: 13, fontWeight: 500, color: "#6b7280", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 8, cursor: "pointer" }}>

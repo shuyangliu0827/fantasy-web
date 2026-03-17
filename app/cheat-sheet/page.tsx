@@ -178,14 +178,14 @@ export default function CheatSheetPage() {
               onClick={() => window.print()}
               style={{ padding: "9px 16px", border: "none", background: "#f59e0b", color: "#000", fontSize: 13, fontWeight: 700, cursor: "pointer", borderRadius: 8, fontFamily: FONT, display: "flex", alignItems: "center", gap: 6 }}
             >
-              🖨 {t("导出PDF", "Export PDF")}
+               {t("导出PDF", "Export PDF")}
             </button>
 
             {/* Custom sort */}
             <button
               style={{ padding: "9px 16px", border: "none", background: "#1e3a8a", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", borderRadius: 8, fontFamily: FONT, display: "flex", alignItems: "center", gap: 6 }}
             >
-              🔒 {t("自定义排序", "Custom Sort")}
+               {t("自定义排序", "Custom Sort")}
             </button>
           </div>
         </div>
