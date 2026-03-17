@@ -23,8 +23,8 @@ const FEATURES = [
   {
     icon: "📊",
     iconBg: "#dbeafe",
-    titleZh: "AI 球员排名",
-    titleEn: "AI Rankings",
+    titleZh: "实时球员排名",
+    titleEn: "Live Rankings",
     descZh: "综合30+数据维度，每日更新，精准量化每个球员的幻想价值。",
     descEn: "30+ data dimensions updated daily to quantify every player's fantasy value.",
     href: "/rankings",
