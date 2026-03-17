@@ -82,15 +82,15 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
         </nav>
 
         {/* Right actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
           <button
             onClick={() => setLang(lang === "zh" ? "en" : "zh")}
             style={{
-              padding: "7px 14px",
+              padding: isMobile ? "6px 9px" : "7px 14px",
               border: "1px solid #e2e8f0",
               borderRadius: 999,
               background: "#fff",
-              fontSize: 13,
+              fontSize: isMobile ? 12 : 13,
               fontWeight: 600,
               color: "#64748b",
               cursor: "pointer",
@@ -102,7 +102,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
           {!user ? (
             <>
               <Link href="/auth/login" style={{
-                padding: isMobile ? "8px 12px" : "8px 18px",
+                padding: isMobile ? "7px 10px" : "8px 18px",
                 border: "1px solid #e2e8f0",
                 borderRadius: 8,
                 fontSize: 14,
@@ -114,7 +114,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 {t("登录", "Login")}
               </Link>
               <Link href="/auth/signup" style={{
-                padding: isMobile ? "8px 12px" : "8px 20px",
+                padding: isMobile ? "7px 10px" : "8px 20px",
                 background: "#1e3a8a",
                 borderRadius: 8,
                 fontSize: 14,
@@ -128,16 +128,17 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
           ) : (
             <>
               <Link href={`/u/${user.username}`} style={{
-                fontSize: 14, color: "#374151", textDecoration: "none",
-                fontWeight: 500, padding: "8px 4px",
+                fontSize: isMobile ? 12 : 14, color: "#374151", textDecoration: "none",
+                fontWeight: 500, padding: isMobile ? "6px 8px" : "8px 4px",
+                maxWidth: isMobile ? 76 : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
                 @{user.username}
               </Link>
               <button onClick={handleLogout} style={{
-                padding: "8px 14px", fontSize: 14, color: "#64748b",
+                padding: isMobile ? "6px 8px" : "8px 14px", fontSize: isMobile ? 12 : 14, color: "#64748b",
                 border: "none", background: "transparent", cursor: "pointer",
               }}>
-                {t("退出", "Logout")}
+                {isMobile ? t("退", "Out") : t("退出", "Logout")}
               </button>
             </>
           )}

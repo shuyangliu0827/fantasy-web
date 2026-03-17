@@ -171,11 +171,11 @@ export default function PublicLeaguesPage() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px 64px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "20px 12px 36px" : "32px 40px 64px" }}>
 
         {/* search row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-          <div style={{ flex: 1, maxWidth: 400, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, maxWidth: isMobile ? "100%" : 400, minWidth: isMobile ? "100%" : 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12 }}>
             <span style={{ fontSize: 14, color: "#9ca3af" }}>🔍</span>
             <input
               type="text"

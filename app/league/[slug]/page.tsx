@@ -581,7 +581,7 @@ export default function LeaguePage() {
         </div>
 
         {/* Quick actions */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
           {[
             { href: `/league/${leagueId}/roster`, icon: "📋", title: "查看阵容", desc: "管理首发和板凳" },
             { href: `/league/${leagueId}/free-agents`, icon: "🔍", title: "自由市场", desc: "签约和放弃球员" },
@@ -617,7 +617,7 @@ export default function LeaguePage() {
             )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
             {teams.map(team => (
               <div key={team.id} style={{ background: myTeam?.id === team.id ? "#eff6ff" : "#f9fafb", padding: "18px", borderRadius: 12, display: "flex", alignItems: "center", gap: 14, border: myTeam?.id === team.id ? "2px solid #1e3a8a" : "2px solid transparent" }}>
                 <div style={{ width: 44, height: 44, background: "#1e3a8a", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
@@ -682,7 +682,7 @@ export default function LeaguePage() {
                 </ul>
               </div>
             </div>
-            <div style={{ padding: "16px 24px", borderTop: "1px solid #f3f4f6", display: "flex", gap: 12, justifyContent: "flex-end" }}>
+            <div style={{ padding: isMobile ? "14px 12px" : "16px 24px", borderTop: "1px solid #f3f4f6", display: "flex", gap: 12, justifyContent: isMobile ? "stretch" : "flex-end", flexDirection: isMobile ? "column" : "row" }}>
               <button onClick={() => setShowJoinModal(false)} style={{ padding: "10px 22px", border: "1.5px solid #e5e7eb", borderRadius: 10, background: "#fff", color: "#374151", fontWeight: 600, cursor: "pointer", fontSize: 14, fontFamily: FONT }}>
                 取消
               </button>

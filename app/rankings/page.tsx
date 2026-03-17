@@ -358,10 +358,10 @@ export default function PlayerRankingsPage() {
       <LightHeader activeHref="/rankings" />
 
       {/* ── Page Body ── */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 32px", display: "flex", gap: 24, alignItems: "flex-start" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "16px 12px 28px" : "24px 32px", display: "flex", flexDirection: isMobile ? "column" : "row", gap: 24, alignItems: "flex-start" }}>
 
         {/* ── Left Sidebar ── */}
-        <aside style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 24 }}>
+        <aside style={{ width: isMobile ? "100%" : 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: isMobile ? 16 : 24 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 20 }}>{t("筛选条件", "Filters")}</div>
 
           {/* 位置 */}
@@ -512,7 +512,7 @@ export default function PlayerRankingsPage() {
             </div>
 
             {/* Sort buttons */}
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, overflowX: isMobile ? "auto" : "visible", paddingBottom: isMobile ? 2 : 0 }}>
               {([
                 { key: "fptsAvg" as SortKey, zh: "综合得分 ↓", en: "Fantasy Pts ↓" },
                 { key: "pts" as SortKey, zh: "场均得分", en: "PPG" },
@@ -538,7 +538,7 @@ export default function PlayerRankingsPage() {
             </div>
 
             {/* View toggle */}
-            <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", marginLeft: "auto" }}>
+            <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", marginLeft: isMobile ? 0 : "auto" }}>
               {(["table", "card"] as ViewMode[]).map((mode) => {
                 const isActive = viewMode === mode;
                 return (
