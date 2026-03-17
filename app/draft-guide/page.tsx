@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
+import LightHeader from "@/components/LightHeader";
 
 const ROUNDS = [
   {
@@ -87,101 +88,13 @@ const STRATEGIES = [
   },
 ];
 
-const NAV = [
-  { href: "/", zh: "首页", en: "Home" },
-  { href: "/rankings", zh: "球员排名", en: "Rankings" },
-  { href: "/league", zh: "公开联赛", en: "Leagues" },
-  { href: "/compare", zh: "球员对比", en: "Compare" },
-  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide", active: true },
-  { href: "/cheat-sheet", zh: "备忘单", en: "Cheat Sheet" },
-  { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
-];
-
 export default function DraftGuidePage() {
-  const { t, lang, setLang } = useLang();
+  const { t } = useLang();
 
   return (
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
 
-      {/* Header */}
-      <header style={{
-        background: "#fff",
-        borderBottom: "1px solid #e5e7eb",
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-      }}>
-        <div style={{
-          maxWidth: 1200,
-          margin: "0 auto",
-          padding: "0 32px",
-          height: 60,
-          display: "flex",
-          alignItems: "center",
-          gap: 40,
-        }}>
-          <Link href="/" style={{ textDecoration: "none", flexShrink: 0 }}>
-            <span style={{ fontSize: 20, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本·</span>
-          </Link>
-
-          <nav style={{ display: "flex", alignItems: "center", gap: 4, flex: 1 }}>
-            {NAV.map((item) => (
-              <Link key={item.href} href={item.href} style={{
-                padding: "6px 14px",
-                fontSize: 14,
-                fontWeight: item.active ? 600 : 400,
-                color: item.active ? "#1e3a8a" : "#4b5563",
-                textDecoration: "none",
-                borderRadius: 6,
-                borderBottom: item.active ? "2px solid #f59e0b" : "2px solid transparent",
-                transition: "color 0.15s",
-              }}>
-                {t(item.zh, item.en)}
-              </Link>
-            ))}
-          </nav>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-            <button
-              onClick={() => setLang(lang === "zh" ? "en" : "zh")}
-              style={{
-                padding: "6px 12px",
-                fontSize: 13,
-                color: "#4b5563",
-                background: "#f3f4f6",
-                border: "none",
-                borderRadius: 6,
-                cursor: "pointer",
-                fontWeight: 500,
-              }}
-            >
-              中 / EN
-            </button>
-            <Link href="/auth/login" style={{
-              padding: "7px 16px",
-              fontSize: 14,
-              fontWeight: 500,
-              color: "#374151",
-              textDecoration: "none",
-              border: "1.5px solid #e5e7eb",
-              borderRadius: 8,
-            }}>
-              {t("登录", "Login")}
-            </Link>
-            <Link href="/auth/signup" style={{
-              padding: "7px 16px",
-              fontSize: 14,
-              fontWeight: 600,
-              color: "#fff",
-              textDecoration: "none",
-              background: "#1e3a8a",
-              borderRadius: 8,
-            }}>
-              {t("注册", "Sign Up")}
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LightHeader activeHref="/draft-guide" />
 
       {/* Hero */}
       <div style={{
