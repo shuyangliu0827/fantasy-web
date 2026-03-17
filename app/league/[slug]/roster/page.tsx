@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
@@ -626,8 +626,8 @@ export default function RosterPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -636,8 +636,8 @@ export default function RosterPage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container"><p>{t("联赛不存在", "League not found")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -647,8 +647,8 @@ export default function RosterPage() {
   // ── Main render ──
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
 
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -855,8 +855,8 @@ export default function RosterPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
   .league-header-inner {
     max-width: 1400px;
@@ -875,7 +875,7 @@ const styles = `
   .league-icon { font-size: 28px; }
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
   .container {
@@ -891,18 +891,18 @@ const styles = `
   .page-header h1 {
     font-size: 24px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
     margin: 0 0 6px 0;
   }
   .page-header p {
     font-size: 14px;
-    color: #888;
+    color: #6b7280;
     margin: 0;
   }
   .auto-btn {
     padding: 10px 20px;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     border: none;
     border-radius: 8px;
     font-weight: 600;
@@ -921,10 +921,10 @@ const styles = `
   }
   .team-tab {
     padding: 8px 16px;
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: #888;
+    color: #6b7280;
     font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
@@ -933,13 +933,13 @@ const styles = `
     gap: 6px;
   }
   .team-tab.active {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: #f59e0b;
-    color: #f59e0b;
+    background: #eff6ff;
+    border-color: #1e3a8a;
+    color: #1e3a8a;
   }
   .my-badge {
-    background: #f59e0b;
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     padding: 1px 6px;
     border-radius: 4px;
     font-size: 10px;
@@ -952,8 +952,8 @@ const styles = `
     align-items: center;
     gap: 4px;
     margin-bottom: 20px;
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 10px;
     padding: 6px;
   }
@@ -961,9 +961,9 @@ const styles = `
     width: 32px;
     height: 40px;
     background: transparent;
-    border: 1px solid #333;
+    border: 1px solid #e5e7eb;
     border-radius: 6px;
-    color: #888;
+    color: #6b7280;
     font-size: 20px;
     cursor: pointer;
     display: flex;
@@ -971,7 +971,7 @@ const styles = `
     justify-content: center;
     flex-shrink: 0;
   }
-  .date-arrow:hover { color: #fff; border-color: #555; }
+  .date-arrow:hover { color: #fff; border-color: #6b7280; }
   .date-tabs {
     display: flex;
     gap: 4px;
@@ -985,7 +985,7 @@ const styles = `
     background: transparent;
     border: 1px solid transparent;
     border-radius: 8px;
-    color: #888;
+    color: #6b7280;
     cursor: pointer;
     display: flex;
     flex-direction: column;
@@ -995,9 +995,9 @@ const styles = `
   }
   .date-tab:hover { background: rgba(255,255,255,0.05); }
   .date-tab.active {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: #f59e0b;
-    color: #f59e0b;
+    background: #eff6ff;
+    border-color: #1e3a8a;
+    color: #1e3a8a;
   }
   .date-tab.today .date-day { color: #3b82f6; }
   .today-dot {
@@ -1046,7 +1046,7 @@ const styles = `
   .section-label {
     font-size: 14px;
     font-weight: 600;
-    color: #f59e0b;
+    color: #1e3a8a;
     margin: 24px 0 12px 0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1056,10 +1056,10 @@ const styles = `
   .table-wrapper {
     overflow-x: auto;
     border-radius: 12px;
-    border: 1px solid #222;
+    border: 1px solid #e5e7eb;
   }
   .lineup-table {
-    background: #111;
+    background: #fff;
     min-width: 900px;
     width: 100%;
   }
@@ -1067,11 +1067,11 @@ const styles = `
     display: grid;
     grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
-    background: #1a1a1a;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
     font-size: 11px;
     font-weight: 600;
-    color: #666;
+    color: #9ca3af;
     text-transform: uppercase;
     letter-spacing: 0.3px;
   }
@@ -1079,18 +1079,18 @@ const styles = `
     display: grid;
     grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
-    border-bottom: 1px solid #1a1a1a;
+    border-bottom: 1px solid #f3f4f6;
     align-items: center;
     transition: background 0.15s;
   }
   .lineup-row:last-child { border-bottom: none; }
   .lineup-row.clickable { cursor: pointer; }
-  .lineup-row.clickable:hover { background: rgba(245, 158, 11, 0.05); }
+  .lineup-row.clickable:hover { background: #f8fafc; }
   .lineup-row.swap-active {
     background: rgba(59, 130, 246, 0.1);
     border-color: rgba(59, 130, 246, 0.2);
   }
-  .lineup-row.highlight { background: rgba(245, 158, 11, 0.05); }
+  .lineup-row.highlight { background: #f8fafc; }
 
   /* Totals row */
   .totals-row {
@@ -1102,7 +1102,7 @@ const styles = `
   .totals-label {
     font-size: 12px;
     font-weight: 700;
-    color: #888;
+    color: #6b7280;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -1128,12 +1128,12 @@ const styles = `
   .player-name {
     font-size: 13px;
     font-weight: 500;
-    color: #fff;
+    color: #111827;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .player-meta { font-size: 11px; color: #666; }
+  .player-meta { font-size: 11px; color: #9ca3af; }
   .empty-slot { font-size: 13px; color: #444; font-style: italic; }
 
   /* Schedule column */
@@ -1143,12 +1143,12 @@ const styles = `
     align-items: center;
     gap: 1px;
     font-size: 12px;
-    color: #ccc;
+    color: #374151;
     text-align: center;
   }
   .col-schedule.dim { color: #444; }
   .opp-label { font-weight: 600; font-size: 12px; }
-  .game-score { font-size: 10px; color: #888; }
+  .game-score { font-size: 10px; color: #6b7280; }
   .status-badge {
     display: inline-block;
     padding: 1px 5px;
@@ -1164,7 +1164,7 @@ const styles = `
   /* Stats columns */
   .col-stat {
     font-size: 12px;
-    color: #aaa;
+    color: #6b7280;
     text-align: center;
   }
   .col-stat.compound {
@@ -1181,7 +1181,7 @@ const styles = `
   .col-fpts {
     font-size: 13px;
     font-weight: 700;
-    color: #f59e0b;
+    color: #1e3a8a;
     text-align: center;
   }
   .col-fpts.live {
@@ -1192,7 +1192,7 @@ const styles = `
   .data-loading {
     text-align: center;
     padding: 12px;
-    color: #666;
+    color: #9ca3af;
     font-size: 13px;
   }
 
@@ -1200,15 +1200,15 @@ const styles = `
   .empty-state {
     text-align: center;
     padding: 80px 20px;
-    color: #888;
+    color: #6b7280;
   }
   .empty-icon { font-size: 64px; margin-bottom: 16px; }
   .back-link {
     display: inline-block;
     margin-top: 16px;
     padding: 10px 24px;
-    background: #f59e0b;
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     border-radius: 8px;
     text-decoration: none;
     font-weight: 600;
@@ -1218,7 +1218,7 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 
   /* Mobile responsive */

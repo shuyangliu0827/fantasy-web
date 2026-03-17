@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -62,8 +62,8 @@ export default function StandingsPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container">
           <p>{t("加载中...", "Loading...")}</p>
         </div>
@@ -74,8 +74,8 @@ export default function StandingsPage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <p>{t("联赛不存在", "League not found")}</p>
         </div>
@@ -85,8 +85,8 @@ export default function StandingsPage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
       
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -166,8 +166,8 @@ export default function StandingsPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
 
   .league-header-inner {
@@ -191,8 +191,8 @@ const styles = `
   }
 
   .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
     position: sticky;
     top: 60px;
     z-index: 40;
@@ -212,7 +212,7 @@ const styles = `
     align-items: center;
     gap: 6px;
     padding: 14px 16px;
-    color: #888;
+    color: #6b7280;
     text-decoration: none;
     font-size: 14px;
     border-bottom: 2px solid transparent;
@@ -220,17 +220,17 @@ const styles = `
   }
 
   .league-nav-link:hover {
-    color: #fff;
+    color: #111827;
   }
 
   .league-nav-link.active {
-    color: #f59e0b;
-    border-bottom-color: #f59e0b;
+    color: #1e3a8a;
+    border-bottom-color: #1e3a8a;
   }
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
 
@@ -246,19 +246,19 @@ const styles = `
   .page-header h1 {
     font-size: 24px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
     margin: 0 0 8px 0;
   }
 
   .page-header p {
     font-size: 14px;
-    color: #888;
+    color: #6b7280;
     margin: 0;
   }
 
   .standings-table-container {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     overflow: hidden;
   }
@@ -273,15 +273,15 @@ const styles = `
     text-align: left;
     font-size: 12px;
     font-weight: 600;
-    color: #888;
+    color: #6b7280;
     text-transform: uppercase;
-    background: #1a1a1a;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .standings-table td {
     padding: 14px 16px;
-    border-bottom: 1px solid #1a1a1a;
+    border-bottom: 1px solid #f3f4f6;
   }
 
   .standings-table tr:last-child td {
@@ -289,7 +289,7 @@ const styles = `
   }
 
   .standings-table tr:hover {
-    background: rgba(245, 158, 11, 0.05);
+    background: #f8fafc;
   }
 
   .rank-col {
@@ -306,22 +306,22 @@ const styles = `
     font-size: 13px;
     font-weight: 700;
     background: #333;
-    color: #fff;
+    color: #111827;
   }
 
   .rank-badge.rank-1 {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
   }
 
   .rank-badge.rank-2 {
     background: linear-gradient(135deg, #94a3b8, #64748b);
-    color: #000;
+    color: #fff;
   }
 
   .rank-badge.rank-3 {
     background: linear-gradient(135deg, #cd7f32, #a0522d);
-    color: #fff;
+    color: #111827;
   }
 
   .team-col {
@@ -338,8 +338,8 @@ const styles = `
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     font-size: 16px;
     font-weight: 700;
     display: flex;
@@ -356,24 +356,24 @@ const styles = `
   .team-name {
     font-size: 14px;
     font-weight: 600;
-    color: #fff;
+    color: #111827;
   }
 
   .owner-name {
     font-size: 12px;
-    color: #888;
+    color: #6b7280;
   }
 
   .stat {
     font-size: 14px;
-    color: #ccc;
+    color: #374151;
     text-align: center;
   }
 
   .empty-state {
     text-align: center;
     padding: 60px 20px;
-    color: #888;
+    color: #6b7280;
   }
 
   .loading-container, .error-container {
@@ -381,7 +381,7 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 
   @media (max-width: 768px) {

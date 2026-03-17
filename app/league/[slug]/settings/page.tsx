@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -92,8 +92,8 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -102,8 +102,8 @@ export default function SettingsPage() {
 
   if (!league || !isOwner) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <h2>{t("无权访问", "Access Denied")}</h2>
           <Link href={`/league/${slug}`} className="back-link">{t("返回联赛", "Back")}</Link>
@@ -114,8 +114,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
       
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -214,39 +214,39 @@ export default function SettingsPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
   .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .league-title { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-size: 20px; font-weight: 600; }
   .league-icon { font-size: 28px; }
-  .league-nav { background: #111; border-bottom: 1px solid #222; position: sticky; top: 60px; z-index: 40; }
+  .league-nav { background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 60px; z-index: 40; }
   .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
-  .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #888; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #6b7280; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
   .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
-  .page-content { min-height: calc(100vh - 200px); background: #0a0a0a; padding: 24px 16px; }
+  .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
+  .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 700px; margin: 0 auto; }
   h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 24px 0; }
-  .settings-section { background: #111; border: 1px solid #222; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-  .settings-section h2 { font-size: 16px; font-weight: 600; color: #fff; margin: 0 0 20px 0; padding-bottom: 12px; border-bottom: 1px solid #222; }
+  .settings-section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .settings-section h2 { font-size: 16px; font-weight: 600; color: #fff; margin: 0 0 20px 0; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
   .form-group { margin-bottom: 20px; }
-  .form-group label { display: block; font-size: 14px; color: #ccc; margin-bottom: 8px; }
-  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; }
-  .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #f59e0b; }
+  .form-group label { display: block; font-size: 14px; color: #374151; margin-bottom: 8px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 12px 16px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; color: #fff; font-size: 14px; }
+  .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #1e3a8a; }
   .radio-group { display: flex; gap: 12px; }
-  .radio-option { flex: 1; display: flex; align-items: center; gap: 10px; padding: 16px; background: #1a1a1a; border: 2px solid #333; border-radius: 10px; cursor: pointer; }
-  .radio-option.selected { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+  .radio-option { flex: 1; display: flex; align-items: center; gap: 10px; padding: 16px; background: #f9fafb; border: 2px solid #e5e7eb; border-radius: 10px; cursor: pointer; }
+  .radio-option.selected { border-color: #1e3a8a; background: #eff6ff; }
   .radio-option input { display: none; }
   .actions-bar { display: flex; justify-content: flex-end; margin-bottom: 40px; }
-  .save-btn { padding: 14px 32px; background: #f59e0b; border: none; border-radius: 8px; color: #000; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .save-btn { padding: 14px 32px; background: #1e3a8a; border: none; border-radius: 8px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
   .save-btn:disabled { opacity: 0.6; }
   .danger-zone { padding: 24px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; }
   .danger-zone h2 { font-size: 16px; color: #ef4444; margin: 0 0 8px 0; }
-  .danger-zone p { font-size: 14px; color: #888; margin: 0 0 16px 0; }
+  .danger-zone p { font-size: 14px; color: #6b7280; margin: 0 0 16px 0; }
   .delete-btn { padding: 12px 24px; background: transparent; border: 1px solid #ef4444; border-radius: 8px; color: #ef4444; cursor: pointer; }
   .delete-btn:hover { background: #ef4444; color: #fff; }
-  .loading-container, .error-container { min-height: 50vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #888; }
+  .loading-container, .error-container { min-height: 50vh; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #6b7280; }
   .error-container h2 { color: #fff; margin-bottom: 16px; }
-  .back-link { color: #f59e0b; }
+  .back-link { color: #1e3a8a; }
 `;
