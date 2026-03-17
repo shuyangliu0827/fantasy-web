@@ -39,8 +39,16 @@ export default function NewPostPage() {
   const [uploadProgress, setUploadProgress] = useState("");
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   function handleFilesSelected(files: FileList | null) {
     if (!files) return;
@@ -144,27 +152,27 @@ export default function NewPostPage() {
 
       {/* Header */}
       <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e2e8f0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", gap: 32 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px", height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32 }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
             <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
           </Link>
-          <nav style={{ display: "flex", gap: 2, flex: 1, overflow: "hidden" }}>
+          <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
             {NAV_ITEMS.map(item => (
               <Link key={item.href} href={item.href} style={{ padding: "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500, color: "#64748b", textDecoration: "none", whiteSpace: "nowrap" }}>
                 {lang === "zh" ? item.labelZh : item.labelEn}
               </Link>
             ))}
           </nav>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-            <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
+            <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: isMobile ? "6px 9px" : "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: isMobile ? 12 : 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
               中 / EN
             </button>
-            <Link href={`/u/${user.username}`} style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Link href={`/u/${user.username}`} style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, textDecoration: "none" }}>
+              <div style={{ width: isMobile ? 30 : 32, height: isMobile ? 30 : 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {user.name?.[0]?.toUpperCase()}
               </div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{t("我的主页", "My Profile")}</span>
+              {!isMobile && <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{t("我的主页", "My Profile")}</span>}
             </Link>
           </div>
         </div>
@@ -172,17 +180,17 @@ export default function NewPostPage() {
 
       {/* Page toolbar */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "10px 10px" : "0 24px", minHeight: isMobile ? 0 : 56, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Link href="/discover" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748b", textDecoration: "none", fontWeight: 500, padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 7, background: "#f8fafc" }}>
             ← {t("返回发现", "Back to Discover")}
           </Link>
-          <h1 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", margin: 0, flex: 1 }}>
+          <h1 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", margin: 0, flex: 1, minWidth: isMobile ? "100%" : "auto", order: isMobile ? 2 : 0 }}>
             {t("创建内容", "Create Post")}
           </h1>
           <button
             onClick={() => router.push("/discover")}
             disabled={submitting}
-            style={{ padding: "8px 20px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
+            style={{ padding: isMobile ? "8px 14px" : "8px 20px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
           >
             {t("存为草稿", "Save Draft")}
           </button>
@@ -190,7 +198,7 @@ export default function NewPostPage() {
             onClick={onSubmit}
             disabled={submitting || images.length === 0 || !title.trim()}
             style={{
-              padding: "8px 24px",
+              padding: isMobile ? "8px 16px" : "8px 24px",
               background: submitting || images.length === 0 || !title.trim() ? "#94a3b8" : "#1e3a8a",
               border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700,
               cursor: submitting || images.length === 0 || !title.trim() ? "not-allowed" : "pointer",
@@ -203,7 +211,7 @@ export default function NewPostPage() {
       </div>
 
       {/* Main content */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 24px 64px", display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "14px 10px 36px" : "24px 24px 64px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 320px", gap: isMobile ? 14 : 24 }}>
 
         {/* Left: editor */}
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -264,7 +272,7 @@ export default function NewPostPage() {
           </div>
 
           {/* Title */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "20px 24px", marginBottom: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("标题", "Title")}</div>
             <div style={{ position: "relative" }}>
               <input
@@ -286,7 +294,7 @@ export default function NewPostPage() {
           </div>
 
           {/* Body */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "20px 24px", marginBottom: 16, marginTop: 4 }}>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16, marginTop: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("正文内容", "Body")}</div>
             <div style={{ position: "relative" }}>
               <textarea
@@ -310,7 +318,7 @@ export default function NewPostPage() {
           </div>
 
           {/* Tags */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "20px 24px", marginBottom: 16, marginTop: 4 }}>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16, marginTop: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>{t("话题标签", "Hashtags")}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {tags.map(tg => (
@@ -343,9 +351,9 @@ export default function NewPostPage() {
           </div>
 
           {/* Visibility */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: "20px 24px", marginTop: 4 }}>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginTop: 4 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>{t("可见范围", "Visibility")}</div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {([
                 { key: "public", zh: "公开", en: "Public" },
                 { key: "followers", zh: "仅关注者", en: "Followers" },
@@ -378,7 +386,7 @@ export default function NewPostPage() {
         </div>
 
         {/* Right: preview panel */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, order: isMobile ? -1 : 0 }}>
 
           {/* Preview card */}
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 20 }}>
