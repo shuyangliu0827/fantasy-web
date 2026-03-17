@@ -170,7 +170,7 @@ export default function SignupPage() {
             {t("创建账号", "Create Account")}
           </h2>
           <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 32px 0" }}>
-            {t("开始你的幻想篮球之旅", "Begin your fantasy basketball journey")}
+            {t("开始你的范特西篮球之旅", "Begin your fantasy basketball journey")}
           </p>
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>

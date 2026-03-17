@@ -244,7 +244,7 @@ export default function HomePage() {
             {/* Description */}
             <p style={{ margin: "22px 0 36px", fontSize: 16, lineHeight: 1.75, color: "#64748b", maxWidth: 430 }}>
               {t(
-                "中国首个专业幻想篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
+                "中国首个专业范特西篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
                 "China's first professional fantasy basketball platform. AI rankings, live data, deep analysis — so you nail every pick."
               )}
             </p>

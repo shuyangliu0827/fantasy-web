@@ -19,7 +19,7 @@ const CARDS = [
     num: "01",
     icon: "📋",
     iconBg: "#dbeafe",
-    titleZh: "什么是幻想篮球?",
+    titleZh: "什么是范特西篮球?",
     titleEn: "What is Fantasy Basketball?",
     descZh: "你扮演一支NBA球队的GM，通过选秀挑选真实球员组建梦之队。球员在现实比赛中的表现直接转化为你的幻想得分。",
     descEn: "You're the GM of an NBA team, drafting real players to build your dream squad. Real game performances convert directly to your fantasy points.",
@@ -73,7 +73,7 @@ export default function HowToPlayPage() {
       {/* Hero */}
       <div style={{ background: "#fff", padding: "56px 32px 48px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
         <h1 style={{ fontSize: 40, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>
-          {t("欢迎来到幻想篮球", "Welcome to Fantasy Basketball")}
+          {t("欢迎来到范特西篮球", "Welcome to Fantasy Basketball")}
         </h1>
         <p style={{ fontSize: 16, color: "#6b7280", margin: "0 0 40px 0" }}>
           {t("不懂也没关系，5分钟读懂规则，立刻开始你的第一次选秀。", "No experience needed — 5 minutes to learn the rules and start your first draft.")}

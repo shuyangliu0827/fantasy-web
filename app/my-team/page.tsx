@@ -197,7 +197,7 @@ export default function MyTeamPage() {
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", padding: "40px 24px" }}>
           <div style={{ fontSize: 52, marginBottom: 16 }}>🏆</div>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>{t("还没有球队", "No Team Yet")}</h1>
-          <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 28px 0" }}>{t("创建你的第一支幻想篮球队开始比赛！", "Create your first Fantasy basketball team to get started!")}</p>
+          <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 28px 0" }}>{t("创建你的第一支范特西篮球队开始比赛！", "Create your first Fantasy basketball team to get started!")}</p>
           <button onClick={() => setShowCreateTeam(true)} style={{ padding: "12px 28px", fontSize: 15, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: FONT }}>
             {t("创建球队", "Create Team")}
           </button>

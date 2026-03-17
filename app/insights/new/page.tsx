@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createInsight, getSessionUser, uploadImage } from "@/lib/store";
 import Header from "@/components/Header";
+import { useLang } from "@/lib/lang";
+
+const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
 type ImageItem = {
   id: string;
@@ -13,6 +16,7 @@ type ImageItem = {
 
 export default function NewInsightPage() {
   const router = useRouter();
+  const { t } = useLang();
   const user = getSessionUser();
 
   const [title, setTitle] = useState("");
@@ -26,31 +30,22 @@ export default function NewInsightPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 添加图片
   function handleFilesSelected(files: FileList | null) {
     if (!files) return;
-    
     const newImages: ImageItem[] = [];
     const remaining = 9 - images.length;
-    
     for (let i = 0; i < Math.min(files.length, remaining); i++) {
       const file = files[i];
       if (!file.type.startsWith("image/")) continue;
-      if (file.size > 10 * 1024 * 1024) {
-        setError("图片大小不能超过 10MB");
-        continue;
-      }
-      
+      if (file.size > 10 * 1024 * 1024) { setError(t("图片大小不能超过 10MB", "Image must be under 10MB")); continue; }
       const id = `img_${Date.now()}_${i}`;
       const preview = URL.createObjectURL(file);
       newImages.push({ id, file, preview });
     }
-    
     setImages((prev) => [...prev, ...newImages]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  // 删除图片
   function removeImage(id: string) {
     setImages((prev) => {
       const item = prev.find((img) => img.id === id);
@@ -59,62 +54,47 @@ export default function NewInsightPage() {
     });
   }
 
-  // 移动图片（排序）
   function moveImage(id: string, direction: "left" | "right") {
     setImages((prev) => {
       const idx = prev.findIndex((img) => img.id === id);
       if (idx === -1) return prev;
-      
       const newIdx = direction === "left" ? idx - 1 : idx + 1;
       if (newIdx < 0 || newIdx >= prev.length) return prev;
-      
       const newArr = [...prev];
       [newArr[idx], newArr[newIdx]] = [newArr[newIdx], newArr[idx]];
       return newArr;
     });
   }
 
-  // 添加标签
   function addTag(raw: string) {
-    const t = raw.trim();
-    if (!t || t.length > 16 || tags.includes(t) || tags.length >= 5) return;
-    setTags((prev) => [...prev, t]);
+    const tg = raw.trim();
+    if (!tg || tg.length > 16 || tags.includes(tg) || tags.length >= 5) return;
+    setTags((prev) => [...prev, tg]);
   }
 
-  function removeTag(t: string) {
-    setTags((prev) => prev.filter((x) => x !== t));
+  function removeTag(tg: string) {
+    setTags((prev) => prev.filter((x) => x !== tg));
   }
 
-  // 提交
   async function onSubmit() {
     if (!user) {
-      alert("需要登录后才能发布");
+      alert(t("需要登录后才能发布", "Login required to post"));
       router.push("/auth/login");
       return;
     }
-
-    if (!title.trim()) {
-      setError("请输入标题");
-      return;
-    }
-
-    if (images.length === 0) {
-      setError("请至少上传一张图片");
-      return;
-    }
+    if (!title.trim()) { setError(t("请输入标题", "Title is required")); return; }
+    if (images.length === 0) { setError(t("请至少上传一张图片", "Please upload at least one image")); return; }
 
     setSubmitting(true);
     setError(null);
 
     try {
-      // 1. 上传所有图片
       const uploadedUrls: string[] = [];
-      
       for (let i = 0; i < images.length; i++) {
-        setUploadProgress(`正在上传图片 ${i + 1}/${images.length}...`);
+        setUploadProgress(t(`正在上传图片 ${i + 1}/${images.length}...`, `Uploading image ${i + 1}/${images.length}...`));
         const res = await uploadImage(images[i].file, "posts");
         if (!res.ok) {
-          setError(res.error || "图片上传失败");
+          setError(res.error || t("图片上传失败", "Image upload failed"));
           setSubmitting(false);
           setUploadProgress("");
           return;
@@ -122,30 +102,27 @@ export default function NewInsightPage() {
         uploadedUrls.push(res.url);
       }
 
-      setUploadProgress("正在发布...");
+      setUploadProgress(t("正在发布...", "Publishing..."));
 
-      // 2. 创建 insight（第一张图作为封面）
       const res = await createInsight({
         title: title.trim(),
-        body: body.trim() || " ", // body 不能为空
-        cover_url: uploadedUrls[0], // 第一张作为封面
-        images: uploadedUrls, // 所有图片
+        body: body.trim() || " ",
+        cover_url: uploadedUrls[0],
+        images: uploadedUrls,
         tags: tags.length > 0 ? tags : undefined,
       });
 
       if (!res.ok) {
-        setError(res.error || "发布失败");
+        setError(res.error || t("发布失败", "Publish failed"));
         setSubmitting(false);
         setUploadProgress("");
         return;
       }
 
-      // 清理预览 URL
       images.forEach((img) => URL.revokeObjectURL(img.preview));
-      
-      router.push("/");
-    } catch (err) {
-      setError("发布失败，请重试");
+      router.push("/insights");
+    } catch {
+      setError(t("发布失败，请重试", "Publish failed, please try again"));
       setSubmitting(false);
       setUploadProgress("");
     }
@@ -155,655 +132,371 @@ export default function NewInsightPage() {
 
   if (!user) {
     return (
-      <div className="app">
+      <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: FONT }}>
         <Header />
-        <main className="page">
-          <div className="login-prompt">
-            <div className="icon">🔒</div>
-            <h2>需要登录</h2>
-            <p>登录后即可发布内容</p>
-            <button onClick={() => router.push("/auth/login")} className="login-btn">
-              去登录
-            </button>
-          </div>
-        </main>
-        <style jsx>{styles}</style>
+        <div style={{ maxWidth: 480, margin: "100px auto", textAlign: "center", background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: "48px 40px", boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>{t("需要登录", "Login Required")}</h2>
+          <p style={{ fontSize: 14, color: "#64748b", margin: "0 0 28px" }}>{t("登录后即可发布笔记", "Login to publish your notes")}</p>
+          <button
+            onClick={() => router.push("/auth/login")}
+            style={{ padding: "12px 32px", background: "#1e3a8a", color: "#fff", borderRadius: 10, border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
+          >
+            {t("去登录", "Login")}
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="app">
+    <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: FONT }}>
       <Header />
-      <main className="page">
-        <div className="container">
-          {/* 头部 */}
-          <div className="header">
-            <h1>发布笔记</h1>
-            <p>分享你的 Fantasy 篮球心得</p>
+
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "36px 24px 64px" }}>
+        {/* Page header */}
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", margin: "0 0 6px", letterSpacing: "-0.5px" }}>
+            {t("发布笔记", "New Post")}
+          </h1>
+          <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>
+            {t("分享你的范特西篮球心得", "Share your fantasy basketball insights")}
+          </p>
+        </div>
+
+        <div style={{
+          background: "#fff",
+          borderRadius: 20,
+          border: "1px solid #e2e8f0",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 0,
+          overflow: "hidden",
+        }}>
+          {/* Left: image upload */}
+          <div style={{ padding: 28, borderRight: "1px solid #f1f5f9" }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => handleFilesSelected(e.target.files)}
+              style={{ display: "none" }}
+              disabled={submitting}
+            />
+
+            {images.length === 0 ? (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={submitting}
+                style={{
+                  width: "100%",
+                  minHeight: 420,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 14,
+                  background: "#f8fafc",
+                  border: "2px dashed #cbd5e1",
+                  borderRadius: 14,
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  fontFamily: FONT,
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "#1e3a8a";
+                  (e.currentTarget as HTMLButtonElement).style.background = "#eff6ff";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "#cbd5e1";
+                  (e.currentTarget as HTMLButtonElement).style.background = "#f8fafc";
+                }}
+              >
+                <div style={{ fontSize: 44 }}>📷</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: "#0f172a" }}>{t("点击上传图片", "Click to upload")}</div>
+                <div style={{ fontSize: 13, color: "#94a3b8" }}>{t("最多 9 张，第一张为封面", "Up to 9 images, first is cover")}</div>
+              </button>
+            ) : (
+              <div>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 8,
+                }}>
+                  {images.map((img, idx) => (
+                    <div key={img.id} style={{
+                      position: "relative",
+                      aspectRatio: "1",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      background: "#f1f5f9",
+                      border: "1px solid #e2e8f0",
+                    }}>
+                      <img src={img.preview} alt={`图片 ${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      {idx === 0 && (
+                        <div style={{
+                          position: "absolute", top: 6, left: 6,
+                          padding: "2px 8px",
+                          background: "#1e3a8a",
+                          color: "#fff",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          borderRadius: 4,
+                        }}>
+                          {t("封面", "Cover")}
+                        </div>
+                      )}
+                      <div style={{
+                        position: "absolute", bottom: 0, left: 0, right: 0,
+                        display: "flex", justifyContent: "center", gap: 4,
+                        padding: "6px",
+                        background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                        opacity: 0,
+                        transition: "opacity 0.2s",
+                      }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = "1"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.opacity = "0"; }}
+                      >
+                        {idx > 0 && (
+                          <button onClick={() => moveImage(img.id, "left")} style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", fontSize: 12, cursor: "pointer", fontFamily: FONT }}>←</button>
+                        )}
+                        {idx < images.length - 1 && (
+                          <button onClick={() => moveImage(img.id, "right")} style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(255,255,255,0.2)", color: "#fff", border: "none", fontSize: 12, cursor: "pointer", fontFamily: FONT }}>→</button>
+                        )}
+                        <button onClick={() => removeImage(img.id)} style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(239,68,68,0.8)", color: "#fff", border: "none", fontSize: 12, cursor: "pointer", fontFamily: FONT }}>×</button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {images.length < 9 && (
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={submitting}
+                      style={{
+                        aspectRatio: "1",
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+                        background: "#f8fafc",
+                        border: "2px dashed #cbd5e1",
+                        borderRadius: 10,
+                        color: "#94a3b8",
+                        fontSize: 22,
+                        cursor: "pointer",
+                        fontFamily: FONT,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <span>+</span>
+                      <span style={{ fontSize: 11 }}>{t("添加", "Add")}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="content">
-            {/* 左侧：图片上传区 */}
-            <div className="left-panel">
-              <div className="upload-section">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => handleFilesSelected(e.target.files)}
-                  style={{ display: "none" }}
-                  disabled={submitting}
-                />
+          {/* Right: form */}
+          <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* Title */}
+            <div style={{ position: "relative" }}>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("填写标题，吸引更多人...", "Write a compelling title...")}
+                maxLength={50}
+                disabled={submitting}
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  fontSize: 17,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 10,
+                  outline: "none",
+                  fontFamily: FONT,
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => { (e.target as HTMLInputElement).style.borderColor = "#1e3a8a"; (e.target as HTMLInputElement).style.background = "#fff"; }}
+                onBlur={(e) => { (e.target as HTMLInputElement).style.borderColor = "#e2e8f0"; (e.target as HTMLInputElement).style.background = "#f8fafc"; }}
+              />
+              <div style={{ position: "absolute", right: 12, bottom: -18, fontSize: 11, color: "#94a3b8" }}>{title.length}/50</div>
+            </div>
 
-                {images.length === 0 ? (
-                  <button
-                    className="upload-placeholder"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={submitting}
-                  >
-                    <div className="upload-icon">📷</div>
-                    <div className="upload-text">点击上传图片</div>
-                    <div className="upload-hint">最多 9 张，第一张为封面</div>
+            {/* Body */}
+            <div style={{ marginTop: 4 }}>
+              <textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={t("分享你的想法...（可选）", "Share your thoughts... (optional)")}
+                rows={6}
+                disabled={submitting}
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  fontSize: 14,
+                  color: "#374151",
+                  background: "#f8fafc",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 10,
+                  outline: "none",
+                  resize: "vertical",
+                  minHeight: 120,
+                  fontFamily: FONT,
+                  lineHeight: 1.6,
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "#1e3a8a"; (e.target as HTMLTextAreaElement).style.background = "#fff"; }}
+                onBlur={(e) => { (e.target as HTMLTextAreaElement).style.borderColor = "#e2e8f0"; (e.target as HTMLTextAreaElement).style.background = "#f8fafc"; }}
+              />
+            </div>
+
+            {/* Tags */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{t("添加标签", "Tags")}</span>
+                <span style={{ fontSize: 12, color: "#94a3b8" }}>{t("（最多 5 个）", "(max 5)")}</span>
+              </div>
+
+              {tags.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {tags.map((tg) => (
+                    <button key={tg} onClick={() => removeTag(tg)} style={{
+                      padding: "5px 12px",
+                      background: "#eff6ff",
+                      border: "1.5px solid #bfdbfe",
+                      borderRadius: 999,
+                      color: "#1e3a8a",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: FONT,
+                    }}>
+                      #{tg} <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                {POPULAR_TAGS.filter((tg) => !tags.includes(tg)).map((tg) => (
+                  <button key={tg} onClick={() => addTag(tg)} disabled={tags.length >= 5} style={{
+                    padding: "5px 12px",
+                    background: "#f1f5f9",
+                    border: "1.5px solid #e2e8f0",
+                    borderRadius: 999,
+                    color: "#64748b",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: tags.length >= 5 ? "not-allowed" : "pointer",
+                    opacity: tags.length >= 5 ? 0.5 : 1,
+                    fontFamily: FONT,
+                    transition: "all 0.15s",
+                  }}>
+                    #{tg}
                   </button>
-                ) : (
-                  <div className="images-grid">
-                    {images.map((img, idx) => (
-                      <div key={img.id} className="image-item">
-                        <img src={img.preview} alt={`图片 ${idx + 1}`} />
-                        {idx === 0 && <div className="cover-badge">封面</div>}
-                        <div className="image-actions">
-                          {idx > 0 && (
-                            <button onClick={() => moveImage(img.id, "left")} title="左移">
-                              ←
-                            </button>
-                          )}
-                          {idx < images.length - 1 && (
-                            <button onClick={() => moveImage(img.id, "right")} title="右移">
-                              →
-                            </button>
-                          )}
-                          <button onClick={() => removeImage(img.id)} className="delete-btn" title="删除">
-                            ×
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    {images.length < 9 && (
-                      <button
-                        className="add-image-btn"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={submitting}
-                      >
-                        <span>+</span>
-                        <span className="add-text">添加</span>
-                      </button>
-                    )}
-                  </div>
-                )}
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  placeholder={t("自定义标签", "Custom tag")}
+                  maxLength={16}
+                  disabled={submitting || tags.length >= 5}
+                  style={{
+                    flex: 1,
+                    padding: "9px 12px",
+                    fontSize: 13,
+                    color: "#374151",
+                    background: "#f8fafc",
+                    border: "1.5px solid #e2e8f0",
+                    borderRadius: 8,
+                    outline: "none",
+                    fontFamily: FONT,
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); addTag(tagInput); setTagInput(""); }
+                  }}
+                />
+                <button
+                  onClick={() => { addTag(tagInput); setTagInput(""); }}
+                  disabled={submitting || tags.length >= 5 || !tagInput.trim()}
+                  style={{
+                    padding: "9px 16px",
+                    background: "#f1f5f9",
+                    border: "1.5px solid #e2e8f0",
+                    borderRadius: 8,
+                    color: "#374151",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: FONT,
+                  }}
+                >
+                  {t("添加", "Add")}
+                </button>
               </div>
             </div>
 
-            {/* 右侧：表单区 */}
-            <div className="right-panel">
-              {/* 标题 */}
-              <div className="form-group">
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="填写标题，吸引更多人..."
-                  maxLength={50}
-                  disabled={submitting}
-                  className="title-input"
-                />
-                <div className="char-count">{title.length}/50</div>
+            {/* Error / progress */}
+            {error && (
+              <div style={{ padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>
+                {error}
               </div>
-
-              {/* 正文 */}
-              <div className="form-group">
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="分享你的想法...（可选）"
-                  rows={6}
-                  disabled={submitting}
-                  className="body-input"
-                />
+            )}
+            {uploadProgress && (
+              <div style={{ padding: "10px 14px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, color: "#1e3a8a", fontSize: 13, textAlign: "center" }}>
+                {uploadProgress}
               </div>
+            )}
 
-              {/* 标签 */}
-              <div className="form-group">
-                <div className="tags-header">
-                  <span className="label">添加标签</span>
-                  <span className="hint">（最多 5 个）</span>
-                </div>
-                
-                <div className="selected-tags">
-                  {tags.map((t) => (
-                    <button key={t} onClick={() => removeTag(t)} className="tag selected">
-                      #{t} <span className="remove">×</span>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="popular-tags">
-                  {POPULAR_TAGS.filter((t) => !tags.includes(t)).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => addTag(t)}
-                      className="tag"
-                      disabled={tags.length >= 5}
-                    >
-                      #{t}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="tag-input-row">
-                  <input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    placeholder="自定义标签"
-                    maxLength={16}
-                    disabled={submitting || tags.length >= 5}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTag(tagInput);
-                        setTagInput("");
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      addTag(tagInput);
-                      setTagInput("");
-                    }}
-                    disabled={submitting || tags.length >= 5 || !tagInput.trim()}
-                  >
-                    添加
-                  </button>
-                </div>
-              </div>
-
-              {/* 错误提示 */}
-              {error && <div className="error">{error}</div>}
-
-              {/* 上传进度 */}
-              {uploadProgress && <div className="progress">{uploadProgress}</div>}
-
-              {/* 提交按钮 */}
-              <div className="actions">
-                <button
-                  onClick={() => router.push("/")}
-                  disabled={submitting}
-                  className="cancel-btn"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={onSubmit}
-                  disabled={submitting || images.length === 0 || !title.trim()}
-                  className="submit-btn"
-                >
-                  {submitting ? "发布中..." : "发布笔记"}
-                </button>
-              </div>
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 12, marginTop: "auto", paddingTop: 8, borderTop: "1px solid #f1f5f9" }}>
+              <button
+                onClick={() => router.push("/insights")}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  padding: "13px",
+                  background: "#fff",
+                  border: "1.5px solid #e2e8f0",
+                  borderRadius: 10,
+                  color: "#64748b",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                }}
+              >
+                {t("取消", "Cancel")}
+              </button>
+              <button
+                onClick={onSubmit}
+                disabled={submitting || images.length === 0 || !title.trim()}
+                style={{
+                  flex: 2,
+                  padding: "13px",
+                  background: submitting || images.length === 0 || !title.trim() ? "#94a3b8" : "#1e3a8a",
+                  border: "none",
+                  borderRadius: 10,
+                  color: "#fff",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: submitting || images.length === 0 || !title.trim() ? "not-allowed" : "pointer",
+                  fontFamily: FONT,
+                  transition: "background 0.15s",
+                }}
+              >
+                {submitting ? t("发布中...", "Publishing...") : t("发布笔记", "Publish")}
+              </button>
             </div>
           </div>
         </div>
-      </main>
-      <style jsx>{styles}</style>
+      </div>
     </div>
   );
 }
-
-const styles = `
-  .page {
-    min-height: 100vh;
-    background: #0a0a0a;
-    padding: 24px 16px 60px;
-  }
-
-  .container {
-    max-width: 1000px;
-    margin: 0 auto;
-  }
-
-  .header {
-    margin-bottom: 24px;
-  }
-
-  .header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    color: #f59e0b;
-    margin: 0 0 4px 0;
-  }
-
-  .header p {
-    font-size: 14px;
-    color: #666;
-    margin: 0;
-  }
-
-  .content {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 16px;
-    padding: 24px;
-  }
-
-  /* 左侧图片区 */
-  .left-panel {
-    min-height: 400px;
-  }
-
-  .upload-section {
-    height: 100%;
-  }
-
-  .upload-placeholder {
-    width: 100%;
-    height: 100%;
-    min-height: 400px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    background: #1a1a1a;
-    border: 2px dashed #333;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .upload-placeholder:hover {
-    border-color: #f59e0b;
-    background: #1f1f1f;
-  }
-
-  .upload-icon {
-    font-size: 48px;
-  }
-
-  .upload-text {
-    font-size: 16px;
-    color: #fff;
-    font-weight: 500;
-  }
-
-  .upload-hint {
-    font-size: 13px;
-    color: #666;
-  }
-
-  .images-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-
-  .image-item {
-    position: relative;
-    aspect-ratio: 1;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #1a1a1a;
-  }
-
-  .image-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .cover-badge {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    padding: 2px 8px;
-    background: #f59e0b;
-    color: #000;
-    font-size: 11px;
-    font-weight: 600;
-    border-radius: 4px;
-  }
-
-  .image-actions {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: center;
-    gap: 4px;
-    padding: 6px;
-    background: linear-gradient(transparent, rgba(0,0,0,0.8));
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .image-item:hover .image-actions {
-    opacity: 1;
-  }
-
-  .image-actions button {
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.2);
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .image-actions button:hover {
-    background: rgba(255,255,255,0.3);
-  }
-
-  .image-actions .delete-btn:hover {
-    background: #ef4444;
-  }
-
-  .add-image-btn {
-    aspect-ratio: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    background: #1a1a1a;
-    border: 2px dashed #333;
-    border-radius: 8px;
-    color: #666;
-    font-size: 24px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .add-image-btn:hover {
-    border-color: #f59e0b;
-    color: #f59e0b;
-  }
-
-  .add-text {
-    font-size: 12px;
-  }
-
-  /* 右侧表单区 */
-  .right-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .form-group {
-    position: relative;
-  }
-
-  .title-input {
-    width: 100%;
-    padding: 16px;
-    font-size: 18px;
-    font-weight: 600;
-    color: #fff;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 10px;
-    outline: none;
-  }
-
-  .title-input:focus {
-    border-color: #f59e0b;
-  }
-
-  .char-count {
-    position: absolute;
-    right: 12px;
-    bottom: -20px;
-    font-size: 12px;
-    color: #666;
-  }
-
-  .body-input {
-    width: 100%;
-    padding: 16px;
-    font-size: 15px;
-    color: #fff;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 10px;
-    outline: none;
-    resize: vertical;
-    min-height: 120px;
-    font-family: inherit;
-  }
-
-  .body-input:focus {
-    border-color: #f59e0b;
-  }
-
-  .tags-header {
-    margin-bottom: 10px;
-  }
-
-  .tags-header .label {
-    font-size: 14px;
-    color: #fff;
-    font-weight: 500;
-  }
-
-  .tags-header .hint {
-    font-size: 12px;
-    color: #666;
-    margin-left: 6px;
-  }
-
-  .selected-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  .popular-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .tag {
-    padding: 6px 12px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 16px;
-    color: #aaa;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .tag:hover {
-    border-color: #f59e0b;
-    color: #f59e0b;
-  }
-
-  .tag.selected {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: #f59e0b;
-    color: #f59e0b;
-  }
-
-  .tag .remove {
-    margin-left: 4px;
-    opacity: 0.6;
-  }
-
-  .tag-input-row {
-    display: flex;
-    gap: 8px;
-  }
-
-  .tag-input-row input {
-    flex: 1;
-    padding: 10px 14px;
-    font-size: 14px;
-    color: #fff;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 8px;
-    outline: none;
-  }
-
-  .tag-input-row input:focus {
-    border-color: #f59e0b;
-  }
-
-  .tag-input-row button {
-    padding: 10px 16px;
-    background: #333;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  .tag-input-row button:hover:not(:disabled) {
-    background: #444;
-  }
-
-  .tag-input-row button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .error {
-    padding: 12px 16px;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 8px;
-    color: #fca5a5;
-    font-size: 14px;
-  }
-
-  .progress {
-    padding: 12px 16px;
-    background: rgba(245, 158, 11, 0.15);
-    border: 1px solid rgba(245, 158, 11, 0.3);
-    border-radius: 8px;
-    color: #f59e0b;
-    font-size: 14px;
-    text-align: center;
-  }
-
-  .actions {
-    display: flex;
-    gap: 12px;
-    margin-top: auto;
-    padding-top: 16px;
-    border-top: 1px solid #222;
-  }
-
-  .cancel-btn {
-    flex: 1;
-    padding: 14px;
-    background: transparent;
-    border: 1px solid #333;
-    border-radius: 10px;
-    color: #aaa;
-    font-size: 15px;
-    cursor: pointer;
-  }
-
-  .cancel-btn:hover {
-    background: #1a1a1a;
-  }
-
-  .submit-btn {
-    flex: 2;
-    padding: 14px;
-    background: #f59e0b;
-    border: none;
-    border-radius: 10px;
-    color: #000;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .submit-btn:hover:not(:disabled) {
-    background: #d97706;
-  }
-
-  .submit-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* 登录提示 */
-  .login-prompt {
-    max-width: 400px;
-    margin: 80px auto;
-    text-align: center;
-    padding: 48px;
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 16px;
-  }
-
-  .login-prompt .icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-  }
-
-  .login-prompt h2 {
-    font-size: 20px;
-    color: #fff;
-    margin: 0 0 8px 0;
-  }
-
-  .login-prompt p {
-    font-size: 14px;
-    color: #666;
-    margin: 0 0 24px 0;
-  }
-
-  .login-btn {
-    padding: 12px 32px;
-    background: #f59e0b;
-    border: none;
-    border-radius: 8px;
-    color: #000;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  /* 响应式 */
-  @media (max-width: 768px) {
-    .content {
-      grid-template-columns: 1fr;
-    }
-
-    .left-panel {
-      min-height: 300px;
-    }
-
-    .upload-placeholder {
-      min-height: 300px;
-    }
-  }
-`;
