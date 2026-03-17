@@ -1093,19 +1093,61 @@
 
    // Lineup: { PG: playerId, SG: playerId, ... }
    export type LineupMap = Record<string, string>;
+   // Daily lineup: { "2026-03-17": { PG: playerId, ... }, "2026-03-18": { ... } }
+   export type DailyLineupMap = Record<string, LineupMap>;
 
-   export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
+   // Detect if data is old flat format (keys are slot names like "PG") vs new date-keyed format
+   function isOldFlatLineup(data: any): data is LineupMap {
+     if (!data || typeof data !== "object") return false;
+     const keys = Object.keys(data);
+     if (keys.length === 0) return false;
+     // Old format has slot keys like "PG", "SG", etc. New format has date keys like "2026-03-17"
+     return keys.some(k => ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"].includes(k));
+   }
+
+   // Migrate old flat lineup to new date-keyed format
+   function migrateFlatLineup(flat: LineupMap): DailyLineupMap {
+     const today = new Date();
+     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     return { [todayStr]: flat };
+   }
+
+   export function getDailyLineups(leagueId: string, teamId: string): DailyLineupMap {
      if (!canUseStorage()) return {};
-     return safeParse<LineupMap>(
+     const raw = safeParse<any>(
        localStorage.getItem(`bp_league_lineup_${leagueId}_${teamId}`), {}
      );
+     if (isOldFlatLineup(raw)) return migrateFlatLineup(raw);
+     return raw as DailyLineupMap;
+   }
+
+   export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
+     // Legacy compat: returns the most recent date's lineup or empty
+     const daily = getDailyLineups(leagueId, teamId);
+     const dates = Object.keys(daily).sort();
+     if (dates.length === 0) return {};
+     return daily[dates[dates.length - 1]];
+   }
+
+   export function getLineupForDate(leagueId: string, teamId: string, date: string): LineupMap {
+     const daily = getDailyLineups(leagueId, teamId);
+     return daily[date] || {};
+   }
+
+   export function setLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
+     if (!canUseStorage()) return;
+     const daily = getDailyLineups(leagueId, teamId);
+     daily[date] = lineup;
+     localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
+     // Sync full daily lineup map to Supabase (fire-and-forget)
+     supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
    }
 
    export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
-     if (!canUseStorage()) return;
-     localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
-     // Sync to Supabase (fire-and-forget)
-     supabase.from("fantasy_teams").update({ lineup_data: lineup }).eq("id", teamId).then(() => {});
+     // Legacy compat: saves as today's lineup
+     const today = new Date();
+     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     setLineupForDate(leagueId, teamId, todayStr, lineup);
    }
 
    // Fetch roster from Supabase (shared across users), falls back to localStorage
@@ -1134,23 +1176,30 @@
      return local;
    }
 
-   // Fetch lineup from Supabase (shared across users), falls back to localStorage
-   export async function fetchTeamLineupFromDB(leagueId: string, teamId: string): Promise<LineupMap> {
+   // Fetch daily lineup map from Supabase, falls back to localStorage
+   export async function fetchTeamLineupFromDB(leagueId: string, teamId: string): Promise<DailyLineupMap> {
      const { data, error } = await supabase
        .from("fantasy_teams")
        .select("lineup_data")
        .eq("id", teamId)
        .single();
      if (!error && data?.lineup_data && typeof data.lineup_data === "object" && Object.keys(data.lineup_data as object).length > 0) {
-       const lineup = data.lineup_data as LineupMap;
+       let daily: DailyLineupMap;
+       if (isOldFlatLineup(data.lineup_data)) {
+         // Migrate old flat format in DB
+         daily = migrateFlatLineup(data.lineup_data as LineupMap);
+         supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
+       } else {
+         daily = data.lineup_data as DailyLineupMap;
+       }
        // Update localStorage cache
        if (canUseStorage()) {
-         localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
+         localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
        }
-       return lineup;
+       return daily;
      }
      // Fallback to localStorage
-     const local = getTeamLineup(leagueId, teamId);
+     const local = getDailyLineups(leagueId, teamId);
      if (Object.keys(local).length > 0) {
        // Backfill Supabase
        supabase.from("fantasy_teams").update({ lineup_data: local }).eq("id", teamId).then(() => {});
@@ -1179,22 +1228,79 @@
      return result;
    }
 
-   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
-     const roster = getTeamRoster(leagueId, teamId);
+   // Build a single-day lineup: injured/DTD players go to bench, best PPG starters
+   export function buildAutoLineup(
+     roster: RosterPlayer[],
+     injuredPlayerIds: Set<string>,
+     positionOverrides?: Record<string, string>,
+   ): LineupMap {
      const lineup: LineupMap = {};
      const assigned = new Set<string>();
-
-     // Auto-assign: go through slots in order, pick best available player
      const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
-     for (const slot of slotOrder) {
-       const eligible = roster
-         .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
+
+     // First pass: assign healthy players to starter slots, injured to bench
+     const healthy = roster.filter(p => !injuredPlayerIds.has(p.id));
+     const injured = roster.filter(p => injuredPlayerIds.has(p.id));
+
+     // Fill starter slots with healthy players
+     const starterSlots = slotOrder.filter(s => !s.startsWith("BE"));
+     for (const slot of starterSlots) {
+       const eligible = healthy
+         .filter(p => !assigned.has(p.id) && isEligibleForSlot(positionOverrides?.[p.name] || p.position, slot))
          .sort((a, b) => b.ppg - a.ppg);
        if (eligible.length > 0) {
          lineup[slot] = eligible[0].id;
          assigned.add(eligible[0].id);
        }
      }
+
+     // Fill bench slots with remaining healthy + injured players
+     const benchSlots = slotOrder.filter(s => s.startsWith("BE"));
+     const remaining = [...healthy.filter(p => !assigned.has(p.id)), ...injured.filter(p => !assigned.has(p.id))];
+     for (const slot of benchSlots) {
+       const eligible = remaining
+         .filter(p => !assigned.has(p.id) && isEligibleForSlot(positionOverrides?.[p.name] || p.position, slot))
+         .sort((a, b) => b.ppg - a.ppg);
+       if (eligible.length > 0) {
+         lineup[slot] = eligible[0].id;
+         assigned.add(eligible[0].id);
+       }
+     }
+
+     return lineup;
+   }
+
+   // Auto-set lineup for today + next 6 days (7 days total).
+   // injuredPlayerIds: set of player IDs that are injured/DTD (should go to bench).
+   // Does NOT change past dates or dates beyond the 7-day window.
+   export function autoSetLineupWeek(
+     leagueId: string,
+     teamId: string,
+     injuredPlayerIds: Set<string>,
+     positionOverrides?: Record<string, string>,
+   ): DailyLineupMap {
+     const roster = getTeamRoster(leagueId, teamId);
+     const daily = getDailyLineups(leagueId, teamId);
+     const today = new Date();
+
+     for (let i = 0; i < 7; i++) {
+       const d = new Date(today);
+       d.setDate(today.getDate() + i);
+       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+       daily[dateStr] = buildAutoLineup(roster, injuredPlayerIds, positionOverrides);
+     }
+
+     if (canUseStorage()) {
+       localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
+     }
+     supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
+     return daily;
+   }
+
+   // Legacy compat: auto-set for today only
+   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
+     const roster = getTeamRoster(leagueId, teamId);
+     const lineup = buildAutoLineup(roster, new Set());
      setTeamLineup(leagueId, teamId, lineup);
      return lineup;
    }
@@ -1233,12 +1339,21 @@
        const dropIdx = roster.findIndex(p => p.id === dropPlayerId);
        if (dropIdx === -1) return { ok: false, error: "Drop player not found on roster" };
        roster.splice(dropIdx, 1);
-       // Also update lineup if dropped player was in it
-       const lineup = getTeamLineup(leagueId, teamId);
-       for (const [slot, pid] of Object.entries(lineup)) {
-         if (pid === dropPlayerId) delete lineup[slot];
+       // Remove dropped player from all daily lineups (today and future)
+       const daily = getDailyLineups(leagueId, teamId);
+       const today = new Date();
+       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       for (const [date, lineup] of Object.entries(daily)) {
+         if (date >= todayStr) {
+           for (const [slot, pid] of Object.entries(lineup)) {
+             if (pid === dropPlayerId) delete lineup[slot];
+           }
+         }
        }
-       setTeamLineup(leagueId, teamId, lineup);
+       if (canUseStorage()) {
+         localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
+       }
+       supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
      } else if (roster.length >= 13) {
        return { ok: false, error: "Roster is full (13 players). Drop a player first." };
      }
@@ -1273,12 +1388,25 @@
      if (idx === -1) return { ok: false, error: "Player not on roster" };
      roster.splice(idx, 1);
      setTeamRoster(leagueId, teamId, roster);
-     // Remove from lineup
-     const lineup = getTeamLineup(leagueId, teamId);
-     for (const [slot, pid] of Object.entries(lineup)) {
-       if (pid === playerId) delete lineup[slot];
+     // Remove from all daily lineups (today and future only, preserve past)
+     const daily = getDailyLineups(leagueId, teamId);
+     const today = new Date();
+     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     let changed = false;
+     for (const [date, lineup] of Object.entries(daily)) {
+       if (date >= todayStr) {
+         for (const [slot, pid] of Object.entries(lineup)) {
+           if (pid === playerId) {
+             delete lineup[slot];
+             changed = true;
+           }
+         }
+       }
      }
-     setTeamLineup(leagueId, teamId, lineup);
+     if (changed) {
+       localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
+       supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
+     }
      return { ok: true };
    }
 
@@ -1422,15 +1550,30 @@
          setTeamRoster(leagueId, trade.toTeamId, newToRoster),
        ]);
 
-       // Clean up lineups for traded players
-       for (const teamId of [trade.fromTeamId, trade.toTeamId]) {
-         const lineup = await fetchTeamLineupFromDB(leagueId, teamId);
-         const roster = teamId === trade.fromTeamId ? newFromRoster : newToRoster;
+       // Clean up lineups for traded players (today and future only)
+       const today = new Date();
+       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       for (const tId of [trade.fromTeamId, trade.toTeamId]) {
+         const daily = await fetchTeamLineupFromDB(leagueId, tId);
+         const roster = tId === trade.fromTeamId ? newFromRoster : newToRoster;
          const rosterIds = new Set(roster.map(p => p.id));
-         for (const [slot, pid] of Object.entries(lineup)) {
-           if (!rosterIds.has(pid)) delete lineup[slot];
+         let changed = false;
+         for (const [date, lineup] of Object.entries(daily)) {
+           if (date >= todayStr) {
+             for (const [slot, pid] of Object.entries(lineup)) {
+               if (!rosterIds.has(pid)) {
+                 delete lineup[slot];
+                 changed = true;
+               }
+             }
+           }
          }
-         setTeamLineup(leagueId, teamId, lineup);
+         if (changed) {
+           if (canUseStorage()) {
+             localStorage.setItem(`bp_league_lineup_${leagueId}_${tId}`, JSON.stringify(daily));
+           }
+           await supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", tId);
+         }
        }
      }
 

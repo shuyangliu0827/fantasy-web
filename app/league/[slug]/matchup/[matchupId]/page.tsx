@@ -18,6 +18,7 @@ import {
   LeagueMember,
   RosterPlayer,
   LineupMap,
+  DailyLineupMap,
 } from "@/lib/store";
 import {
   getWeekDates,
@@ -147,8 +148,8 @@ export default function MatchupDetailPage() {
   const [awayTeam, setAwayTeam] = useState<{ member: LeagueMember; fantasy: any } | null>(null);
   const [homeRoster, setHomeRoster] = useState<RosterPlayer[]>([]);
   const [awayRoster, setAwayRoster] = useState<RosterPlayer[]>([]);
-  const [homeLineup, setHomeLineup] = useState<LineupMap>({});
-  const [awayLineup, setAwayLineup] = useState<LineupMap>({});
+  const [homeDailyLineups, setHomeDailyLineups] = useState<DailyLineupMap>({});
+  const [awayDailyLineups, setAwayDailyLineups] = useState<DailyLineupMap>({});
   const [loading, setLoading] = useState(true);
 
   // Real data state
@@ -210,17 +211,17 @@ export default function MatchupDetailPage() {
           setHomeTeam({ member: matchup.home, fantasy: homeFT });
           setAwayTeam({ member: matchup.away, fantasy: awayFT });
 
-          // Fetch rosters and lineups from DB
-          const [hRoster, aRoster, hLineup, aLineup] = await Promise.all([
+          // Fetch rosters and daily lineups from DB
+          const [hRoster, aRoster, hDaily, aDaily] = await Promise.all([
             homeFT ? fetchTeamRosterFromDB(leagueData.id, homeFT.id).catch(() => getTeamRoster(leagueData.id, homeFT.id)) : Promise.resolve([]),
             awayFT ? fetchTeamRosterFromDB(leagueData.id, awayFT.id).catch(() => getTeamRoster(leagueData.id, awayFT.id)) : Promise.resolve([]),
-            homeFT ? fetchTeamLineupFromDB(leagueData.id, homeFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
-            awayFT ? fetchTeamLineupFromDB(leagueData.id, awayFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
+            homeFT ? fetchTeamLineupFromDB(leagueData.id, homeFT.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
+            awayFT ? fetchTeamLineupFromDB(leagueData.id, awayFT.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
           ]);
           setHomeRoster(hRoster);
           setAwayRoster(aRoster);
-          setHomeLineup(hLineup);
-          setAwayLineup(aLineup);
+          setHomeDailyLineups(hDaily);
+          setAwayDailyLineups(aDaily);
         }
       }
 
@@ -405,6 +406,20 @@ export default function MatchupDetailPage() {
       text: `${won ? "W" : "L"} ${teamScore}-${oppScore}`,
       cls: won ? "status-win" : "status-loss",
     };
+  }
+
+  // Get the lineup to use for the current view mode
+  function getLineupForView(dailyLineups: DailyLineupMap): LineupMap {
+    if (viewMode !== "total") {
+      // Single day view - use that day's lineup
+      return dailyLineups[viewMode] || {};
+    }
+    // Total view - use today's lineup (or the most recent available)
+    const today = todayStr;
+    if (dailyLineups[today]) return dailyLineups[today];
+    const dates = Object.keys(dailyLineups).sort();
+    if (dates.length === 0) return {};
+    return dailyLineups[dates[dates.length - 1]];
   }
 
   // ── Box score renderer ────────────────────────────────────────────────────
@@ -720,8 +735,8 @@ export default function MatchupDetailPage() {
           </div>
 
           {/* ── Box scores ── */}
-          {renderBoxScore(homeRoster, homeName, homeLineup)}
-          {renderBoxScore(awayRoster, awayName, awayLineup)}
+          {renderBoxScore(homeRoster, homeName, getLineupForView(homeDailyLineups))}
+          {renderBoxScore(awayRoster, awayName, getLineupForView(awayDailyLineups))}
 
         </div>
       </main>
