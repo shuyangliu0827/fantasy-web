@@ -182,10 +182,9 @@ export default function LeaguePage() {
         : "—"
       : null;
 
-    const TABS = [
+    const TABS: { key: string; label: string; href?: string }[] = [
       { key: "standings", label: "积分榜" },
-      { key: "schedule", label: "本周赛程" },
-      { key: "history", label: "历史赛程" },
+      { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
       { key: "draft", label: "选秀记录" },
       { key: "news", label: "联赛公告" },
       { key: "settings", label: "联赛设置" },
