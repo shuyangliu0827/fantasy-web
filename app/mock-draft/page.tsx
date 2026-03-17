@@ -38,7 +38,7 @@ export default function MockDraftPage() {
   const [availablePlayers, setAvailablePlayers] = useState<Player[]>([]);
   const [currentPick, setCurrentPick] = useState(1);
   const [myDrafts, setMyDrafts] = useState<Draft[]>([]);
-  const [settings, setSettings] = useState({ name: "Mock Draft", teams: 12, position: 6, rounds: 13, type: "snake" as const });
+  const [settings, setSettings] = useState<{ name: string; teams: number; position: number; rounds: number; type: "snake" | "linear" }>({ name: "Mock Draft", teams: 12, position: 6, rounds: 13, type: "snake" });
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
