@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -266,8 +266,8 @@ export default function ScoreboardPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container">
           <p>{t("加载中...", "Loading...")}</p>
         </div>
@@ -278,8 +278,8 @@ export default function ScoreboardPage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <p>{t("联赛不存在", "League not found")}</p>
         </div>
@@ -289,8 +289,8 @@ export default function ScoreboardPage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
 
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -394,8 +394,8 @@ export default function ScoreboardPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
 
   .league-header-inner {
@@ -420,7 +420,7 @@ const styles = `
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
 
@@ -441,7 +441,7 @@ const styles = `
   .page-header h1 {
     font-size: 24px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
     margin: 0;
   }
 
@@ -454,17 +454,17 @@ const styles = `
   .week-nav {
     width: 36px;
     height: 36px;
-    border: 1px solid #333;
-    background: #111;
-    color: #fff;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    color: #111827;
     border-radius: 8px;
     cursor: pointer;
     font-size: 16px;
   }
 
   .week-nav:hover:not(:disabled) {
-    border-color: #f59e0b;
-    color: #f59e0b;
+    border-color: #1e3a8a;
+    color: #1e3a8a;
   }
 
   .week-nav:disabled {
@@ -474,10 +474,10 @@ const styles = `
 
   .week-dropdown {
     padding: 8px 16px;
-    background: #111;
-    border: 1px solid #333;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: #fff;
+    color: #111827;
     font-size: 14px;
     cursor: pointer;
   }
@@ -489,8 +489,8 @@ const styles = `
   }
 
   .matchup-card {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     overflow: hidden;
   }
@@ -500,8 +500,8 @@ const styles = `
     justify-content: space-between;
     align-items: center;
     padding: 12px 16px;
-    background: #1a1a1a;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .matchup-status {
@@ -511,8 +511,8 @@ const styles = `
   }
 
   .status-scheduled {
-    background: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
+    background: #dbeafe;
+    color: #1e3a8a;
   }
 
   .status-live {
@@ -527,7 +527,7 @@ const styles = `
 
   .matchup-week {
     font-size: 13px;
-    color: #888;
+    color: #6b7280;
   }
 
   .matchup-teams {
@@ -554,8 +554,8 @@ const styles = `
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     font-size: 18px;
     font-weight: 700;
     display: flex;
@@ -572,13 +572,13 @@ const styles = `
   .team-name {
     font-size: 15px;
     font-weight: 600;
-    color: #fff;
+    color: #111827;
   }
 
   .team-score {
     font-size: 28px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
     min-width: 40px;
     text-align: center;
   }
@@ -586,19 +586,19 @@ const styles = `
   .vs {
     font-size: 14px;
     font-weight: 600;
-    color: #666;
+    color: #9ca3af;
     padding: 0 8px;
   }
 
   .matchup-footer {
     padding: 12px 16px;
-    border-top: 1px solid #222;
+    border-top: 1px solid #e5e7eb;
     text-align: center;
   }
 
   .view-matchup {
     font-size: 13px;
-    color: #f59e0b;
+    color: #1e3a8a;
     text-decoration: none;
   }
 
@@ -610,8 +610,8 @@ const styles = `
     grid-column: 1 / -1;
     text-align: center;
     padding: 60px 20px;
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
   }
 
@@ -622,13 +622,13 @@ const styles = `
 
   .empty-state h3 {
     font-size: 18px;
-    color: #fff;
+    color: #111827;
     margin: 0 0 8px 0;
   }
 
   .empty-state p {
     font-size: 14px;
-    color: #888;
+    color: #6b7280;
     margin: 0;
   }
 
@@ -637,7 +637,7 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 
   @media (max-width: 500px) {

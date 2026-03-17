@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -127,7 +127,7 @@ export default function BoardPage() {
   if (loading) {
     return (
       <div className="app">
-        <Header />
+        <LightHeader activeHref="/league" />
         <div className="loading-container">
           <p>{t("加载中...", "Loading...")}</p>
         </div>
@@ -139,7 +139,7 @@ export default function BoardPage() {
   if (!league) {
     return (
       <div className="app">
-        <Header />
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <p>{t("联赛不存在", "League not found")}</p>
         </div>
@@ -150,7 +150,7 @@ export default function BoardPage() {
 
   return (
     <div className="app">
-      <Header />
+      <LightHeader activeHref="/league" />
       
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -248,8 +248,8 @@ export default function BoardPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
 
   .league-header-inner {
@@ -271,8 +271,8 @@ const styles = `
   .league-icon { font-size: 28px; }
 
   .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
     position: sticky;
     top: 60px;
     z-index: 40;
@@ -292,7 +292,7 @@ const styles = `
     align-items: center;
     gap: 6px;
     padding: 14px 16px;
-    color: #888;
+    color: #6b7280;
     text-decoration: none;
     font-size: 14px;
     border-bottom: 2px solid transparent;
@@ -300,11 +300,11 @@ const styles = `
   }
 
   .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
 
@@ -326,7 +326,7 @@ const styles = `
 
   .new-post-btn {
     padding: 10px 20px;
-    background: #f59e0b;
+    background: #1e3a8a;
     border: none;
     border-radius: 20px;
     color: #000;
@@ -338,8 +338,8 @@ const styles = `
   .new-post-btn:hover { background: #fbbf24; }
 
   .new-post-form {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 24px;
@@ -348,8 +348,8 @@ const styles = `
   .post-title-input, .post-body-input {
     width: 100%;
     padding: 12px 16px;
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
     color: #fff;
     font-size: 14px;
@@ -359,7 +359,7 @@ const styles = `
 
   .post-title-input:focus, .post-body-input:focus {
     outline: none;
-    border-color: #f59e0b;
+    border-color: #1e3a8a;
   }
 
   .post-actions {
@@ -371,15 +371,15 @@ const styles = `
   .cancel-btn {
     padding: 10px 20px;
     background: transparent;
-    border: 1px solid #333;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: #888;
+    color: #6b7280;
     cursor: pointer;
   }
 
   .submit-btn {
     padding: 10px 24px;
-    background: #f59e0b;
+    background: #1e3a8a;
     border: none;
     border-radius: 8px;
     color: #000;
@@ -396,20 +396,20 @@ const styles = `
   }
 
   .message-card {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     padding: 20px;
   }
 
   .message-card.pinned {
-    border-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.05);
+    border-color: #1e3a8a;
+    background: #f8fafc;
   }
 
   .pinned-badge {
     font-size: 12px;
-    color: #f59e0b;
+    color: #1e3a8a;
     margin-bottom: 12px;
   }
 
@@ -430,7 +430,7 @@ const styles = `
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
+    background: #1e3a8a;
     color: #000;
     font-size: 14px;
     font-weight: 700;
@@ -447,7 +447,7 @@ const styles = `
 
   .message-time {
     font-size: 12px;
-    color: #666;
+    color: #9ca3af;
   }
 
   .message-title {
@@ -459,7 +459,7 @@ const styles = `
 
   .message-body {
     font-size: 14px;
-    color: #ccc;
+    color: #374151;
     line-height: 1.6;
     margin: 0;
     white-space: pre-wrap;
@@ -468,36 +468,36 @@ const styles = `
   .message-footer {
     margin-top: 16px;
     padding-top: 12px;
-    border-top: 1px solid #222;
+    border-top: 1px solid #e5e7eb;
   }
 
   .reply-btn {
     background: none;
     border: none;
-    color: #888;
+    color: #6b7280;
     font-size: 13px;
     cursor: pointer;
   }
 
-  .reply-btn:hover { color: #f59e0b; }
+  .reply-btn:hover { color: #1e3a8a; }
 
   .empty-state {
     text-align: center;
     padding: 60px 20px;
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
   }
 
   .empty-icon { font-size: 48px; margin-bottom: 16px; }
   .empty-state h3 { font-size: 18px; color: #fff; margin: 0 0 8px 0; }
-  .empty-state p { font-size: 14px; color: #888; margin: 0; }
+  .empty-state p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .loading-container, .error-container {
     min-height: 50vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 `;

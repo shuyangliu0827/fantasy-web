@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -103,8 +103,8 @@ export default function MembersPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container">
           <p>{t("加载中...", "Loading...")}</p>
         </div>
@@ -115,8 +115,8 @@ export default function MembersPage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <p>{t("联赛不存在", "League not found")}</p>
         </div>
@@ -126,8 +126,8 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
       
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -235,8 +235,8 @@ export default function MembersPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
 
   .league-header-inner {
@@ -258,8 +258,8 @@ const styles = `
   .league-icon { font-size: 28px; }
 
   .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
     position: sticky;
     top: 60px;
     z-index: 40;
@@ -279,7 +279,7 @@ const styles = `
     align-items: center;
     gap: 6px;
     padding: 14px 16px;
-    color: #888;
+    color: #6b7280;
     text-decoration: none;
     font-size: 14px;
     border-bottom: 2px solid transparent;
@@ -287,11 +287,11 @@ const styles = `
   }
 
   .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
 
@@ -307,22 +307,22 @@ const styles = `
   .page-header h1 {
     font-size: 24px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
     margin: 0 0 4px 0;
   }
 
   .page-header p {
     font-size: 14px;
-    color: #888;
+    color: #6b7280;
     margin: 0;
   }
 
   .invite-btn {
     padding: 10px 20px;
-    background: #f59e0b;
+    background: #1e3a8a;
     border: none;
     border-radius: 20px;
-    color: #000;
+    color: #fff;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -333,8 +333,8 @@ const styles = `
     align-items: center;
     gap: 16px;
     padding: 20px;
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
     border-radius: 12px;
     margin-bottom: 24px;
   }
@@ -348,22 +348,22 @@ const styles = `
   .invite-content h3 {
     font-size: 16px;
     font-weight: 600;
-    color: #fff;
+    color: #111827;
     margin: 0 0 4px 0;
   }
 
   .invite-content p {
     font-size: 14px;
-    color: #888;
+    color: #6b7280;
     margin: 0;
   }
 
   .copy-btn {
     padding: 10px 20px;
-    background: #f59e0b;
+    background: #1e3a8a;
     border: none;
     border-radius: 8px;
-    color: #000;
+    color: #fff;
     font-weight: 600;
     cursor: pointer;
   }
@@ -379,20 +379,20 @@ const styles = `
     align-items: center;
     gap: 16px;
     padding: 20px;
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
   }
 
   .member-card.current-user {
-    border-color: #f59e0b;
-    background: rgba(245, 158, 11, 0.05);
+    border-color: #1e3a8a;
+    background: #f8fafc;
   }
 
   .member-rank {
     font-size: 14px;
     font-weight: 700;
-    color: #666;
+    color: #9ca3af;
     width: 32px;
   }
 
@@ -400,8 +400,8 @@ const styles = `
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     font-size: 22px;
     font-weight: 700;
     display: flex;
@@ -416,7 +416,7 @@ const styles = `
   .member-name {
     font-size: 16px;
     font-weight: 600;
-    color: #fff;
+    color: #111827;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -425,8 +425,8 @@ const styles = `
   .you-badge {
     font-size: 11px;
     padding: 2px 8px;
-    background: #f59e0b;
-    color: #000;
+    background: #1e3a8a;
+    color: #fff;
     border-radius: 10px;
   }
 
@@ -441,18 +441,18 @@ const styles = `
   }
 
   .role-badge.owner {
-    background: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
+    background: #dbeafe;
+    color: #1e3a8a;
   }
 
   .role-badge.member {
     background: rgba(100, 100, 100, 0.2);
-    color: #888;
+    color: #6b7280;
   }
 
   .join-date {
     font-size: 12px;
-    color: #666;
+    color: #9ca3af;
     margin-top: 4px;
   }
 
@@ -463,12 +463,12 @@ const styles = `
   .stat-value {
     font-size: 18px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
   }
 
   .stat-label {
     font-size: 12px;
-    color: #666;
+    color: #9ca3af;
     display: block;
   }
 
@@ -493,10 +493,10 @@ const styles = `
 
   .join-btn {
     padding: 14px 40px;
-    background: #f59e0b;
+    background: #1e3a8a;
     border: none;
     border-radius: 24px;
-    color: #000;
+    color: #fff;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
@@ -507,7 +507,7 @@ const styles = `
     background: transparent;
     border: 1px solid #666;
     border-radius: 24px;
-    color: #888;
+    color: #6b7280;
     font-size: 14px;
     cursor: pointer;
   }
@@ -522,6 +522,6 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 `;

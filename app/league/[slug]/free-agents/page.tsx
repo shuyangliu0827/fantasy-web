@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
@@ -126,8 +126,8 @@ export default function FreeAgentsPage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -136,8 +136,8 @@ export default function FreeAgentsPage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container"><p>{t("联赛不存在", "League not found")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -145,8 +145,8 @@ export default function FreeAgentsPage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
 
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -322,8 +322,8 @@ export default function FreeAgentsPage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
   .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .league-title {
@@ -331,22 +331,22 @@ const styles = `
     color: #fff; text-decoration: none; font-size: 20px; font-weight: 600;
   }
   .league-icon { font-size: 28px; }
-  .league-nav { background: #111; border-bottom: 1px solid #222; position: sticky; top: 60px; z-index: 40; }
+  .league-nav { background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 60px; z-index: 40; }
   .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
-  .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #888; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #6b7280; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
   .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
-  .page-content { min-height: calc(100vh - 200px); background: #0a0a0a; padding: 24px 16px; }
+  .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
+  .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
   .page-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 8px 0; }
-  .page-header p { font-size: 14px; color: #888; margin: 0; }
+  .page-header p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .my-roster-section {
-    background: #111; border: 1px solid #222; border-radius: 12px; padding: 16px; margin-bottom: 20px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 20px;
   }
   .section-title {
-    font-size: 14px; font-weight: 600; color: #f59e0b; margin-bottom: 12px;
+    font-size: 14px; font-weight: 600; color: #1e3a8a; margin-bottom: 12px;
     display: flex; justify-content: space-between; align-items: center;
   }
   .view-link { font-size: 13px; color: #3b82f6; text-decoration: none; }
@@ -354,10 +354,10 @@ const styles = `
   .roster-chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .roster-chip {
     display: flex; align-items: center; gap: 6px; padding: 6px 10px;
-    background: #1a1a1a; border: 1px solid #333; border-radius: 8px; font-size: 12px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px;
   }
   .chip-name { color: #fff; font-weight: 500; }
-  .chip-pos { color: #888; }
+  .chip-pos { color: #6b7280; }
   .chip-drop {
     width: 18px; height: 18px; border-radius: 50%; border: none;
     background: rgba(239, 68, 68, 0.2); color: #f87171; font-size: 10px;
@@ -370,47 +370,47 @@ const styles = `
   }
   .search-input {
     flex: 1; min-width: 200px; padding: 10px 14px;
-    background: #1a1a1a; border: 1px solid #333; border-radius: 8px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
     color: #fff; font-size: 14px; outline: none;
   }
-  .search-input:focus { border-color: #f59e0b; }
+  .search-input:focus { border-color: #1e3a8a; }
   .filter-group { display: flex; gap: 4px; }
   .filter-btn {
-    padding: 8px 12px; background: #1a1a1a; border: 1px solid #333;
-    border-radius: 6px; color: #888; font-size: 12px; cursor: pointer;
+    padding: 8px 12px; background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 6px; color: #6b7280; font-size: 12px; cursor: pointer;
   }
-  .filter-btn.active { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b; }
+  .filter-btn.active { background: #eff6ff; border-color: #1e3a8a; color: #1e3a8a; }
   .sort-select {
-    padding: 8px 12px; background: #1a1a1a; border: 1px solid #333;
+    padding: 8px 12px; background: #f9fafb; border: 1px solid #e5e7eb;
     border-radius: 6px; color: #fff; font-size: 13px;
   }
 
-  .fa-table { background: #111; border: 1px solid #222; border-radius: 12px; overflow: hidden; }
+  .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
   .fa-header {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
-    padding: 12px 16px; background: #1a1a1a; border-bottom: 1px solid #222;
-    font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase;
+    padding: 12px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+    font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;
   }
   .fa-row {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
-    padding: 12px 16px; border-bottom: 1px solid #1a1a1a; align-items: center;
+    padding: 12px 16px; border-bottom: 1px solid #f3f4f6; align-items: center;
   }
   .fa-row:last-child { border-bottom: none; }
   .fa-row:hover { background: rgba(245, 158, 11, 0.03); }
-  .col-rank { font-size: 13px; color: #888; text-align: center; }
+  .col-rank { font-size: 13px; color: #6b7280; text-align: center; }
   .col-player { padding: 0 8px; }
   .player-info { display: flex; flex-direction: column; gap: 2px; }
   .player-name { font-size: 14px; font-weight: 500; color: #fff; }
-  .player-meta { font-size: 12px; color: #888; }
-  .col-stat { font-size: 13px; color: #ccc; text-align: center; }
+  .player-meta { font-size: 12px; color: #6b7280; }
+  .col-stat { font-size: 13px; color: #374151; text-align: center; }
   .col-action { text-align: center; }
   .add-btn {
     padding: 6px 14px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
     border-radius: 6px; color: #6ee7b7; font-size: 12px; font-weight: 600; cursor: pointer;
   }
   .add-btn:hover { background: rgba(16, 185, 129, 0.25); }
-  .empty-row { padding: 40px; text-align: center; color: #555; font-size: 14px; }
-  .more-hint { text-align: center; padding: 16px; color: #555; font-size: 13px; }
+  .empty-row { padding: 40px; text-align: center; color: #6b7280; font-size: 14px; }
+  .more-hint { text-align: center; padding: 16px; color: #6b7280; font-size: 13px; }
 
   .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -418,7 +418,7 @@ const styles = `
     justify-content: center; z-index: 1000; padding: 20px;
   }
   .modal {
-    background: #1a1a1a; border: 1px solid #333; border-radius: 16px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 16px;
     max-width: 500px; width: 100%; overflow: hidden;
   }
   .modal-header {
@@ -428,43 +428,43 @@ const styles = `
   .modal-header h3 { margin: 0; font-size: 18px; color: #fff; }
   .modal-close {
     width: 32px; height: 32px; border: none; background: #333;
-    border-radius: 50%; color: #888; font-size: 16px; cursor: pointer;
+    border-radius: 50%; color: #6b7280; font-size: 16px; cursor: pointer;
   }
   .modal-body { padding: 24px; }
   .add-player-card {
-    background: #111; border: 1px solid #222; border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px;
   }
   .add-player-name { font-size: 18px; font-weight: 600; color: #fff; }
-  .add-player-meta { font-size: 13px; color: #888; margin-top: 4px; }
-  .add-player-stats { display: flex; gap: 16px; margin-top: 8px; font-size: 13px; color: #f59e0b; }
+  .add-player-meta { font-size: 13px; color: #6b7280; margin-top: 4px; }
+  .add-player-stats { display: flex; gap: 16px; margin-top: 8px; font-size: 13px; color: #1e3a8a; }
   .drop-section { margin-top: 8px; }
   .drop-label { font-size: 14px; color: #fca5a5; margin: 0 0 12px 0; }
   .drop-list { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
   .drop-item {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 12px; background: #111; border: 1px solid #333;
+    padding: 10px 12px; background: #fff; border: 1px solid #e5e7eb;
     border-radius: 8px; cursor: pointer;
   }
-  .drop-item:hover { border-color: #555; }
+  .drop-item:hover { border-color: #6b7280; }
   .drop-item.selected { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
   .drop-name { font-size: 14px; color: #fff; }
-  .drop-meta { font-size: 12px; color: #888; }
+  .drop-meta { font-size: 12px; color: #6b7280; }
   .modal-footer {
     padding: 16px 24px; border-top: 1px solid #333;
     display: flex; gap: 12px; justify-content: flex-end;
   }
   .btn-cancel {
     padding: 10px 20px; background: #333; border: none;
-    border-radius: 8px; color: #888; font-weight: 600; cursor: pointer;
+    border-radius: 8px; color: #6b7280; font-weight: 600; cursor: pointer;
   }
   .btn-confirm {
-    padding: 10px 20px; background: #f59e0b; border: none;
-    border-radius: 8px; color: #000; font-weight: 600; cursor: pointer;
+    padding: 10px 20px; background: #1e3a8a; border: none;
+    border-radius: 8px; color: #fff; font-weight: 600; cursor: pointer;
   }
   .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .loading-container, .error-container {
-    min-height: 50vh; display: flex; align-items: center; justify-content: center; color: #888;
+    min-height: 50vh; display: flex; align-items: center; justify-content: center; color: #6b7280;
   }
 
   @media (max-width: 768px) {

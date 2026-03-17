@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
@@ -70,7 +70,7 @@ export default function SchedulePage() {
   if (loading) {
     return (
       <div className="app">
-        <Header />
+        <LightHeader activeHref="/league" />
         <div className="loading-container">
           <p>{t("加载中...", "Loading...")}</p>
         </div>
@@ -82,7 +82,7 @@ export default function SchedulePage() {
   if (!league) {
     return (
       <div className="app">
-        <Header />
+        <LightHeader activeHref="/league" />
         <div className="error-container">
           <p>{t("联赛不存在", "League not found")}</p>
         </div>
@@ -93,7 +93,7 @@ export default function SchedulePage() {
 
   return (
     <div className="app">
-      <Header />
+      <LightHeader activeHref="/league" />
       
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -175,8 +175,8 @@ export default function SchedulePage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
 
   .league-header-inner {
@@ -198,8 +198,8 @@ const styles = `
   .league-icon { font-size: 28px; }
 
   .league-nav {
-    background: #111;
-    border-bottom: 1px solid #222;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
     position: sticky;
     top: 60px;
     z-index: 40;
@@ -219,7 +219,7 @@ const styles = `
     align-items: center;
     gap: 6px;
     padding: 14px 16px;
-    color: #888;
+    color: #6b7280;
     text-decoration: none;
     font-size: 14px;
     border-bottom: 2px solid transparent;
@@ -227,11 +227,11 @@ const styles = `
   }
 
   .league-nav-link:hover { color: #fff; }
-  .league-nav-link.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
 
@@ -260,16 +260,16 @@ const styles = `
 
   .toggle-btn {
     padding: 8px 16px;
-    background: #111;
-    border: 1px solid #333;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: #888;
+    color: #6b7280;
     font-size: 14px;
     cursor: pointer;
   }
 
-  .toggle-btn:hover { border-color: #f59e0b; color: #fff; }
-  .toggle-btn.active { background: #f59e0b; color: #000; border-color: #f59e0b; }
+  .toggle-btn:hover { border-color: #1e3a8a; color: #fff; }
+  .toggle-btn.active { background: #1e3a8a; color: #000; border-color: #1e3a8a; }
 
   .schedule-list {
     display: flex;
@@ -278,8 +278,8 @@ const styles = `
   }
 
   .week-card {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
     overflow: hidden;
   }
@@ -289,8 +289,8 @@ const styles = `
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    background: #1a1a1a;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
   }
 
   .week-header h3 {
@@ -303,8 +303,8 @@ const styles = `
   .week-status {
     font-size: 12px;
     padding: 4px 12px;
-    background: rgba(245, 158, 11, 0.2);
-    color: #f59e0b;
+    background: #dbeafe;
+    color: #1e3a8a;
     border-radius: 12px;
   }
 
@@ -320,7 +320,7 @@ const styles = `
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    background: #1a1a1a;
+    background: #f9fafb;
     border-radius: 8px;
   }
 
@@ -339,7 +339,7 @@ const styles = `
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
+    background: #1e3a8a;
     color: #000;
     font-size: 14px;
     font-weight: 700;
@@ -357,7 +357,7 @@ const styles = `
   .vs-badge {
     font-size: 12px;
     font-weight: 600;
-    color: #666;
+    color: #9ca3af;
     padding: 4px 12px;
     background: #222;
     border-radius: 4px;
@@ -366,27 +366,27 @@ const styles = `
   .empty-state {
     text-align: center;
     padding: 60px 20px;
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 12px;
   }
 
   .empty-icon { font-size: 48px; margin-bottom: 16px; }
   .empty-state h3 { font-size: 18px; color: #fff; margin: 0 0 8px 0; }
-  .empty-state p { font-size: 14px; color: #888; margin: 0; }
+  .empty-state p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .schedule-note {
     margin-top: 24px;
     padding: 16px;
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.2);
+    background: #eff6ff;
+    border: 1px solid #dbeafe;
     border-radius: 8px;
     text-align: center;
   }
 
   .schedule-note p {
     font-size: 14px;
-    color: #f59e0b;
+    color: #1e3a8a;
     margin: 0;
   }
 
@@ -395,6 +395,6 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 `;

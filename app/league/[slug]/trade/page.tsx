@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Header from "@/components/Header";
+import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
@@ -343,8 +343,8 @@ export default function TradePage() {
 
   if (loading) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -353,8 +353,8 @@ export default function TradePage() {
 
   if (!league) {
     return (
-      <div className="app">
-        <Header />
+      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+        <LightHeader activeHref="/league" />
         <div className="error-container"><p>{t("联赛不存在", "League not found")}</p></div>
         <style jsx>{styles}</style>
       </div>
@@ -362,8 +362,8 @@ export default function TradePage() {
   }
 
   return (
-    <div className="app">
-      <Header />
+    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <LightHeader activeHref="/league" />
 
       <div className="league-header-mini">
         <div className="league-header-inner">
@@ -676,111 +676,111 @@ export default function TradePage() {
 
 const styles = `
   .league-header-mini {
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border-bottom: 1px solid #283593;
+    background: #1e3a8a;
+    border-bottom: none;
   }
   .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
   .league-title { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; font-size: 20px; font-weight: 600; }
   .league-icon { font-size: 28px; }
-  .page-content { min-height: calc(100vh - 200px); background: #0a0a0a; padding: 24px 16px; }
+  .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
   .page-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 8px 0; }
-  .page-header p { font-size: 14px; color: #888; margin: 0; }
+  .page-header p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
   .tab {
-    padding: 10px 20px; background: #1a1a1a; border: 1px solid #333;
-    border-radius: 8px; color: #888; font-size: 14px; cursor: pointer;
+    padding: 10px 20px; background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 8px; color: #6b7280; font-size: 14px; cursor: pointer;
     display: flex; align-items: center; gap: 8px;
   }
-  .tab.active { background: rgba(245, 158, 11, 0.15); border-color: #f59e0b; color: #f59e0b; }
+  .tab.active { background: #eff6ff; border-color: #1e3a8a; color: #1e3a8a; }
   .badge {
     background: #ef4444; color: #fff; padding: 1px 7px; border-radius: 10px;
     font-size: 11px; font-weight: 700;
   }
 
-  .select-label { color: #888; font-size: 14px; margin: 0 0 16px 0; }
+  .select-label { color: #6b7280; font-size: 14px; margin: 0 0 16px 0; }
   .team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
   .team-card {
-    background: #111; border: 1px solid #222; border-radius: 12px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
     padding: 20px; cursor: pointer; transition: all 0.15s;
   }
-  .team-card:hover { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+  .team-card:hover { border-color: #1e3a8a; background: #f8fafc; }
   .team-card-name { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 4px; }
-  .team-card-count { font-size: 13px; color: #888; }
+  .team-card-count { font-size: 13px; color: #6b7280; }
 
   .back-btn {
-    padding: 8px 16px; background: #1a1a1a; border: 1px solid #333;
-    border-radius: 8px; color: #888; font-size: 13px; cursor: pointer; margin-bottom: 20px;
+    padding: 8px 16px; background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 8px; color: #6b7280; font-size: 13px; cursor: pointer; margin-bottom: 20px;
   }
   .back-btn:hover { color: #fff; }
 
   .trade-board { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 12px; align-items: start; }
-  .trade-arrow { text-align: center; font-size: 24px; color: #f59e0b; padding-top: 60px; }
-  .trade-side { background: #111; border: 1px solid #222; border-radius: 12px; overflow: hidden; }
-  .side-header { padding: 14px 16px; background: #1a1a1a; border-bottom: 1px solid #222; font-weight: 600; color: #fff; font-size: 14px; }
-  .side-hint { padding: 8px 16px; margin: 0; font-size: 12px; color: #555; }
+  .trade-arrow { text-align: center; font-size: 24px; color: #1e3a8a; padding-top: 60px; }
+  .trade-side { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+  .side-header { padding: 14px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; font-weight: 600; color: #fff; font-size: 14px; }
+  .side-hint { padding: 8px 16px; margin: 0; font-size: 12px; color: #6b7280; }
   .player-list { max-height: 400px; overflow-y: auto; }
   .trade-player {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 16px; border-bottom: 1px solid #1a1a1a; cursor: pointer;
+    padding: 10px 16px; border-bottom: 1px solid #f3f4f6; cursor: pointer;
   }
   .trade-player:hover { background: rgba(245, 158, 11, 0.03); }
-  .trade-player.selected { background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; }
+  .trade-player.selected { background: #eff6ff; border-left: 3px solid #f59e0b; }
   .tp-info { display: flex; flex-direction: column; gap: 2px; }
   .tp-name { font-size: 14px; color: #fff; font-weight: 500; }
-  .tp-meta { font-size: 12px; color: #888; }
+  .tp-meta { font-size: 12px; color: #6b7280; }
   .tp-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-  .tp-ppg { font-size: 13px; color: #f59e0b; font-weight: 600; }
-  .tp-fpts { font-size: 11px; color: #888; }
+  .tp-ppg { font-size: 13px; color: #1e3a8a; font-weight: 600; }
+  .tp-fpts { font-size: 11px; color: #6b7280; }
 
   .trade-summary {
-    background: #111; border: 1px solid #f59e0b; border-radius: 12px;
+    background: #fff; border: 1px solid #f59e0b; border-radius: 12px;
     padding: 20px; margin-top: 20px;
   }
-  .summary-title { font-size: 16px; font-weight: 600; color: #f59e0b; margin-bottom: 16px; }
+  .summary-title { font-size: 16px; font-weight: 600; color: #1e3a8a; margin-bottom: 16px; }
   .summary-content { display: flex; gap: 20px; align-items: flex-start; }
   .summary-side { flex: 1; }
-  .summary-arrow { font-size: 20px; color: #f59e0b; padding-top: 20px; }
-  .summary-label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 8px; }
+  .summary-arrow { font-size: 20px; color: #1e3a8a; padding-top: 20px; }
+  .summary-label { font-size: 12px; color: #6b7280; text-transform: uppercase; margin-bottom: 8px; }
   .summary-player { padding: 6px 0; font-size: 14px; }
   .summary-player.out { color: #fca5a5; }
   .summary-player.in { color: #6ee7b7; }
-  .summary-empty { color: #555; font-size: 13px; }
+  .summary-empty { color: #6b7280; font-size: 13px; }
   .trade-msg {
     width: 100%; margin-top: 16px; padding: 10px 14px;
-    background: #0a0a0a; border: 1px solid #333; border-radius: 8px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
     color: #fff; font-size: 14px; resize: none; outline: none; box-sizing: border-box;
   }
   .propose-btn {
     margin-top: 16px; width: 100%; padding: 14px;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000; border: none; border-radius: 8px;
+    background: #1e3a8a;
+    color: #fff; border: none; border-radius: 8px;
     font-weight: 700; font-size: 15px; cursor: pointer;
   }
   .propose-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-  .pending-label { font-size: 14px; font-weight: 600; color: #f59e0b; margin: 0 0 12px 0; text-transform: uppercase; }
+  .pending-label { font-size: 14px; font-weight: 600; color: #1e3a8a; margin: 0 0 12px 0; text-transform: uppercase; }
   .trade-card {
-    background: #111; border: 1px solid #222; border-radius: 12px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
     margin-bottom: 16px; overflow: hidden;
   }
   .tc-header {
-    padding: 14px 16px; background: #1a1a1a; border-bottom: 1px solid #222;
+    padding: 14px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
     display: flex; align-items: center; gap: 8px; font-size: 14px;
   }
   .tc-from { color: #fff; font-weight: 600; }
-  .tc-arrow { color: #f59e0b; }
+  .tc-arrow { color: #1e3a8a; }
   .tc-to { color: #fff; font-weight: 600; }
-  .tc-time { margin-left: auto; color: #555; font-size: 12px; }
+  .tc-time { margin-left: auto; color: #6b7280; font-size: 12px; }
   .tc-body { display: flex; gap: 20px; padding: 16px; }
   .tc-side { flex: 1; }
-  .tc-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+  .tc-label { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
   .tc-player { font-size: 14px; color: #fff; padding: 3px 0; display: flex; justify-content: space-between; align-items: center; }
-  .tc-player-ppg { font-size: 12px; color: #f59e0b; font-weight: 600; }
-  .tc-message { padding: 0 16px 12px; font-size: 13px; color: #888; font-style: italic; }
-  .tc-actions { padding: 12px 16px; border-top: 1px solid #222; display: flex; gap: 8px; align-items: center; }
+  .tc-player-ppg { font-size: 12px; color: #1e3a8a; font-weight: 600; }
+  .tc-message { padding: 0 16px 12px; font-size: 13px; color: #6b7280; font-style: italic; }
+  .tc-actions { padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; align-items: center; }
   .accept-btn {
     padding: 8px 20px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
     border-radius: 6px; color: #6ee7b7; font-weight: 600; cursor: pointer;
@@ -792,9 +792,9 @@ const styles = `
   }
   .cancel-btn {
     padding: 8px 20px; background: #333; border: none;
-    border-radius: 6px; color: #888; cursor: pointer;
+    border-radius: 6px; color: #6b7280; cursor: pointer;
   }
-  .pending-badge { font-size: 13px; color: #f59e0b; }
+  .pending-badge { font-size: 13px; color: #1e3a8a; }
   .status-badge {
     margin-left: auto; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
   }
@@ -802,12 +802,12 @@ const styles = `
   .status-badge.rejected { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
   .status-badge.cancelled { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 
-  .empty-state { text-align: center; padding: 60px 20px; color: #888; }
+  .empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
   .empty-state.small { padding: 30px; }
   .empty-icon { font-size: 48px; margin-bottom: 12px; }
 
   .loading-container, .error-container {
-    min-height: 50vh; display: flex; align-items: center; justify-content: center; color: #888;
+    min-height: 50vh; display: flex; align-items: center; justify-content: center; color: #6b7280;
   }
 
   @media (max-width: 768px) {
