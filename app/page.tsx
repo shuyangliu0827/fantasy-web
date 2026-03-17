@@ -95,8 +95,8 @@ export default function HomePage() {
         borderBottom: "1px solid #e2e8f0",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px",
-          height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+          height: 64, display: "flex", alignItems: "center", gap: isMobile ? 12 : 32,
         }}>
 
           {/* Logo */}
@@ -106,7 +106,7 @@ export default function HomePage() {
           </Link>
 
           {/* Nav */}
-          <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
+          <nav style={{ display: "flex", gap: 2, flex: 1, overflowX: "auto", overflowY: "hidden" }}>
             {NAV_ITEMS.map(item => {
               const isActive = item.href === "/";
               return (
@@ -132,7 +132,7 @@ export default function HomePage() {
           </nav>
 
           {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexShrink: 0 }}>
             <button
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{
@@ -315,8 +315,7 @@ export default function HomePage() {
           </div>
 
           {/* Right: floating player cards */}
-          {!isMobile && (
-            <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0, width: "100%", overflow: "hidden" }}>
+          <div style={{ flex: 1, position: "relative", height: isMobile ? 280 : 400, minWidth: 0, width: "100%" }}>
 
             {/* Giannis card — dark navy */}
             <div style={{

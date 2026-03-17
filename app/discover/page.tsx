@@ -78,14 +78,14 @@ export default function DiscoverPage() {
         borderBottom: "1px solid #e2e8f0",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px",
-          height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+          height: 64, display: "flex", alignItems: "center", gap: isMobile ? 12 : 32,
         }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
             <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
           </Link>
-          <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
+          <nav style={{ display: "flex", gap: 2, flex: 1, overflowX: "auto", overflowY: "hidden" }}>
             {NAV_ITEMS.map(item => (
               <Link key={item.href} href={item.href} style={{
                 padding: "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
@@ -96,7 +96,7 @@ export default function DiscoverPage() {
               </Link>
             ))}
           </nav>
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexShrink: 0 }}>
             <button
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{ padding: isMobile ? "6px 9px" : "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: isMobile ? 12 : 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}
@@ -255,7 +255,7 @@ export default function DiscoverPage() {
             )}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 12 : 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
             {filtered.map((insight) => (
               <InsightCard key={insight.id} insight={insight} formatDate={formatDate} />
             ))}

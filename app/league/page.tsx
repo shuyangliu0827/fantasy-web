@@ -150,8 +150,8 @@ export default function PublicLeaguesPage() {
       </div>
 
       {/* ── Tab bar ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: isMobile ? 60 : 64, zIndex: 10 }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "0 12px" : "0 40px", display: "flex", gap: 0, overflowX: "auto" }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 40px", display: "flex", gap: 0 }}>
           {TABS.map(tab => (
             <button
               key={tab.key}
