@@ -84,47 +84,66 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
   }
 
   return (
-    <nav className="league-nav">
-      <div className="league-nav-inner">
-        {mainNav.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`league-nav-link ${isActive(item.href) ? "active" : ""}`}
-          >
-            <span className="nav-label">{item.label}</span>
-            {item.badge > 0 && (
-              <span className="trade-badge">{item.badge}</span>
-            )}
-          </Link>
-        ))}
+    <nav style={{
+      background: "#fff",
+      borderBottom: "1px solid #e5e7eb",
+      position: "sticky",
+      top: 64,
+      zIndex: 40,
+    }}>
+      <div style={{
+        maxWidth: 1200,
+        margin: "0 auto",
+        display: "flex",
+        gap: 4,
+        padding: "0 16px",
+        overflowX: "auto",
+      }}>
+        {mainNav.map((item) => {
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "12px 16px",
+                color: active ? "#1e3a8a" : "#6b7280",
+                textDecoration: "none",
+                fontSize: 14,
+                fontWeight: active ? 600 : 500,
+                borderBottom: active ? "2px solid #1e3a8a" : "2px solid transparent",
+                whiteSpace: "nowrap",
+                position: "relative",
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#111827"; }}
+              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "#6b7280"; }}
+            >
+              {item.label}
+              {item.badge > 0 && (
+                <span style={{
+                  background: "#ef4444",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 5px",
+                  lineHeight: 1,
+                }}>
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
       </div>
-      <style jsx>{`
-        .league-nav { background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 64px; z-index: 40; }
-        .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
-        .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 12px 16px; color: #6b7280; text-decoration: none; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap; position: relative; }
-        .league-nav-link:hover { color: #111827; }
-        .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; font-weight: 600; }
-        .trade-badge {
-          background: #ef4444;
-          color: #fff;
-          font-size: 11px;
-          font-weight: 700;
-          min-width: 18px;
-          height: 18px;
-          border-radius: 9px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0 5px;
-          line-height: 1;
-          animation: badge-pulse 2s ease-in-out infinite;
-        }
-        @keyframes badge-pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-        }
-      `}</style>
     </nav>
   );
 }

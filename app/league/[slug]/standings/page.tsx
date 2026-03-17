@@ -190,44 +190,6 @@ const styles = `
     font-size: 28px;
   }
 
-  .league-nav {
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    position: sticky;
-    top: 60px;
-    z-index: 40;
-  }
-
-  .league-nav-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    gap: 4px;
-    padding: 0 16px;
-    overflow-x: auto;
-  }
-
-  .league-nav-link {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 16px;
-    color: #6b7280;
-    text-decoration: none;
-    font-size: 14px;
-    border-bottom: 2px solid transparent;
-    white-space: nowrap;
-  }
-
-  .league-nav-link:hover {
-    color: #111827;
-  }
-
-  .league-nav-link.active {
-    color: #1e3a8a;
-    border-bottom-color: #1e3a8a;
-  }
-
   .page-content {
     min-height: calc(100vh - 200px);
     background: #f9fafb;
