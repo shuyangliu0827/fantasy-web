@@ -342,7 +342,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
           )}
 
           {draftComplete && (
-            <div style={{ background: "linear-gradient(90deg, #f59e0b, #f97316)", padding: "8px 20px", borderRadius: 8, fontWeight: 700, color: "#fff", fontSize: 14 }}>
+            <div style={{ background: "#1e3a8a", padding: "8px 20px", borderRadius: 8, fontWeight: 700, color: "#fff", fontSize: 14 }}>
               🏆 选秀完成!
             </div>
           )}
@@ -532,7 +532,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
                 </div>
               ))}
             </div>
-            <button onClick={onDraftComplete} style={{ padding: "12px 32px", background: "linear-gradient(90deg, #f59e0b, #f97316)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: FONT }}>
+            <button onClick={onDraftComplete} style={{ padding: "12px 32px", background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: FONT }}>
               返回联赛
             </button>
           </div>

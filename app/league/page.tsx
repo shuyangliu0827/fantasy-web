@@ -83,7 +83,7 @@ export default function PublicLeaguesPage() {
               </p>
             </div>
           </div>
-          <Link href="/league/new" style={{ padding: "12px 24px", fontSize: 14, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg, #f59e0b, #f97316)", borderRadius: 10, textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}>
+          <Link href="/league/new" style={{ padding: "12px 24px", fontSize: 14, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}>
             + {t("创建联赛", "Create League")}
           </Link>
         </div>
@@ -167,7 +167,7 @@ export default function PublicLeaguesPage() {
                   <Link href={`/league/${league.slug}`} style={{ flex: 1, padding: "10px", fontSize: 14, fontWeight: 600, color: "#374151", background: "#fff", border: "1.5px solid #d1d5db", borderRadius: 10, textDecoration: "none", textAlign: "center" }}>
                     {t("查看详情", "View Details")}
                   </Link>
-                  <Link href={`/league/${league.slug}`} style={{ flex: 1, padding: "10px", fontSize: 14, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg, #f59e0b, #f97316)", borderRadius: 10, textDecoration: "none", textAlign: "center" }}>
+                  <Link href={`/league/${league.slug}`} style={{ flex: 1, padding: "10px", fontSize: 14, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, textDecoration: "none", textAlign: "center" }}>
                     {t("加入联赛", "Join League")}
                   </Link>
                 </div>

@@ -158,7 +158,7 @@ export default function MockDraftPage() {
 
                 <button onClick={startDraft} style={{
                   width: "100%", padding: "13px", fontSize: 15, fontWeight: 700,
-                  color: "#fff", background: "linear-gradient(90deg, #f59e0b, #f97316)",
+                  color: "#fff", background: "#1e3a8a",
                   border: "none", borderRadius: 10, cursor: "pointer", marginTop: 4,
                 }}>
                   {t("开始选秀", "Start Draft")}
