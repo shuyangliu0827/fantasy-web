@@ -17,16 +17,16 @@ const JOURNEY = [
 const CARDS = [
   {
     num: "01",
-    icon: "📋",
+    icon: "",
     iconBg: "#dbeafe",
-    titleZh: "什么是幻想篮球?",
+    titleZh: "什么是范特西篮球?",
     titleEn: "What is Fantasy Basketball?",
     descZh: "你扮演一支NBA球队的GM，通过选秀挑选真实球员组建梦之队。球员在现实比赛中的表现直接转化为你的幻想得分。",
     descEn: "You're the GM of an NBA team, drafting real players to build your dream squad. Real game performances convert directly to your fantasy points.",
   },
   {
     num: "02",
-    icon: "🎯",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "蛇形选秀机制",
     titleEn: "Snake Draft System",
@@ -35,7 +35,7 @@ const CARDS = [
   },
   {
     num: "03",
-    icon: "📊",
+    icon: "",
     iconBg: "#dbeafe",
     titleZh: "积分是怎么算的?",
     titleEn: "How is Scoring Calculated?",
@@ -44,7 +44,7 @@ const CARDS = [
   },
   {
     num: "04",
-    icon: "🔄",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "赛季管理",
     titleEn: "Season Management",
@@ -53,7 +53,7 @@ const CARDS = [
   },
   {
     num: "05",
-    icon: "🏆",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "如何赢得联赛?",
     titleEn: "How to Win the League?",
@@ -73,7 +73,7 @@ export default function HowToPlayPage() {
       {/* Hero */}
       <div style={{ background: "#fff", padding: "56px 32px 48px", textAlign: "center", borderBottom: "1px solid #f3f4f6" }}>
         <h1 style={{ fontSize: 40, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>
-          {t("欢迎来到幻想篮球", "Welcome to Fantasy Basketball")}
+          {t("欢迎来到范特西篮球", "Welcome to Fantasy Basketball")}
         </h1>
         <p style={{ fontSize: 16, color: "#6b7280", margin: "0 0 40px 0" }}>
           {t("不懂也没关系，5分钟读懂规则，立刻开始你的第一次选秀。", "No experience needed — 5 minutes to learn the rules and start your first draft.")}
@@ -97,7 +97,7 @@ export default function HowToPlayPage() {
                   border: i === 0 ? "none" : i === 1 ? "2.5px solid #1e3a8a" : "2px solid #d1d5db",
                   transition: "all 0.2s",
                 }}>
-                  {i === 0 ? "✓" : i + 1}
+                  {i === 0 ? "" : i + 1}
                 </div>
 
                 {/* Right line */}
@@ -164,7 +164,7 @@ export default function HowToPlayPage() {
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 20, marginBottom: 12,
             }}>
-              🚀
+              
             </div>
             <div style={{ fontSize: 40, fontWeight: 800, color: "rgba(255,255,255,0.15)", lineHeight: 1, marginBottom: 8 }}>
               GO

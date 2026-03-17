@@ -155,7 +155,7 @@ export default function BoardPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -166,7 +166,7 @@ export default function BoardPage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>💬 {t("讨论区", "Message Board")}</h1>
+            <h1> {t("讨论区", "Message Board")}</h1>
             {isMember && (
               <button className="new-post-btn" onClick={() => setShowNewPost(true)}>
                 + {t("发布帖子", "New Post")}
@@ -210,7 +210,7 @@ export default function BoardPage() {
           <div className="messages-list">
             {messages.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">💬</div>
+                <div className="empty-icon"></div>
                 <h3>{t("还没有帖子", "No messages yet")}</h3>
                 <p>{t("成为第一个发言的人吧！", "Be the first to post!")}</p>
               </div>
@@ -218,7 +218,7 @@ export default function BoardPage() {
               messages.map((msg) => (
                 <div key={msg.id} className={`message-card ${msg.is_pinned ? "pinned" : ""}`}>
                   {msg.is_pinned && (
-                    <div className="pinned-badge">📌 {t("置顶", "Pinned")}</div>
+                    <div className="pinned-badge"> {t("置顶", "Pinned")}</div>
                   )}
                   <div className="message-header">
                     <div className="author-info">
@@ -232,7 +232,7 @@ export default function BoardPage() {
                   {msg.title && <h3 className="message-title">{msg.title}</h3>}
                   <p className="message-body">{msg.body}</p>
                   <div className="message-footer">
-                    <button className="reply-btn">💬 {t("回复", "Reply")}</button>
+                    <button className="reply-btn"> {t("回复", "Reply")}</button>
                   </div>
                 </div>
               ))

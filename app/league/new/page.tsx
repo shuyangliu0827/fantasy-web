@@ -50,7 +50,7 @@ export default function NewLeaguePage() {
 
           {/* Header */}
           <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 48, marginBottom: 14 }}>🏆</div>
+            <div style={{ fontSize: 48, marginBottom: 14 }}></div>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: "#111827", margin: "0 0 8px 0" }}>
               创建联赛
             </h1>
@@ -93,7 +93,7 @@ export default function NewLeaguePage() {
                   disabled={submitting}
                   style={{ flex: 1, padding: "11px", background: visibility === "public" ? "#eff6ff" : "#fff", border: `1.5px solid ${visibility === "public" ? "#1e3a8a" : "#e5e7eb"}`, borderRadius: 10, color: visibility === "public" ? "#1e3a8a" : "#6b7280", fontSize: 14, fontWeight: visibility === "public" ? 700 : 400, cursor: "pointer", fontFamily: FONT }}
                 >
-                  🌐 公开
+                   公开
                 </button>
                 <button
                   type="button"
@@ -101,7 +101,7 @@ export default function NewLeaguePage() {
                   disabled={submitting}
                   style={{ flex: 1, padding: "11px", background: visibility === "private" ? "#eff6ff" : "#fff", border: `1.5px solid ${visibility === "private" ? "#1e3a8a" : "#e5e7eb"}`, borderRadius: 10, color: visibility === "private" ? "#1e3a8a" : "#6b7280", fontSize: 14, fontWeight: visibility === "private" ? 700 : 400, cursor: "pointer", fontFamily: FONT }}
                 >
-                  🔒 私密
+                   私密
                 </button>
               </div>
             </div>

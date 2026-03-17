@@ -19,12 +19,12 @@ type Badge = {
 };
 
 const ALL_BADGES: Badge[] = [
-  { id: "expert", name: "专家认证", nameEn: "Expert", icon: "🏆", description: "发布超过10篇高质量分析", descriptionEn: "Published 10+ quality analyses", color: "#f59e0b" },
+  { id: "expert", name: "专家认证", nameEn: "Expert", icon: "", description: "发布超过10篇高质量分析", descriptionEn: "Published 10+ quality analyses", color: "#f59e0b" },
   { id: "veteran", name: "资深玩家", nameEn: "Veteran", icon: "⭐", description: "参与超过5个联赛", descriptionEn: "Joined 5+ leagues", color: "#8b5cf6" },
-  { id: "champion", name: "冠军", nameEn: "Champion", icon: "👑", description: "赢得联赛冠军", descriptionEn: "Won a league championship", color: "#eab308" },
-  { id: "analyst", name: "分析师", nameEn: "Analyst", icon: "📊", description: "帖子获得100+点赞", descriptionEn: "Posts received 100+ likes", color: "#3b82f6" },
-  { id: "rookie", name: "新秀", nameEn: "Rookie", icon: "🌟", description: "发布首篇帖子", descriptionEn: "Published first post", color: "#22c55e" },
-  { id: "social", name: "社交达人", nameEn: "Social Star", icon: "💬", description: "评论超过50条", descriptionEn: "Posted 50+ comments", color: "#ec4899" },
+  { id: "champion", name: "冠军", nameEn: "Champion", icon: "", description: "赢得联赛冠军", descriptionEn: "Won a league championship", color: "#eab308" },
+  { id: "analyst", name: "分析师", nameEn: "Analyst", icon: "", description: "帖子获得100+点赞", descriptionEn: "Posts received 100+ likes", color: "#3b82f6" },
+  { id: "rookie", name: "新秀", nameEn: "Rookie", icon: "", description: "发布首篇帖子", descriptionEn: "Published first post", color: "#22c55e" },
+  { id: "social", name: "社交达人", nameEn: "Social Star", icon: "", description: "评论超过50条", descriptionEn: "Posted 50+ comments", color: "#ec4899" },
 ];
 
 type DraftHistory = {
@@ -231,7 +231,7 @@ export default function UserProfilePage() {
               <div className="name-row">
                 <h1 className="username">@{username}</h1>
                 {userBadges.length > 0 && (
-                  <span className="verified-badge" title={t(userBadges[0].name, userBadges[0].nameEn)}>✓</span>
+                  <span className="verified-badge" title={t(userBadges[0].name, userBadges[0].nameEn)}></span>
                 )}
               </div>
               <p className="bio">{isOwnProfile ? t("这是你的个人主页", "This is your profile") : t("Fantasy 篮球玩家", "Fantasy Basketball Player")}</p>
@@ -304,7 +304,7 @@ export default function UserProfilePage() {
             <div>
               {userInsights.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">📝</div>
+                  <div className="empty-icon"></div>
                   <p>{isOwnProfile ? t("你还没有发布任何帖子", "You haven't posted anything yet") : t("该用户还没有发布帖子", "This user hasn't posted anything yet")}</p>
                   {isOwnProfile && <Link href="/insights/new" className="btn btn-primary">{t("发布第一篇帖子", "Create Your First Post")}</Link>}
                 </div>
@@ -315,7 +315,7 @@ export default function UserProfilePage() {
                     return (
                       <Link key={insight.id} href={`/insights/${insight.id}`} className="post-card">
                         <div className="post-cover" style={{ backgroundImage: parsed.coverImage ? `url(${parsed.coverImage})` : "linear-gradient(135deg, #1e293b, #334155)" }}>
-                          <span className="post-heat">🔥 {insight.heat}</span>
+                          <span className="post-heat"> {insight.heat}</span>
                         </div>
                         <div className="post-info">
                           <h3 className="post-title">{insight.title}</h3>
@@ -341,7 +341,7 @@ export default function UserProfilePage() {
               )}
               {userLeagues.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">🏀</div>
+                  <div className="empty-icon"></div>
                   <p>{isOwnProfile ? t("你还没有创建任何联赛", "You haven't created any leagues") : t("该用户还没有联赛", "This user has no leagues")}</p>
                   {isOwnProfile && <Link href="/league/new" className="btn btn-primary">{t("创建联赛", "Create League")}</Link>}
                 </div>
@@ -350,7 +350,7 @@ export default function UserProfilePage() {
                   {userLeagues.map(league => (
                     <div key={league.id} className="league-card">
                       <Link href={`/league/${league.slug}`} className="league-info">
-                        <div className="league-icon">🏀</div>
+                        <div className="league-icon"></div>
                         <div>
                           <h3 className="league-name">{league.name}</h3>
                           <div className="league-meta">
@@ -359,7 +359,7 @@ export default function UserProfilePage() {
                           </div>
                         </div>
                       </Link>
-                      {isOwnProfile && <button className="delete-btn" onClick={() => setShowDeleteModal(league.id)}>🗑️</button>}
+                      {isOwnProfile && <button className="delete-btn" onClick={() => setShowDeleteModal(league.id)}></button>}
                     </div>
                   ))}
                 </div>
@@ -371,7 +371,7 @@ export default function UserProfilePage() {
             <div>
               {draftHistory.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">📋</div>
+                  <div className="empty-icon"></div>
                   <p>{t("还没有选秀记录", "No draft history yet")}</p>
                   <p className="empty-hint">{t("完成联赛选秀后，记录会显示在这里", "Complete a league draft to see your history here")}</p>
                   <Link href="/mock-draft" className="btn btn-primary">{t("开始模拟选秀", "Start Mock Draft")}</Link>
@@ -396,12 +396,12 @@ export default function UserProfilePage() {
           {activeTab === "stats" && (
             <div className="stats-grid">
               {[
-                { icon: "📝", value: stats.totalPosts, label: t("发布帖子", "Posts Published") },
-                { icon: "❤️", value: stats.totalLikes, label: t("获得点赞", "Likes Received") },
-                { icon: "💬", value: stats.totalComments, label: t("发表评论", "Comments Made") },
-                { icon: "🏀", value: stats.leaguesJoined, label: t("参与联赛", "Leagues Joined") },
-                { icon: "🏆", value: stats.leaguesWon, label: t("联赛冠军", "Championships") },
-                { icon: "📋", value: stats.draftsCompleted, label: t("完成选秀", "Drafts Completed") },
+                { icon: "", value: stats.totalPosts, label: t("发布帖子", "Posts Published") },
+                { icon: "", value: stats.totalLikes, label: t("获得点赞", "Likes Received") },
+                { icon: "", value: stats.totalComments, label: t("发表评论", "Comments Made") },
+                { icon: "", value: stats.leaguesJoined, label: t("参与联赛", "Leagues Joined") },
+                { icon: "", value: stats.leaguesWon, label: t("联赛冠军", "Championships") },
+                { icon: "", value: stats.draftsCompleted, label: t("完成选秀", "Drafts Completed") },
               ].map((stat, i) => (
                 <div key={i} className="stat-card">
                   <div className="stat-icon">{stat.icon}</div>

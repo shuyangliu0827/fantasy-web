@@ -653,7 +653,7 @@ export default function RosterPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -720,7 +720,7 @@ export default function RosterPage() {
 
           {roster.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon"></div>
               <p>{t("该队伍还没有球员。请先完成选秀。", "No players on this team yet. Complete the draft first.")}</p>
               <Link href={`/league/${slug}`} className="back-link">
                 {t("返回联赛", "Back to League")}

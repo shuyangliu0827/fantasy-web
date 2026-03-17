@@ -151,7 +151,7 @@ export default function FreeAgentsPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -178,7 +178,7 @@ export default function FreeAgentsPage() {
                   <div key={p.id} className="roster-chip">
                     <span className="chip-name">{p.name}</span>
                     <span className="chip-pos">{p.position}</span>
-                    <button className="chip-drop" onClick={() => handleDropPlayer(p.id)} title={t("放弃", "Drop")}>✕</button>
+                    <button className="chip-drop" onClick={() => handleDropPlayer(p.id)} title={t("放弃", "Drop")}></button>
                   </div>
                 ))}
               </div>
@@ -268,7 +268,7 @@ export default function FreeAgentsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>{t("签约球员", "Add Player")}</h3>
-              <button className="modal-close" onClick={() => setShowAddModal(null)}>✕</button>
+              <button className="modal-close" onClick={() => setShowAddModal(null)}></button>
             </div>
             <div className="modal-body">
               <div className="add-player-card">

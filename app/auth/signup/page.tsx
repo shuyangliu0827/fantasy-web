@@ -127,9 +127,9 @@ export default function SignupPage() {
         {/* Feature bullets */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 40 }}>
           {[
-            { icon: "🎯", label: t("免费模拟选秀无限次", "Unlimited mock drafts") },
-            { icon: "📱", label: t("实时推送选秀提醒", "Real-time draft alerts") },
-            { icon: "🎁", label: t("新用户免费参加精英联赛", "Free elite league for new users") },
+            { icon: "", label: t("免费模拟选秀无限次", "Unlimited mock drafts") },
+            { icon: "", label: t("实时推送选秀提醒", "Real-time draft alerts") },
+            { icon: "", label: t("新用户免费参加精英联赛", "Free elite league for new users") },
           ].map((item) => (
             <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{
@@ -170,7 +170,7 @@ export default function SignupPage() {
             {t("创建账号", "Create Account")}
           </h2>
           <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 32px 0" }}>
-            {t("开始你的幻想篮球之旅", "Begin your fantasy basketball journey")}
+            {t("开始你的范特西篮球之旅", "Begin your fantasy basketball journey")}
           </p>
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -348,7 +348,7 @@ export default function SignupPage() {
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#d1d5db")}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
             >
-              <span style={{ fontSize: 18 }}>💬</span>
+              <span style={{ fontSize: 18 }}></span>
               {t("使用微信快速注册", "Sign up with WeChat")}
             </button>
 

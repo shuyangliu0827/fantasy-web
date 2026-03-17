@@ -5,8 +5,6 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 
-// ── Nav ──────────────────────────────────────────────────────────────────────
-
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
@@ -15,24 +13,19 @@ const NAV_ITEMS = [
   { href: "/draft-guide", labelZh: "选秀指南", labelEn: "Draft Guide" },
   { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
   { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
-  { href: "/my-team", labelZh: "我的球队", labelEn: "My Team" },
 ];
-
-// ── Feature cards ─────────────────────────────────────────────────────────────
 
 const FEATURES = [
   {
-    icon: "📊",
-    iconBg: "#dbeafe",
-    titleZh: "实时球员排名",
-    titleEn: "Live Rankings",
-    descZh: "综合30+数据维度，每日更新，精准量化每个球员的幻想价值。",
+    accentColor: "#dbeafe",
+    titleZh: "AI 球员排名",
+    titleEn: "AI Rankings",
+    descZh: "综合30+数据维度，每日更新，精准量化每个球员的范特西价值。",
     descEn: "30+ data dimensions updated daily to quantify every player's fantasy value.",
     href: "/rankings",
   },
   {
-    icon: "🏆",
-    iconBg: "#fef3c7",
+    accentColor: "#fef3c7",
     titleZh: "公开联赛",
     titleEn: "Public Leagues",
     descZh: "加入全国玩家的公开联赛，展示你的选秀实力，赢取排行榜荣耀。",
@@ -40,8 +33,7 @@ const FEATURES = [
     href: "/league",
   },
   {
-    icon: "⚡",
-    iconBg: "#dbeafe",
+    accentColor: "#dbeafe",
     titleZh: "模拟选秀",
     titleEn: "Mock Draft",
     descZh: "在真实选秀前反复练习，AI对手陪你跑通每一套战略方案。",
@@ -49,8 +41,7 @@ const FEATURES = [
     href: "/mock-draft",
   },
   {
-    icon: "🔍",
-    iconBg: "#fef9ee",
+    accentColor: "#fef9ee",
     titleZh: "球员对比",
     titleEn: "Player Compare",
     descZh: "任意两名球员深度数据对比，帮你在关键轮次做出最优决策。",
@@ -59,15 +50,13 @@ const FEATURES = [
   },
 ];
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
-
 const STATS = [
   { num: "480+", labelZh: "NBA球员数据库", labelEn: "NBA Players Tracked", color: "#2563eb" },
   { num: "12K", labelZh: "活跃用户", labelEn: "Active Users", color: "#2563eb" },
   { num: "98%", labelZh: "数据准确率", labelEn: "Data Accuracy", color: "#059669" },
 ];
 
-// ── Component ─────────────────────────────────────────────────────────────────
+const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
 export default function HomePage() {
   const { t, lang, setLang } = useLang();
@@ -77,7 +66,6 @@ export default function HomePage() {
   const [signupHovered, setSignupHovered] = useState(false);
   const [cta1Hovered, setCta1Hovered] = useState(false);
   const [cta2Hovered, setCta2Hovered] = useState(false);
-  const [cta3Hovered, setCta3Hovered] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -91,9 +79,9 @@ export default function HomePage() {
   };
 
   return (
-    <div style={{ background: "#fff", minHeight: "100vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif", color: "#0f172a" }}>
+    <div style={{ background: "#fff", minHeight: "100vh", fontFamily: FONT, color: "#0f172a" }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header style={{
         position: "sticky", top: 0, zIndex: 100,
         background: "rgba(255,255,255,0.95)",
@@ -205,9 +193,37 @@ export default function HomePage() {
             )}
           </div>
         </div>
+
+        {/* Page tabs: 首页 / 发现 */}
+        <div style={{
+          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
+          display: "flex", gap: 0,
+          borderTop: "1px solid #f1f5f9",
+        }}>
+          {[
+            { labelZh: "首页", labelEn: "Home", href: "/", active: true },
+            { labelZh: "发现", labelEn: "Discover", href: "/discover", active: false },
+          ].map(tab => (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              style={{
+                padding: "11px 20px",
+                fontSize: 14,
+                fontWeight: tab.active ? 700 : 500,
+                color: tab.active ? "#1e3a8a" : "#64748b",
+                textDecoration: "none",
+                borderBottom: tab.active ? "2px solid #1e3a8a" : "2px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              {lang === "zh" ? tab.labelZh : tab.labelEn}
+            </Link>
+          ))}
+        </div>
       </header>
 
-      {/* ── Hero ── */}
+      {/* Hero */}
       <section style={{ background: "#fff", padding: "88px 24px 72px" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
@@ -244,7 +260,7 @@ export default function HomePage() {
             {/* Description */}
             <p style={{ margin: "22px 0 36px", fontSize: 16, lineHeight: 1.75, color: "#64748b", maxWidth: 430 }}>
               {t(
-                "中国首个专业幻想篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
+                "中国首个专业范特西篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
                 "China's first professional fantasy basketball platform. AI rankings, live data, deep analysis — so you nail every pick."
               )}
             </p>
@@ -268,7 +284,7 @@ export default function HomePage() {
                   boxShadow: "0 4px 16px rgba(30,58,138,0.25)",
                 }}
               >
-                🏀 {t("免费开始", "Get Started")} →
+                {t("免费开始", "Get Started")} →
               </Link>
               <Link
                 href="/how-to-play"
@@ -287,25 +303,6 @@ export default function HomePage() {
                   transition: "all 0.15s",
                 }}
               >
-                {t("新手入门", "How To Play")}
-              </Link>
-              <Link
-                href="/draft-guide"
-                onMouseEnter={() => setCta3Hovered(true)}
-                onMouseLeave={() => setCta3Hovered(false)}
-                style={{
-                  display: "inline-flex", alignItems: "center",
-                  padding: "14px 30px",
-                  border: `2px solid ${cta3Hovered ? "#cbd5e1" : "#e2e8f0"}`,
-                  color: "#374151",
-                  borderRadius: 10,
-                  fontSize: 16,
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  background: cta3Hovered ? "#f8fafc" : "#fff",
-                  transition: "all 0.15s",
-                }}
-              >
                 {t("查看选秀指南", "Draft Guide")}
               </Link>
             </div>
@@ -314,7 +311,7 @@ export default function HomePage() {
           {/* Right: floating player cards */}
           <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0 }}>
 
-            {/* Giannis card — dark navy, back-right */}
+            {/* Giannis card — dark navy */}
             <div style={{
               position: "absolute",
               top: 10, right: 30,
@@ -335,7 +332,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Curry card — amber, back-left */}
+            {/* Curry card — amber */}
             <div style={{
               position: "absolute",
               bottom: 20, left: 10,
@@ -377,21 +374,15 @@ export default function HomePage() {
               zIndex: 3,
               overflow: "hidden",
             }}>
-              {/* Position */}
               <div style={{
                 display: "inline-block", padding: "4px 10px",
                 background: "#eff6ff",
                 borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#2563eb", marginBottom: 14,
               }}>SF</div>
-
-              {/* Big number watermark */}
               <div style={{ fontSize: 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
-
               <div style={{ fontSize: 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
               <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 22 }}>LAL · 湖人</div>
-
               <div style={{ height: 1, background: "#f1f5f9", marginBottom: 18 }} />
-
               <div style={{ display: "flex", gap: 0 }}>
                 {[["25.2", "分"], ["7.3", "篮"], ["8.1", "助"]].map(([val, label], i) => (
                   <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f1f5f9" : "none", paddingBottom: 4 }}>
@@ -402,25 +393,21 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Trophy badge */}
+            {/* Amber dot accent */}
             <div style={{
               position: "absolute",
               bottom: 45, right: 18,
               width: 48, height: 48,
-              background: "#fef9c3",
+              background: "#f59e0b",
               borderRadius: "50%",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 22,
-              boxShadow: "0 4px 20px rgba(245,158,11,0.22)",
+              boxShadow: "0 4px 20px rgba(245,158,11,0.35)",
               zIndex: 4,
-            }}>
-              🏆
-            </div>
+            }} />
           </div>
         </div>
       </section>
 
-      {/* ── Stats bar ── */}
+      {/* Stats bar */}
       <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
@@ -443,7 +430,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── Feature cards ── */}
+      {/* Feature cards */}
       <section style={{ background: "#f8fafc", padding: "64px 24px 80px" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{
@@ -470,27 +457,64 @@ export default function HomePage() {
                     minHeight: 200,
                   }}
                 >
-                  {/* Icon */}
+                  {/* Color block instead of emoji */}
                   <div style={{
                     width: 48, height: 48,
-                    background: f.iconBg,
+                    background: f.accentColor,
                     borderRadius: 12,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 22,
                     marginBottom: 18,
-                  }}>
-                    {f.icon}
-                  </div>
+                  }} />
 
-                  {/* Title */}
                   <div style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>
                     {lang === "zh" ? f.titleZh : f.titleEn}
                   </div>
 
-                  {/* Description */}
                   <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.65, margin: 0 }}>
                     {lang === "zh" ? f.descZh : f.descEn}
                   </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Hot players section */}
+      <section style={{ background: "#fff", padding: "64px 24px 80px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.5px" }}>
+              {t("本周热门球员", "Hot Players This Week")}
+            </h2>
+            <Link href="/rankings" style={{ fontSize: 14, fontWeight: 600, color: "#2563eb", textDecoration: "none" }}>
+              {t("查看全部排名", "View All Rankings")} →
+            </Link>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+            {[
+              { rank: 1, name: "N. Jokić", team: "DEN · C", score: 68.4, color: "#f59e0b" },
+              { rank: 2, name: "L. Dončić", team: "DAL · PG", score: 64.2, color: "#64748b" },
+              { rank: 3, name: "G. Antetokounmpo", team: "MIL · PF", score: 62.8, color: "#64748b" },
+              { rank: 4, name: "S. Curry", team: "GSW · PG", score: 58.7, color: "#64748b" },
+            ].map((p) => (
+              <Link key={p.rank} href="/rankings" style={{ textDecoration: "none" }}>
+                <div style={{
+                  background: "#f8fafc",
+                  borderRadius: 14,
+                  padding: "18px 20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 14,
+                  border: "1px solid #e2e8f0",
+                  transition: "all 0.15s",
+                }}>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: p.color, minWidth: 28, textAlign: "center" }}>{p.rank}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8" }}>{p.team}</div>
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{p.score}</div>
                 </div>
               </Link>
             ))}

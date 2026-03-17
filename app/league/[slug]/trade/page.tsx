@@ -368,7 +368,7 @@ export default function TradePage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -619,7 +619,7 @@ export default function TradePage() {
 
               {myPendingReceived.length === 0 && myPendingSent.length === 0 && (
                 <div className="empty-state">
-                  <div className="empty-icon">🔄</div>
+                  <div className="empty-icon"></div>
                   <p>{t("没有待处理的交易", "No pending trades")}</p>
                 </div>
               )}
@@ -631,7 +631,7 @@ export default function TradePage() {
             <div className="history-section">
               {historyTrades.length === 0 ? (
                 <div className="empty-state">
-                  <div className="empty-icon">📜</div>
+                  <div className="empty-icon"></div>
                   <p>{t("还没有交易历史", "No trade history yet")}</p>
                 </div>
               ) : (

@@ -132,7 +132,7 @@ export default function MembersPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -149,7 +149,7 @@ export default function MembersPage() {
             </div>
             {isOwner && (
               <button className="invite-btn" onClick={copyInviteLink}>
-                {copied ? "✓ " + t("已复制", "Copied!") : "🔗 " + t("复制邀请链接", "Copy Invite Link")}
+                {copied ? " " + t("已复制", "Copied!") : " " + t("复制邀请链接", "Copy Invite Link")}
               </button>
             )}
           </div>
@@ -157,7 +157,7 @@ export default function MembersPage() {
           {/* 邀请卡片 */}
           {isOwner && (
             <div className="invite-card">
-              <div className="invite-icon">📨</div>
+              <div className="invite-icon"></div>
               <div className="invite-content">
                 <h3>{t("邀请成员", "Invite Members")}</h3>
                 <p>{t("分享链接邀请朋友加入联赛", "Share the link to invite friends to join")}</p>
@@ -185,7 +185,7 @@ export default function MembersPage() {
                     </div>
                     <div className="member-meta">
                       {member.role === "owner" && (
-                        <span className="role-badge owner">👑 {t("联赛管理员", "League Manager")}</span>
+                        <span className="role-badge owner"> {t("联赛管理员", "League Manager")}</span>
                       )}
                       {member.role === "member" && (
                         <span className="role-badge member">{t("成员", "Member")}</span>

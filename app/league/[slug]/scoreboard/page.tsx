@@ -295,7 +295,7 @@ export default function ScoreboardPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -339,7 +339,7 @@ export default function ScoreboardPage() {
           <div className="matchups-grid">
             {matchups.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">📊</div>
+                <div className="empty-icon"></div>
                 <h3>{t("还没有对阵", "No matchups yet")}</h3>
                 <p>{t("联赛需要至少2支队伍才能生成对阵", "League needs at least 2 teams to generate matchups")}</p>
               </div>

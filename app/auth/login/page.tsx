@@ -121,9 +121,9 @@ export default function LoginPage() {
         {/* Feature bullets */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 40 }}>
           {[
-            { icon: "🏀", label: t("实时NBA数据更新", "Real-time NBA stats") },
-            { icon: "📊", label: t("智能选手排名系统", "Smart player rankings") },
-            { icon: "🏆", label: t("多联赛同时参与", "Join multiple leagues") },
+            { icon: "", label: t("实时NBA数据更新", "Real-time NBA stats") },
+            { icon: "", label: t("智能选手排名系统", "Smart player rankings") },
+            { icon: "", label: t("多联赛同时参与", "Join multiple leagues") },
           ].map((item) => (
             <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{
@@ -292,7 +292,7 @@ export default function LoginPage() {
               onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#d1d5db")}
               onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
             >
-              <span style={{ fontSize: 18 }}>💬</span>
+              <span style={{ fontSize: 18 }}></span>
               {t("使用微信快速登录", "Sign in with WeChat")}
             </button>
 

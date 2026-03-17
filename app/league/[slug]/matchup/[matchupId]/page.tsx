@@ -609,7 +609,7 @@ export default function MatchupDetailPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span>🏆</span>
+            <span></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -705,14 +705,14 @@ export default function MatchupDetailPage() {
               className="view-dropdown"
             >
               <option value="total">
-                {viewMode === "total" ? "✓ " : ""}{t("总计", "Total")}
+                {viewMode === "total" ? " " : ""}{t("总计", "Total")}
               </option>
               {weekDates.map((d, i) => {
                 const ds = dateStrings[i];
                 const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                 return (
                   <option key={ds} value={ds}>
-                    {viewMode === ds ? "✓ " : ""}{label}
+                    {viewMode === ds ? " " : ""}{label}
                   </option>
                 );
               })}
