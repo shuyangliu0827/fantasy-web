@@ -131,6 +131,7 @@ export default function ComparePage() {
   const { t } = useLang();
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState<StrategyKey>("balanced");
@@ -147,6 +148,12 @@ export default function ComparePage() {
     if (players.length >= 2) {
       setSelectedPlayers([players[0], players[1]]);
     }
+  }, []);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const filteredPlayers = allPlayers.filter(p =>
@@ -210,7 +217,7 @@ export default function ComparePage() {
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
       <LightHeader activeHref="/compare" />
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 16px" }}>
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 12px" : "32px 16px" }}>
         {/* Page Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px 0" }}>
@@ -229,7 +236,7 @@ export default function ComparePage() {
             const color = COLORS[index] || "#64748b";
             const textOnColor = TEXT_ON_COLOR[index] || "#fff";
             return (
-              <div key={player.id} style={{ background: "#fff", border: `2px solid ${color}`, borderRadius: 16, padding: 20, width: 220, position: "relative", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+              <div key={player.id} style={{ background: "#fff", border: `2px solid ${color}`, borderRadius: 16, padding: 20, width: isMobile ? "100%" : 220, position: "relative", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
                 <button onClick={() => removePlayer(player.id)} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>✕</button>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                   <div style={{ width: 48, height: 48, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: textOnColor, fontSize: 14, flexShrink: 0 }}>
@@ -257,7 +264,7 @@ export default function ComparePage() {
           })}
 
           {selectedPlayers.length < 4 && (
-            <div onClick={() => setShowSearch(true)} style={{ background: "#fff", border: "2px dashed #d1d5db", borderRadius: 16, padding: 20, width: 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9ca3af", minHeight: 200, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+            <div onClick={() => setShowSearch(true)} style={{ background: "#fff", border: "2px dashed #d1d5db", borderRadius: 16, padding: 20, width: isMobile ? "100%" : 220, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#9ca3af", minHeight: 200, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
               <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, marginBottom: 12, color: "#9ca3af" }}>+</div>
               <span style={{ fontSize: 14, fontWeight: 500 }}>{t("添加球员", "Add Player")}</span>
             </div>
@@ -266,7 +273,7 @@ export default function ComparePage() {
 
         {/* Strategy Selection */}
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 24, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 10, flexWrap: "wrap" }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>{t("分析策略", "Analysis Strategy")}</h2>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setShowCustom(false)} style={{ padding: "7px 14px", borderRadius: 8, background: !showCustom ? "#1e3a8a" : "#f3f4f6", color: !showCustom ? "#fff" : "#374151", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
@@ -279,7 +286,7 @@ export default function ComparePage() {
           </div>
 
           {!showCustom ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
               {(Object.entries(STRATEGY_PRESETS) as [StrategyKey, typeof STRATEGY_PRESETS[StrategyKey]][]).map(([key, preset]) => (
                 <button
                   key={key}
@@ -304,7 +311,7 @@ export default function ComparePage() {
               ))}
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
               {[
                 { key: "ppg", label: t("得分 (PPG)", "Points (PPG)") },
                 { key: "rpg", label: t("篮板 (RPG)", "Rebounds (RPG)") },
@@ -407,7 +414,7 @@ export default function ComparePage() {
             {/* Category Breakdown */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 24, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 20px 0" }}>{t("类别详细分析", "Category Breakdown")}</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
                 {[
                   { key: "ppg", label: t("得分", "Scoring"), max: 35 },
                   { key: "rpg", label: t("篮板", "Rebounds"), max: 15 },
@@ -455,7 +462,7 @@ export default function ComparePage() {
                   `Scores based on "${showCustom ? "Custom" : STRATEGY_PRESETS[activeStrategy].nameEn}" strategy`)}
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
                 {selectedPlayers.sort((a, b) => calculateWeightedScore(b) - calculateWeightedScore(a)).map((player, index) => {
                   const score = calculateWeightedScore(player);
                   const cats = calculateCategoryScores(player);
@@ -480,7 +487,7 @@ export default function ComparePage() {
                         </div>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
                         {[
                           { key: "scoring", label: t("得分", "Scoring"), value: cats.scoring },
                           { key: "rebounding", label: t("篮板", "Rebounds"), value: cats.rebounding },

@@ -66,10 +66,16 @@ export default function HomePage() {
   const [signupHovered, setSignupHovered] = useState(false);
   const [cta1Hovered, setCta1Hovered] = useState(false);
   const [cta2Hovered, setCta2Hovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
     if (u) setUser({ name: u.name, username: u.username });
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const handleLogout = () => {
@@ -89,8 +95,8 @@ export default function HomePage() {
         borderBottom: "1px solid #e2e8f0",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
-          height: 64, display: "flex", alignItems: "center", gap: 32,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px",
+          height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32,
         }}>
 
           {/* Logo */}
@@ -100,7 +106,7 @@ export default function HomePage() {
           </Link>
 
           {/* Nav */}
-          <nav style={{ display: "flex", gap: 2, flex: 1, overflow: "hidden" }}>
+          <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
             {NAV_ITEMS.map(item => {
               const isActive = item.href === "/";
               return (
@@ -126,15 +132,15 @@ export default function HomePage() {
           </nav>
 
           {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
             <button
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{
-                padding: "7px 14px",
+                padding: isMobile ? "6px 9px" : "7px 14px",
                 border: "1px solid #e2e8f0",
                 borderRadius: 999,
                 background: "#fff",
-                fontSize: 13,
+                fontSize: isMobile ? 12 : 13,
                 fontWeight: 600,
                 color: "#64748b",
                 cursor: "pointer",
@@ -150,7 +156,7 @@ export default function HomePage() {
                   onMouseEnter={() => setLoginHovered(true)}
                   onMouseLeave={() => setLoginHovered(false)}
                   style={{
-                    padding: "8px 18px",
+                    padding: isMobile ? "7px 10px" : "8px 18px",
                     border: "1px solid #e2e8f0",
                     borderRadius: 8,
                     fontSize: 14,
@@ -168,7 +174,7 @@ export default function HomePage() {
                   onMouseEnter={() => setSignupHovered(true)}
                   onMouseLeave={() => setSignupHovered(false)}
                   style={{
-                    padding: "8px 20px",
+                    padding: isMobile ? "7px 10px" : "8px 20px",
                     background: signupHovered ? "#1e40af" : "#1e3a8a",
                     borderRadius: 8,
                     fontSize: 14,
@@ -183,11 +189,11 @@ export default function HomePage() {
               </>
             ) : (
               <>
-                <Link href={`/u/${user.username}`} style={{ fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: "8px 4px" }}>
+                <Link href={`/u/${user.username}`} style={{ fontSize: isMobile ? 12 : 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: isMobile ? "6px 8px" : "8px 4px", maxWidth: isMobile ? 76 : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   @{user.username}
                 </Link>
-                <button onClick={handleLogout} style={{ padding: "8px 14px", fontSize: 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
-                  {t("退出", "Logout")}
+                <button onClick={handleLogout} style={{ padding: isMobile ? "6px 8px" : "8px 14px", fontSize: isMobile ? 12 : 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
+                  {isMobile ? t("退", "Out") : t("退出", "Logout")}
                 </button>
               </>
             )}
@@ -196,8 +202,8 @@ export default function HomePage() {
 
         {/* Page tabs: 首页 / 发现 */}
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
-          display: "flex", gap: 0,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+          display: "flex", gap: 0, overflowX: "auto",
           borderTop: "1px solid #f1f5f9",
         }}>
           {[
@@ -224,10 +230,10 @@ export default function HomePage() {
       </header>
 
       {/* Hero */}
-      <section style={{ background: "#fff", padding: "88px 24px 72px" }}>
+      <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
-          display: "flex", alignItems: "center", gap: 48,
+          display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 24 : 48,
         }}>
 
           {/* Left: copy */}
@@ -309,54 +315,55 @@ export default function HomePage() {
           </div>
 
           {/* Right: floating player cards */}
-          <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0 }}>
+          {!isMobile && (
+            <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0, width: "100%", overflow: "hidden" }}>
 
             {/* Giannis card — dark navy */}
             <div style={{
               position: "absolute",
-              top: 10, right: 30,
-              width: 190, height: 255,
+              top: isMobile ? 18 : 10, right: isMobile ? 4 : 30,
+              width: isMobile ? 130 : 190, height: isMobile ? 176 : 255,
               background: "linear-gradient(145deg, #1e3a8a 0%, #1e40af 100%)",
               borderRadius: 20,
               transform: "rotate(7deg)",
               boxShadow: "0 24px 60px rgba(30,58,138,0.28)",
-              padding: "20px 20px 24px",
+              padding: isMobile ? "12px 12px 14px" : "20px 20px 24px",
               color: "#fff",
               zIndex: 1,
               overflow: "hidden",
             }}>
-              <div style={{ fontSize: 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>34</div>
-              <div style={{ position: "absolute", bottom: 24, left: 20 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>G. Antetokounmpo</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>MIL · 雄鹿</div>
+              <div style={{ fontSize: isMobile ? 46 : 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>34</div>
+              <div style={{ position: "absolute", bottom: isMobile ? 12 : 24, left: isMobile ? 12 : 20 }}>
+                <div style={{ fontSize: isMobile ? 10 : 13, fontWeight: 700, marginBottom: 2 }}>G. Antetokounmpo</div>
+                <div style={{ fontSize: isMobile ? 9 : 11, color: "rgba(255,255,255,0.55)" }}>MIL · 雄鹿</div>
               </div>
             </div>
 
             {/* Curry card — amber */}
             <div style={{
               position: "absolute",
-              bottom: 20, left: 10,
-              width: 185, height: 240,
+              bottom: isMobile ? 16 : 20, left: isMobile ? 2 : 10,
+              width: isMobile ? 126 : 185, height: isMobile ? 164 : 240,
               background: "linear-gradient(145deg, #d97706 0%, #f59e0b 100%)",
               borderRadius: 20,
               transform: "rotate(-7deg)",
               boxShadow: "0 20px 56px rgba(245,158,11,0.32)",
-              padding: "18px 18px 22px",
+              padding: isMobile ? "10px 10px 12px" : "18px 18px 22px",
               zIndex: 1,
               overflow: "hidden",
             }}>
               <div style={{
                 display: "inline-block", padding: "3px 9px",
                 background: "rgba(255,255,255,0.28)",
-                borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 10,
+                borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#fff", marginBottom: isMobile ? 6 : 10,
               }}>PG</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>S. Curry</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 22 }}>GSW · 勇士</div>
-              <div style={{ display: "flex", gap: 16 }}>
+              <div style={{ fontSize: isMobile ? 12 : 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>S. Curry</div>
+              <div style={{ fontSize: isMobile ? 9 : 12, color: "rgba(255,255,255,0.65)", marginBottom: isMobile ? 10 : 22 }}>GSW · 勇士</div>
+              <div style={{ display: "flex", gap: isMobile ? 8 : 16 }}>
                 {[["26.4", "分"], ["4.5", "篮"], ["6.1", "助"]].map(([val, label]) => (
                   <div key={label} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>{val}</div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)" }}>{label}</div>
+                    <div style={{ fontSize: isMobile ? 12 : 17, fontWeight: 800, color: "#fff" }}>{val}</div>
+                    <div style={{ fontSize: isMobile ? 8 : 10, color: "rgba(255,255,255,0.65)" }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -365,29 +372,29 @@ export default function HomePage() {
             {/* LeBron card — white, front */}
             <div style={{
               position: "absolute",
-              top: 50, left: 100,
-              width: 235, height: 305,
+              top: isMobile ? 24 : 50, left: isMobile ? 60 : 100,
+              width: isMobile ? 168 : 235, height: isMobile ? 220 : 305,
               background: "#fff",
               borderRadius: 22,
               boxShadow: "0 28px 80px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.06)",
-              padding: "22px 24px",
+              padding: isMobile ? "14px 14px" : "22px 24px",
               zIndex: 3,
               overflow: "hidden",
             }}>
               <div style={{
                 display: "inline-block", padding: "4px 10px",
                 background: "#eff6ff",
-                borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#2563eb", marginBottom: 14,
+                borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#2563eb", marginBottom: isMobile ? 8 : 14,
               }}>SF</div>
-              <div style={{ fontSize: 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
-              <div style={{ fontSize: 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
-              <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 22 }}>LAL · 湖人</div>
-              <div style={{ height: 1, background: "#f1f5f9", marginBottom: 18 }} />
+              <div style={{ fontSize: isMobile ? 54 : 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
+              <div style={{ fontSize: isMobile ? 14 : 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
+              <div style={{ fontSize: isMobile ? 10 : 13, color: "#94a3b8", marginBottom: isMobile ? 10 : 22 }}>LAL · 湖人</div>
+              <div style={{ height: 1, background: "#f1f5f9", marginBottom: isMobile ? 10 : 18 }} />
               <div style={{ display: "flex", gap: 0 }}>
                 {[["25.2", "分"], ["7.3", "篮"], ["8.1", "助"]].map(([val, label], i) => (
                   <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f1f5f9" : "none", paddingBottom: 4 }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px" }}>{val}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
+                    <div style={{ fontSize: isMobile ? 15 : 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px" }}>{val}</div>
+                    <div style={{ fontSize: isMobile ? 9 : 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -396,14 +403,15 @@ export default function HomePage() {
             {/* Amber dot accent */}
             <div style={{
               position: "absolute",
-              bottom: 45, right: 18,
-              width: 48, height: 48,
+              bottom: isMobile ? 24 : 45, right: isMobile ? 4 : 18,
+              width: isMobile ? 32 : 48, height: isMobile ? 32 : 48,
               background: "#f59e0b",
               borderRadius: "50%",
               boxShadow: "0 4px 20px rgba(245,158,11,0.35)",
               zIndex: 4,
             }} />
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -411,19 +419,19 @@ export default function HomePage() {
       <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
-          padding: "36px 24px",
-          display: "flex",
+          padding: isMobile ? "24px 12px" : "36px 24px",
+          display: "flex", flexDirection: isMobile ? "column" : "row",
           alignItems: "center",
           gap: 0,
         }}>
           {STATS.map((s, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", flex: 1 }}>
               <div>
-                <div style={{ fontSize: 38, fontWeight: 800, color: s.color, letterSpacing: "-1.5px", lineHeight: 1 }}>{s.num}</div>
+                <div style={{ fontSize: isMobile ? 30 : 38, fontWeight: 800, color: s.color, letterSpacing: "-1.5px", lineHeight: 1 }}>{s.num}</div>
                 <div style={{ fontSize: 14, color: "#64748b", marginTop: 5, fontWeight: 500 }}>{lang === "zh" ? s.labelZh : s.labelEn}</div>
               </div>
               {i < STATS.length - 1 && (
-                <div style={{ width: 1, height: 44, background: "#e2e8f0", margin: "0 48px", flexShrink: 0 }} />
+                <div style={{ width: isMobile ? "100%" : 1, height: isMobile ? 1 : 44, background: "#e2e8f0", margin: isMobile ? "14px 0" : "0 48px", flexShrink: 0 }} />
               )}
             </div>
           ))}
@@ -431,11 +439,11 @@ export default function HomePage() {
       </section>
 
       {/* Feature cards */}
-      <section style={{ background: "#f8fafc", padding: "64px 24px 80px" }}>
+      <section style={{ background: "#f8fafc", padding: isMobile ? "36px 12px 44px" : "64px 24px 80px" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
             gap: 20,
           }}>
             {FEATURES.map((f, i) => (
@@ -490,7 +498,7 @@ export default function HomePage() {
               {t("查看全部排名", "View All Rankings")} →
             </Link>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 16 }}>
             {[
               { rank: 1, name: "N. Jokić", team: "DEN · C", score: 68.4, color: "#f59e0b" },
               { rank: 2, name: "L. Dončić", team: "DAL · PG", score: 64.2, color: "#64748b" },
