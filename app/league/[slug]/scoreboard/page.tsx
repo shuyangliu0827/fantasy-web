@@ -12,10 +12,12 @@ import {
   getLeagueMembers,
   getTeamRoster,
   fetchTeamRosterFromDB,
+  fetchTeamLineupFromDB,
   supabase,
   League,
   LeagueMember,
   RosterPlayer,
+  LineupMap,
 } from "@/lib/store";
 import {
   getWeekDateStrings,
@@ -43,6 +45,15 @@ type PlayerGameStats = {
 
 type DateStatsMap = Record<string, PlayerGameStats>;
 
+const STARTER_SLOTS = new Set(["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"]);
+
+function getWeekdayScoringDates(dateStrings: string[]): string[] {
+  return dateStrings.filter((dateStr) => {
+    const day = new Date(`${dateStr}T00:00:00`).getDay();
+    return day >= 1 && day <= 5; // Monday–Friday
+  });
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScoreboardPage() {
@@ -58,6 +69,7 @@ export default function ScoreboardPage() {
 
   // Real data state
   const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
+  const [teamLineups, setTeamLineups] = useState<Record<string, LineupMap>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
   const [scoresLoading, setScoresLoading] = useState(false);
@@ -82,14 +94,17 @@ export default function ScoreboardPage() {
 
       if (teamsData) {
         const rosters: Record<string, RosterPlayer[]> = {};
+        const lineups: Record<string, LineupMap> = {};
         for (const team of teamsData) {
           if (team.roster_data && Array.isArray(team.roster_data)) {
             rosters[team.user_id] = team.roster_data as RosterPlayer[];
           } else {
             rosters[team.user_id] = getTeamRoster(leagueData.id, team.id);
           }
+          lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
         }
         setTeamRosters(rosters);
+        setTeamLineups(lineups);
       }
 
       // Fetch player stats cache for name -> BDL ID mapping
@@ -193,10 +208,22 @@ export default function ScoreboardPage() {
     return null;
   }
 
-  function calcWeekTotalForRoster(roster: RosterPlayer[]): number {
-    const dateStrings = getWeekDateStrings(selectedWeek);
-    return dateStrings.reduce((total, dateStr) => {
-      return total + roster.reduce((sum, p) => {
+  function getStartersFromLineup(roster: RosterPlayer[], lineup: LineupMap): RosterPlayer[] {
+    const playerMap = new Map(roster.map((p) => [p.id, p]));
+    const starters: RosterPlayer[] = [];
+    for (const slot of Object.keys(lineup)) {
+      if (!STARTER_SLOTS.has(slot)) continue;
+      const player = playerMap.get(lineup[slot]);
+      if (player) starters.push(player);
+    }
+    return starters;
+  }
+
+  function calcWeekTotalForRoster(roster: RosterPlayer[], lineup: LineupMap): number {
+    const scoringDates = getWeekdayScoringDates(getWeekDateStrings(selectedWeek));
+    const starters = getStartersFromLineup(roster, lineup);
+    return scoringDates.reduce((total, dateStr) => {
+      return total + starters.reduce((sum, p) => {
         const stats = getPlayerDayStats(p, dateStr);
         return sum + (stats?.fpts || 0);
       }, 0);
@@ -222,13 +249,15 @@ export default function ScoreboardPage() {
 
     const homeRoster = teamRosters[fixed.user_id] || [];
     const awayRoster = teamRosters[rotating[round].user_id] || [];
+    const homeLineup = teamLineups[fixed.user_id] || {};
+    const awayLineup = teamLineups[rotating[round].user_id] || {};
 
     result.push({
       id: id++,
       home: fixed,
       away: rotating[round],
-      homeScore: calcWeekTotalForRoster(homeRoster),
-      awayScore: calcWeekTotalForRoster(awayRoster),
+      homeScore: calcWeekTotalForRoster(homeRoster, homeLineup),
+      awayScore: calcWeekTotalForRoster(awayRoster, awayLineup),
     });
 
     for (let i = 1; i <= half; i++) {
@@ -236,12 +265,14 @@ export default function ScoreboardPage() {
       const aw = rotating[(round + n - 1 - i) % (n - 1)];
       const hRoster = teamRosters[hm.user_id] || [];
       const aRoster = teamRosters[aw.user_id] || [];
+      const hLineup = teamLineups[hm.user_id] || {};
+      const aLineup = teamLineups[aw.user_id] || {};
       result.push({
         id: id++,
         home: hm,
         away: aw,
-        homeScore: calcWeekTotalForRoster(hRoster),
-        awayScore: calcWeekTotalForRoster(aRoster),
+        homeScore: calcWeekTotalForRoster(hRoster, hLineup),
+        awayScore: calcWeekTotalForRoster(aRoster, aLineup),
       });
     }
 
