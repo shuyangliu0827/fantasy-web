@@ -3,18 +3,9 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
+import LightHeader from "@/components/LightHeader";
 import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
 
-const NAV = [
-  { href: "/", zh: "首页", en: "Home" },
-  { href: "/rankings", zh: "球员排名", en: "Rankings" },
-  { href: "/league", zh: "公开联赛", en: "Leagues" },
-  { href: "/compare", zh: "球员对比", en: "Compare" },
-  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
-  { href: "/cheat-sheet", zh: "备忘单", en: "Cheat Sheet" },
-  { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
-  { href: "/mock-draft", zh: "模拟选秀", en: "Mock Draft", active: true },
-];
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
@@ -30,7 +21,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 export default function MockDraftPage() {
-  const { t, lang, setLang } = useLang();
+  const { t } = useLang();
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [draftStarted, setDraftStarted] = useState(false);
   const [currentDraft, setCurrentDraft] = useState<Draft | null>(null);
@@ -110,39 +101,7 @@ export default function MockDraftPage() {
   if (!draftStarted) {
     return (
       <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
-        {/* Header */}
-        <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 50 }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", height: 60, display: "flex", alignItems: "center", gap: 40 }}>
-            <Link href="/" style={{ textDecoration: "none", flexShrink: 0 }}>
-              <span style={{ fontSize: 20, fontWeight: 800, color: "#1e3a8a" }}>蓝本·</span>
-            </Link>
-            <nav style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, overflow: "hidden" }}>
-              {NAV.map(item => (
-                <Link key={item.href} href={item.href} style={{
-                  padding: "6px 12px", fontSize: 13, fontWeight: item.active ? 600 : 400,
-                  color: item.active ? "#1e3a8a" : "#6b7280", textDecoration: "none",
-                  borderBottom: item.active ? "2px solid #f59e0b" : "2px solid transparent",
-                  whiteSpace: "nowrap",
-                }}>
-                  {t(item.zh, item.en)}
-                </Link>
-              ))}
-            </nav>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: "5px 11px", fontSize: 13, color: "#4b5563", background: "#f3f4f6", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}>
-                中 / EN
-              </button>
-              {user ? (
-                <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>@{user.username}</span>
-              ) : (
-                <>
-                  <Link href="/auth/login" style={{ padding: "6px 14px", fontSize: 13, fontWeight: 500, color: "#374151", textDecoration: "none", border: "1.5px solid #e5e7eb", borderRadius: 7 }}>{t("登录", "Login")}</Link>
-                  <Link href="/auth/signup" style={{ padding: "6px 14px", fontSize: 13, fontWeight: 600, color: "#fff", textDecoration: "none", background: "#1e3a8a", borderRadius: 7 }}>{t("注册", "Sign Up")}</Link>
-                </>
-              )}
-            </div>
-          </div>
-        </header>
+        <LightHeader activeHref="/mock-draft" />
 
         {/* Page content */}
         <div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 32px" }}>

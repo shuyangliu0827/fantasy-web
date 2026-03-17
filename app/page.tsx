@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/draft-guide", labelZh: "选秀指南", labelEn: "Draft Guide" },
   { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
   { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
+  { href: "/my-team", labelZh: "我的球队", labelEn: "My Team" },
 ];
 
 // ── Feature cards ─────────────────────────────────────────────────────────────
