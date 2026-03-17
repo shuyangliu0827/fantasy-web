@@ -1,8 +1,20 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Header from "@/components/Header";
+import Link from "next/link";
 import { useLang } from "@/lib/lang";
+
+const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
+
+const NAV = [
+  { href: "/", zh: "首页", en: "Home" },
+  { href: "/rankings", zh: "球员排名", en: "Rankings", active: true },
+  { href: "/league", zh: "公开联赛", en: "Leagues" },
+  { href: "/compare", zh: "球员对比", en: "Compare" },
+  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
+  { href: "/cheat-sheet", zh: "备忘单", en: "Cheat Sheet" },
+  { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
+];
 
 type PlayerStats = {
   id: number;
@@ -49,10 +61,48 @@ type PlayerStats = {
   injury?: string;
 };
 
-type SortKey = "rank" | "name" | "pts" | "reb" | "ast" | "stl" | "blk" | "fg3m" | "tov" | "fptsAvg" | "gamesPlayed";
+type SortKey =
+  | "rank"
+  | "name"
+  | "pts"
+  | "reb"
+  | "ast"
+  | "stl"
+  | "blk"
+  | "fg3m"
+  | "tov"
+  | "fptsAvg"
+  | "gamesPlayed";
+
+type LeagueType = "NBA" | "CBA" | "Fantasy";
+type HealthFilter = "all" | "healthy" | "questionable" | "injured";
+type ViewMode = "table" | "card";
+
+function abbreviateName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  const first = parts[0];
+  const last = parts.slice(1).join(" ");
+  return `${first.charAt(0)}. ${last}`;
+}
+
+function computeTrend(player: PlayerStats): { value: number; label: string; bg: string; color: string } {
+  const raw = ((player.id * 17 + player.rank * 7) % 30 - 12) * 0.2;
+  if (raw > 0.3) {
+    return { value: raw, label: `▲ +${Math.abs(raw).toFixed(1)}`, bg: "#dcfce7", color: "#16a34a" };
+  } else if (raw < -0.3) {
+    return { value: raw, label: `▼ -${Math.abs(raw).toFixed(1)}`, bg: "#fee2e2", color: "#dc2626" };
+  }
+  return { value: raw, label: "— 0.0", bg: "#f3f4f6", color: "#6b7280" };
+}
+
+const QUESTIONABLE_STATUSES = new Set(["Questionable", "Probable", "Day-To-Day"]);
+const INJURED_STATUSES = new Set(["Out", "Doubtful"]);
 
 export default function PlayerRankingsPage() {
-  const { t } = useLang();
+  const { t, lang, setLang } = useLang();
+
+  // --- existing state ---
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,14 +113,20 @@ export default function PlayerRankingsPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const [statView, setStatView] = useState<"averages" | "totals">("averages");
+  const [statView] = useState<"averages" | "totals">("averages");
   const [page, setPage] = useState(1);
   const pageSize = 20;
 
-  // 初始加载
+  // --- new state ---
+  const [leagueType, setLeagueType] = useState<LeagueType>("NBA");
+  const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
+  const [minPts, setMinPts] = useState(0);
+  const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
+
+  // --- data fetching ---
   useEffect(() => {
     loadData();
-    // 每 5 分钟检查一次更新
     const interval = setInterval(loadData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -81,7 +137,6 @@ export default function PlayerRankingsPage() {
       const data = await response.json();
 
       if (data.status === "loading") {
-        // 数据正在首次加载，5秒后重试
         setTimeout(loadData, 5000);
         return;
       }
@@ -92,9 +147,10 @@ export default function PlayerRankingsPage() {
         setLastUpdated(data.lastUpdated);
         setError(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error("Error loading data:", err);
-      setError(err.message);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -123,8 +179,21 @@ export default function PlayerRankingsPage() {
       result = result.filter((p) => p.team === teamFilter);
     }
 
+    if (minPts > 0) {
+      result = result.filter((p) => p.averages.pts >= minPts);
+    }
+
+    if (healthFilter === "healthy") {
+      result = result.filter((p) => !p.injury);
+    } else if (healthFilter === "questionable") {
+      result = result.filter((p) => p.injury && QUESTIONABLE_STATUSES.has(p.injury));
+    } else if (healthFilter === "injured") {
+      result = result.filter((p) => p.injury && INJURED_STATUSES.has(p.injury));
+    }
+
     result = [...result].sort((a, b) => {
-      let aVal: any, bVal: any;
+      let aVal: string | number;
+      let bVal: string | number;
 
       if (sortKey === "name") {
         aVal = a.name;
@@ -133,18 +202,26 @@ export default function PlayerRankingsPage() {
         aVal = a[sortKey];
         bVal = b[sortKey];
       } else {
-        aVal = statView === "averages" ? a.averages[sortKey as keyof typeof a.averages] : a.totals[sortKey as keyof typeof a.totals];
-        bVal = statView === "averages" ? b.averages[sortKey as keyof typeof b.averages] : b.totals[sortKey as keyof typeof b.totals];
+        aVal =
+          statView === "averages"
+            ? a.averages[sortKey as keyof typeof a.averages]
+            : a.totals[sortKey as keyof typeof a.totals];
+        bVal =
+          statView === "averages"
+            ? b.averages[sortKey as keyof typeof b.averages]
+            : b.totals[sortKey as keyof typeof b.totals];
       }
 
-      if (typeof aVal === "string") {
+      if (typeof aVal === "string" && typeof bVal === "string") {
         return sortOrder === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
-      return sortOrder === "asc" ? aVal - bVal : bVal - aVal;
+      return sortOrder === "asc"
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number);
     });
 
     return result;
-  }, [players, searchTerm, positionFilter, teamFilter, sortKey, sortOrder, statView]);
+  }, [players, searchTerm, positionFilter, teamFilter, sortKey, sortOrder, statView, minPts, healthFilter]);
 
   const paginatedPlayers = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -152,750 +229,665 @@ export default function PlayerRankingsPage() {
   }, [filteredPlayers, page]);
 
   const totalPages = Math.ceil(filteredPlayers.length / pageSize);
-  const injuredCount = players.filter((p) => p.injury).length;
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortOrder(key === "name" ? "asc" : "desc");
-    }
+  function handleSortButton(key: SortKey) {
+    setSortKey(key);
+    setSortOrder("desc");
+    setPage(1);
   }
 
-  function SortIcon({ column }: { column: SortKey }) {
-    if (sortKey !== column) return <span className="sort-icon">↕</span>;
-    return <span className="sort-icon active">{sortOrder === "asc" ? "↑" : "↓"}</span>;
-  }
-
-  function InjuryBadge({ status }: { status?: string }) {
-    if (!status) return null;
-    const colors: Record<string, string> = {
-      Out: "#ef4444",
-      Doubtful: "#f97316",
-      Questionable: "#eab308",
-      Probable: "#22c55e",
-      "Day-To-Day": "#f97316",
-    };
-    return (
-      <span className="injury-indicator" style={{ backgroundColor: colors[status] || "#888" }} title={status}>
-        {status.charAt(0)}
-      </span>
-    );
-  }
-
-  function formatStat(value: number): string {
-    return value.toFixed(1);
-  }
-
-  function formatTime(isoString: string | null): string {
-    if (!isoString) return "";
-    const date = new Date(isoString);
-    return date.toLocaleString("zh-CN", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+  function toggleAdded(id: number) {
+    setAddedPlayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
     });
   }
 
+  function getRankCircleStyle(rank: number): React.CSSProperties {
+    const base: React.CSSProperties = {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: 28,
+      height: 28,
+      borderRadius: "50%",
+      fontSize: 12,
+      fontWeight: 700,
+    };
+    if (rank === 1) return { ...base, background: "#fef3c7", color: "#92400e" };
+    if (rank === 2) return { ...base, background: "#dbeafe", color: "#1e40af" };
+    if (rank === 3) return { ...base, background: "#f3f4f6", color: "#374151" };
+    return { ...base, background: "transparent", color: "#6b7280", fontSize: 13 };
+  }
+
+  // Loading screen
   if (loading && players.length === 0) {
     return (
-      <div className="app">
-        <Header />
-        <main className="page-content">
-          <div className="loading-container">
-            <div className="loading-spinner">🏀</div>
-            <p>{t("加载中...", "Loading...")}</p>
-          </div>
-        </main>
-        <style jsx>{styles}</style>
+      <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <div style={{ fontSize: 48 }}>🏀</div>
+        <p style={{ color: "#6b7280", fontSize: 16 }}>{t("加载中...", "Loading...")}</p>
       </div>
     );
   }
 
+  // Error screen
   if (error && players.length === 0) {
     return (
-      <div className="app">
-        <Header />
-        <main className="page-content">
-          <div className="error-container">
-            <h2>❌ {t("加载失败", "Failed to Load")}</h2>
-            <p>{error}</p>
-            <button onClick={loadData} className="retry-btn">
-              {t("重试", "Retry")}
-            </button>
-          </div>
-        </main>
-        <style jsx>{styles}</style>
+      <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <p style={{ color: "#dc2626", fontSize: 18, fontWeight: 600 }}>❌ {t("加载失败", "Failed to Load")}</p>
+        <p style={{ color: "#6b7280" }}>{error}</p>
+        <button
+          onClick={loadData}
+          style={{ padding: "10px 24px", background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 14 }}
+        >
+          {t("重试", "Retry")}
+        </button>
       </div>
     );
   }
 
+  // ── Pill helper ──────────────────────────────────────────────────────────────
+  function Pill({
+    active,
+    onClick,
+    children,
+    style: extraStyle,
+  }: {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+    style?: React.CSSProperties;
+  }) {
+    const base: React.CSSProperties = {
+      padding: "5px 12px",
+      borderRadius: 20,
+      fontSize: 12,
+      fontWeight: 500,
+      cursor: "pointer",
+      border: "1px solid #e5e7eb",
+      background: active ? "#1e3a8a" : "#fff",
+      color: active ? "#fff" : "#374151",
+      transition: "all 0.15s",
+      ...extraStyle,
+    };
+    return (
+      <button style={base} onClick={onClick}>
+        {children}
+      </button>
+    );
+  }
+
+  const sectionLabelStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#9ca3af",
+    textTransform: "uppercase",
+    letterSpacing: "0.06em",
+    marginBottom: 8,
+    marginTop: 18,
+  };
+
+  const thStyle: React.CSSProperties = {
+    padding: "10px 12px",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#9ca3af",
+    textAlign: "left",
+    background: "#f9fafb",
+    borderBottom: "1px solid #e5e7eb",
+    whiteSpace: "nowrap",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+  };
+
+  const tdStyle: React.CSSProperties = {
+    padding: "12px 12px",
+    fontSize: 13,
+    color: "#374151",
+    borderBottom: "1px solid #f3f4f6",
+    verticalAlign: "middle",
+  };
+
   return (
-    <div className="app">
-      <Header />
-      <main className="page-content">
-        <div className="container">
-          {/* 页面头部 */}
-          <div className="page-header">
-            <div className="header-left">
-              <h1>🏀 {t("球员排名", "Player Rankings")}</h1>
-              <div className="header-tabs">
-                <button className="tab active">Stats</button>
-                <button className="tab">Trending</button>
-                <button className="tab">Schedule</button>
-                <button className="tab">News</button>
-              </div>
-            </div>
-            <div className="header-right">
-              <div className="view-toggle">
-                <button
-                  className={statView === "totals" ? "active" : ""}
-                  onClick={() => setStatView("totals")}
-                >
-                  Totals
-                </button>
-                <button
-                  className={statView === "averages" ? "active" : ""}
-                  onClick={() => setStatView("averages")}
-                >
-                  Averages
-                </button>
-              </div>
+    <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT }}>
+
+      {/* ── Header ── */}
+      <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 32px", height: 60, display: "flex", alignItems: "center", gap: 40 }}>
+          <Link href="/" style={{ textDecoration: "none", flexShrink: 0 }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: "#1e3a8a" }}>蓝本·</span>
+          </Link>
+          <nav style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, overflow: "hidden" }}>
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                style={{
+                  padding: "6px 12px",
+                  fontSize: 13,
+                  fontWeight: item.active ? 600 : 400,
+                  color: item.active ? "#1e3a8a" : "#6b7280",
+                  textDecoration: "none",
+                  borderBottom: item.active ? "2px solid #f59e0b" : "2px solid transparent",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t(item.zh, item.en)}
+              </Link>
+            ))}
+          </nav>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+              style={{ padding: "5px 11px", fontSize: 13, color: "#4b5563", background: "#f3f4f6", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
+            >
+              中 / EN
+            </button>
+            <Link
+              href="/auth/login"
+              style={{ padding: "6px 14px", fontSize: 13, fontWeight: 500, color: "#374151", textDecoration: "none", border: "1.5px solid #e5e7eb", borderRadius: 7 }}
+            >
+              {t("登录", "Login")}
+            </Link>
+            <Link
+              href="/auth/signup"
+              style={{ padding: "6px 14px", fontSize: 13, fontWeight: 600, color: "#fff", textDecoration: "none", background: "#1e3a8a", borderRadius: 7 }}
+            >
+              {t("注册", "Sign Up")}
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Page Body ── */}
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 32px", display: "flex", gap: 24, alignItems: "flex-start" }}>
+
+        {/* ── Left Sidebar ── */}
+        <aside style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 20 }}>{t("筛选条件", "Filters")}</div>
+
+          {/* 联赛类型 */}
+          <div style={sectionLabelStyle}>{t("联赛类型", "League Type")}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {(["NBA", "CBA", "Fantasy"] as LeagueType[]).map((lt) => (
+              <Pill key={lt} active={leagueType === lt} onClick={() => setLeagueType(lt)}>
+                {lt}
+              </Pill>
+            ))}
+          </div>
+
+          {/* 位置 */}
+          <div style={sectionLabelStyle}>{t("位置", "Position")}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[
+              { label: t("全部", "All"), value: "all" },
+              { label: "PG", value: "PG" },
+              { label: "SG", value: "SG" },
+              { label: "SF", value: "SF" },
+              { label: "PF", value: "PF" },
+              { label: "C", value: "C" },
+            ].map((pos) => (
+              <Pill
+                key={pos.value}
+                active={positionFilter === pos.value}
+                onClick={() => { setPositionFilter(pos.value); setPage(1); }}
+              >
+                {pos.label}
+              </Pill>
+            ))}
+          </div>
+
+          {/* 球队 */}
+          <div style={sectionLabelStyle}>{t("球队", "Team")}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[
+              { label: t("全部", "All"), value: "all" },
+              { label: "LAL", value: "LAL" },
+              { label: "GSW", value: "GSW" },
+              { label: "MIL", value: "MIL" },
+              { label: "DEN", value: "DEN" },
+              { label: "BOS", value: "BOS" },
+            ].map((tm) => (
+              <Pill
+                key={tm.value}
+                active={teamFilter === tm.value}
+                onClick={() => { setTeamFilter(tm.value === "all" ? "all" : tm.value); setPage(1); }}
+              >
+                {tm.label}
+              </Pill>
+            ))}
+          </div>
+
+          {/* 场均得分范围 */}
+          <div style={sectionLabelStyle}>{t("场均得分范围", "Min PPG")}</div>
+          <div>
+            <input
+              type="range"
+              min={0}
+              max={50}
+              step={1}
+              value={minPts}
+              onChange={(e) => setMinPts(Number(e.target.value))}
+              style={{ width: "100%", accentColor: "#1e3a8a" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+              <span>0</span>
+              <span style={{ fontWeight: 600, color: "#1e3a8a", fontSize: 12 }}>≥ {minPts}</span>
+              <span>40+</span>
             </div>
           </div>
 
-          {/* 数据状态栏 */}
-          <div className="data-source-bar">
-            <span className="live-indicator">⚡ {t("实时数据", "LIVE DATA")}</span>
-            <span>{t(`${gamesLoaded} 场比赛`, `${gamesLoaded} games`)}</span>
-            <span>{t(`${players.length} 名球员`, `${players.length} players`)}</span>
+          {/* 健康状态 */}
+          <div style={sectionLabelStyle}>{t("健康状态", "Health")}</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <button
+              onClick={() => setHealthFilter("all")}
+              style={{
+                padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: "1px solid #e5e7eb",
+                background: healthFilter === "all" ? "#1e3a8a" : "#fff",
+                color: healthFilter === "all" ? "#fff" : "#374151",
+              }}
+            >
+              {t("全部", "All")}
+            </button>
+            <button
+              onClick={() => setHealthFilter("healthy")}
+              style={{
+                padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: healthFilter === "healthy" ? "1.5px solid #16a34a" : "1px solid #e5e7eb",
+                background: healthFilter === "healthy" ? "#dcfce7" : "#fff",
+                color: healthFilter === "healthy" ? "#16a34a" : "#374151",
+              }}
+            >
+              {t("健康", "Healthy")}
+            </button>
+            <button
+              onClick={() => setHealthFilter("questionable")}
+              style={{
+                padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: healthFilter === "questionable" ? "1.5px solid #d97706" : "1px solid #e5e7eb",
+                background: healthFilter === "questionable" ? "#fef3c7" : "#fff",
+                color: healthFilter === "questionable" ? "#d97706" : "#374151",
+              }}
+            >
+              {t("问题", "Questionable")}
+            </button>
+            <button
+              onClick={() => setHealthFilter("injured")}
+              style={{
+                padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+                border: healthFilter === "injured" ? "1.5px solid #dc2626" : "1px solid #e5e7eb",
+                background: healthFilter === "injured" ? "#fee2e2" : "#fff",
+                color: healthFilter === "injured" ? "#dc2626" : "#374151",
+              }}
+            >
+              {t("伤病", "Injured")}
+            </button>
+          </div>
+
+          {/* Apply button */}
+          <button
+            onClick={() => setPage(1)}
+            style={{
+              marginTop: 24,
+              width: "100%",
+              padding: "12px 0",
+              background: "#1e3a8a",
+              color: "#fff",
+              border: "none",
+              borderRadius: 10,
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            {t("应用筛选", "Apply Filters")}
+          </button>
+
+          {/* Stats summary */}
+          <div style={{ marginTop: 18, padding: "12px 14px", background: "#f9fafb", borderRadius: 10, fontSize: 12, color: "#6b7280" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span>{t("显示球员", "Showing")}</span>
+              <span style={{ fontWeight: 600, color: "#374151" }}>{filteredPlayers.length}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>{t("比赛场次", "Games")}</span>
+              <span style={{ fontWeight: 600, color: "#374151" }}>{gamesLoaded}</span>
+            </div>
             {lastUpdated && (
-              <span className="last-updated">
-                {t("更新于", "Updated")} {formatTime(lastUpdated)}
-              </span>
+              <div style={{ marginTop: 6, fontSize: 11, color: "#9ca3af" }}>
+                {t("更新", "Updated")} {new Date(lastUpdated).toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </div>
             )}
           </div>
+        </aside>
 
-          {/* 过滤器 */}
-          <div className="filters">
-            <div className="search-box">
-              <span className="search-icon">🔍</span>
+        {/* ── Main Content ── */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+
+          {/* Top bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+            {/* Search */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
+              padding: "9px 14px", flex: 1, maxWidth: 340,
+            }}>
+              <span style={{ fontSize: 14, color: "#9ca3af" }}>🔍</span>
               <input
                 type="text"
-                placeholder={t("搜索球员...", "Search players...")}
+                placeholder={t("搜索球员姓名...", "Search players...")}
                 value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                style={{ flex: 1, border: "none", outline: "none", fontSize: 13, color: "#374151", background: "transparent" }}
               />
             </div>
-            <select
-              value={positionFilter}
-              onChange={(e) => {
-                setPositionFilter(e.target.value);
-                setPage(1);
-              }}
-              className="filter-select"
-            >
-              <option value="all">{t("全部位置", "All Positions")}</option>
-              <option value="G">Guard (G)</option>
-              <option value="F">Forward (F)</option>
-              <option value="C">Center (C)</option>
-            </select>
-            <select
-              value={teamFilter}
-              onChange={(e) => {
-                setTeamFilter(e.target.value);
-                setPage(1);
-              }}
-              className="filter-select"
-            >
-              <option value="all">{t("全部球队", "All Teams")}</option>
-              {teams.map((team) => (
-                <option key={team} value={team}>
-                  {team}
-                </option>
-              ))}
-            </select>
-            <div className="stats-info">
-              <span>👥 {filteredPlayers.length}</span>
-              <span>🏥 {injuredCount}</span>
+
+            {/* Sort buttons */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {([
+                { key: "fptsAvg" as SortKey, zh: "综合得分 ↓", en: "Fantasy Pts ↓" },
+                { key: "pts" as SortKey, zh: "场均得分", en: "PPG" },
+                { key: "ast" as SortKey, zh: "场均助攻", en: "APG" },
+              ] as { key: SortKey; zh: string; en: string }[]).map((btn) => {
+                const isActive = sortKey === btn.key;
+                return (
+                  <button
+                    key={btn.key}
+                    onClick={() => handleSortButton(btn.key)}
+                    style={{
+                      padding: "8px 14px", fontSize: 12, fontWeight: isActive ? 700 : 500,
+                      borderRadius: 8, cursor: "pointer",
+                      background: isActive ? "#1e3a8a" : "#fff",
+                      color: isActive ? "#fff" : "#374151",
+                      border: isActive ? "none" : "1px solid #e5e7eb",
+                    }}
+                  >
+                    {t(btn.zh, btn.en)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* View toggle */}
+            <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", marginLeft: "auto" }}>
+              {(["table", "card"] as ViewMode[]).map((mode) => {
+                const isActive = viewMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => setViewMode(mode)}
+                    style={{
+                      padding: "7px 16px", fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none",
+                      background: isActive ? "#111827" : "transparent",
+                      color: isActive ? "#fff" : "#6b7280",
+                    }}
+                  >
+                    {mode === "table" ? t("表格", "Table") : t("卡片", "Cards")}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* 球员表格 */}
-          <div className="table-container">
-            <table className="players-table">
-              <thead>
-                <tr>
-                  <th className="col-player" colSpan={2}>
-                    <div className="th-content" onClick={() => handleSort("name")}>
-                      PLAYER <SortIcon column="name" />
-                    </div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("gamesPlayed")}>
-                    <div className="th-content">GP <SortIcon column="gamesPlayed" /></div>
-                  </th>
-                  <th className="col-stat">MIN</th>
-                  <th className="col-stat">FGM</th>
-                  <th className="col-stat">FGA</th>
-                  <th className="col-stat">FTM</th>
-                  <th className="col-stat">FTA</th>
-                  <th className="col-stat" onClick={() => handleSort("fg3m")}>
-                    <div className="th-content">3PM <SortIcon column="fg3m" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("reb")}>
-                    <div className="th-content">REB <SortIcon column="reb" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("ast")}>
-                    <div className="th-content">AST <SortIcon column="ast" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("stl")}>
-                    <div className="th-content">STL <SortIcon column="stl" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("blk")}>
-                    <div className="th-content">BLK <SortIcon column="blk" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("tov")}>
-                    <div className="th-content">TO <SortIcon column="tov" /></div>
-                  </th>
-                  <th className="col-stat" onClick={() => handleSort("pts")}>
-                    <div className="th-content">PTS <SortIcon column="pts" /></div>
-                  </th>
-                  <th className="col-fpts" onClick={() => handleSort("fptsAvg")}>
-                    <div className="th-content">FPTS <SortIcon column="fptsAvg" /></div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedPlayers.map((player) => {
-                  const stats = statView === "averages" ? player.averages : player.totals;
-                  return (
-                    <tr key={player.id} className={player.injury ? "injured" : ""}>
-                      <td className="col-rank">
-                        <span className={`rank ${player.rank <= 10 ? "top10" : player.rank <= 50 ? "top50" : ""}`}>
-                          {player.rank}
-                        </span>
-                      </td>
-                      <td className="col-player-info">
-                        <div className="player-avatar">{player.name.charAt(0)}</div>
-                        <div className="player-details">
-                          <div className="player-name">
-                            {player.name}
-                            <InjuryBadge status={player.injury} />
-                          </div>
-                          <div className="player-meta">{player.team} • {player.position}</div>
-                        </div>
-                      </td>
-                      <td className="col-stat">{player.gamesPlayed}</td>
-                      <td className="col-stat">{formatStat(stats.min)}</td>
-                      <td className="col-stat">{formatStat(stats.fgm)}</td>
-                      <td className="col-stat">{formatStat(stats.fga)}</td>
-                      <td className="col-stat">{formatStat(stats.ftm)}</td>
-                      <td className="col-stat">{formatStat(stats.fta)}</td>
-                      <td className="col-stat">{formatStat(stats.fg3m)}</td>
-                      <td className="col-stat">{formatStat(stats.reb)}</td>
-                      <td className="col-stat">{formatStat(stats.ast)}</td>
-                      <td className="col-stat">{formatStat(stats.stl)}</td>
-                      <td className="col-stat">{formatStat(stats.blk)}</td>
-                      <td className="col-stat negative">{formatStat(stats.tov)}</td>
-                      <td className="col-stat highlight">{formatStat(stats.pts)}</td>
-                      <td className="col-fpts">
-                        <div className="fpts-cell">
-                          <span className="fpts-total">{player.fpts}</span>
-                          <span className="fpts-avg">{player.fptsAvg}</span>
-                        </div>
-                      </td>
+          {/* ── Table View ── */}
+          {viewMode === "table" && (
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+                  <thead>
+                    <tr>
+                      {[
+                        t("排名", "Rank"),
+                        t("球员", "Player"),
+                        t("综合分", "FPTS"),
+                        t("得分", "PTS"),
+                        t("篮板", "REB"),
+                        t("助攻", "AST"),
+                        t("抢断", "STL"),
+                        t("盖帽", "BLK"),
+                        t("趋势", "Trend"),
+                        t("操作", "Action"),
+                      ].map((h, i) => (
+                        <th
+                          key={i}
+                          style={{
+                            ...thStyle,
+                            textAlign: i === 0 ? "center" : i === 1 ? "left" : i >= 8 ? "center" : "right",
+                          }}
+                        >
+                          {h}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {paginatedPlayers.map((player) => {
+                      const trend = computeTrend(player);
+                      const isAdded = addedPlayers.has(player.id);
+                      const rowBg = player.injury ? "#fff5f5" : undefined;
+                      return (
+                        <tr
+                          key={player.id}
+                          style={{ background: rowBg, transition: "background 0.12s" }}
+                          onMouseEnter={(e) => { if (!player.injury) (e.currentTarget as HTMLTableRowElement).style.background = "#f9fafb"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLTableRowElement).style.background = rowBg || ""; }}
+                        >
+                          {/* 排名 */}
+                          <td style={{ ...tdStyle, textAlign: "center", width: 50 }}>
+                            <span style={getRankCircleStyle(player.rank)}>{player.rank}</span>
+                          </td>
 
-          {/* 分页 */}
+                          {/* 球员 */}
+                          <td style={{ ...tdStyle, textAlign: "left", minWidth: 180 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{
+                                width: 40, height: 40, borderRadius: "50%",
+                                background: "#fff7ed", display: "flex", alignItems: "center",
+                                justifyContent: "center", fontSize: 18, flexShrink: 0,
+                              }}>
+                                🏀
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
+                                  {abbreviateName(player.name)}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                                  {player.team} · {player.position}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* 综合分 */}
+                          <td style={{ ...tdStyle, textAlign: "right", color: "#2563eb", fontWeight: 700, fontSize: 16 }}>
+                            {player.fptsAvg}
+                          </td>
+
+                          {/* 得分 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.pts.toFixed(1)}</td>
+
+                          {/* 篮板 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.reb.toFixed(1)}</td>
+
+                          {/* 助攻 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.ast.toFixed(1)}</td>
+
+                          {/* 抢断 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.stl.toFixed(1)}</td>
+
+                          {/* 盖帽 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.blk.toFixed(1)}</td>
+
+                          {/* 趋势 */}
+                          <td style={{ ...tdStyle, textAlign: "center" }}>
+                            <span style={{
+                              background: trend.bg, color: trend.color,
+                              borderRadius: 20, padding: "4px 10px",
+                              fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                            }}>
+                              {trend.label}
+                            </span>
+                          </td>
+
+                          {/* 操作 */}
+                          <td style={{ ...tdStyle, textAlign: "center" }}>
+                            <button
+                              onClick={() => toggleAdded(player.id)}
+                              style={{
+                                padding: "6px 14px", fontSize: 12, fontWeight: 600,
+                                borderRadius: 8, border: "none", cursor: "pointer",
+                                background: isAdded ? "#f3f4f6" : "#1e3a8a",
+                                color: isAdded ? "#9ca3af" : "#fff",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {isAdded ? t("已添加", "Added") : t("+加入", "+ Add")}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Card View ── */}
+          {viewMode === "card" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+              {paginatedPlayers.map((player) => {
+                const trend = computeTrend(player);
+                const isAdded = addedPlayers.has(player.id);
+                return (
+                  <div
+                    key={player.id}
+                    style={{
+                      background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 20,
+                      ...(player.injury ? { background: "#fff5f5" } : {}),
+                    }}
+                  >
+                    {/* Card header */}
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={getRankCircleStyle(player.rank)}>{player.rank}</span>
+                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#fff7ed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                          🏀
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{abbreviateName(player.name)}</div>
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{player.team} · {player.position}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* FPTS */}
+                    <div style={{ textAlign: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: "#2563eb" }}>{player.fptsAvg}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af" }}>{t("综合分", "Fantasy Pts")}</div>
+                    </div>
+
+                    {/* Stats grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+                      {[
+                        { label: t("得分", "PTS"), val: player.averages.pts.toFixed(1) },
+                        { label: t("篮板", "REB"), val: player.averages.reb.toFixed(1) },
+                        { label: t("助攻", "AST"), val: player.averages.ast.toFixed(1) },
+                        { label: t("抢断", "STL"), val: player.averages.stl.toFixed(1) },
+                        { label: t("盖帽", "BLK"), val: player.averages.blk.toFixed(1) },
+                        { label: t("趋势", "Trend"), val: trend.label },
+                      ].map((s) => (
+                        <div key={s.label} style={{ background: "#f9fafb", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{s.val}</div>
+                          <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Trend badge + add button */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ background: trend.bg, color: trend.color, borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 600 }}>
+                        {trend.label}
+                      </span>
+                      <button
+                        onClick={() => toggleAdded(player.id)}
+                        style={{
+                          padding: "6px 14px", fontSize: 12, fontWeight: 600,
+                          borderRadius: 8, border: "none", cursor: "pointer",
+                          background: isAdded ? "#f3f4f6" : "#1e3a8a",
+                          color: isAdded ? "#9ca3af" : "#fff",
+                        }}
+                      >
+                        {isAdded ? t("已添加", "Added") : t("+加入", "+ Add")}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Pagination ── */}
           {totalPages > 1 && (
-            <div className="pagination">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-                ← Prev
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginTop: 20 }}>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={{
+                  padding: "7px 14px", fontSize: 13, background: "#fff", border: "1px solid #e5e7eb",
+                  borderRadius: 8, cursor: page === 1 ? "not-allowed" : "pointer",
+                  color: page === 1 ? "#d1d5db" : "#374151",
+                }}
+              >
+                ← {t("上一页", "Prev")}
               </button>
-              <div className="page-numbers">
-                {(() => {
-                  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
-                  const end = Math.min(totalPages, start + 4);
-                  return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((pageNum) => (
+
+              {(() => {
+                const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                const end = Math.min(totalPages, start + 4);
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((pageNum) => {
+                  const isActive = pageNum === page;
+                  return (
                     <button
                       key={pageNum}
-                      className={pageNum === page ? "active" : ""}
                       onClick={() => setPage(pageNum)}
+                      style={{
+                        width: 36, height: 36, fontSize: 13, fontWeight: isActive ? 700 : 400,
+                        background: isActive ? "#1e3a8a" : "#fff",
+                        color: isActive ? "#fff" : "#374151",
+                        border: isActive ? "none" : "1px solid #e5e7eb",
+                        borderRadius: 8, cursor: "pointer",
+                      }}
                     >
                       {pageNum}
                     </button>
-                  ));
-                })()}
-              </div>
-              <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                Next →
+                  );
+                });
+              })()}
+
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={{
+                  padding: "7px 14px", fontSize: 13, background: "#fff", border: "1px solid #e5e7eb",
+                  borderRadius: 8, cursor: page === totalPages ? "not-allowed" : "pointer",
+                  color: page === totalPages ? "#d1d5db" : "#374151",
+                }}
+              >
+                {t("下一页", "Next")} →
               </button>
             </div>
           )}
 
         </div>
-      </main>
-      <style jsx>{styles}</style>
+      </div>
     </div>
   );
 }
-
-const styles = `
-  .page-content {
-    min-height: calc(100vh - 60px);
-    background: #f5f5f5;
-    padding: 20px 16px;
-  }
-
-  .container {
-    max-width: 1400px;
-    margin: 0 auto;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    background: #fff;
-    padding: 16px 20px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-
-  .header-left h1 {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1a1a1a;
-    margin: 0 0 12px 0;
-  }
-
-  .header-tabs {
-    display: flex;
-    gap: 4px;
-  }
-
-  .header-tabs .tab {
-    padding: 8px 16px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: #666;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  .header-tabs .tab.active {
-    color: #0066cc;
-    border-bottom-color: #0066cc;
-    font-weight: 600;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .view-toggle {
-    display: flex;
-    background: #f0f0f0;
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .view-toggle button {
-    padding: 8px 16px;
-    border: none;
-    background: none;
-    font-size: 13px;
-    cursor: pointer;
-    color: #666;
-  }
-
-  .view-toggle button.active {
-    background: #0066cc;
-    color: white;
-  }
-
-  .data-source-bar {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 10px 16px;
-    background: linear-gradient(90deg, #065f46 0%, #047857 100%);
-    border-radius: 6px;
-    margin-bottom: 12px;
-    color: white;
-    font-size: 13px;
-    flex-wrap: wrap;
-  }
-
-  .live-indicator {
-    font-weight: 600;
-    animation: pulse 2s infinite;
-  }
-
-  .last-updated {
-    margin-left: auto;
-    opacity: 0.9;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-  }
-
-  .filters {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-    align-items: center;
-  }
-
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    min-width: 200px;
-  }
-
-  .search-box input {
-    flex: 1;
-    border: none;
-    outline: none;
-    font-size: 14px;
-  }
-
-  .filter-select {
-    padding: 10px 14px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 14px;
-  }
-
-  .stats-info {
-    display: flex;
-    gap: 12px;
-    margin-left: auto;
-    font-size: 13px;
-    color: #666;
-  }
-
-  .table-container {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    overflow-x: auto;
-  }
-
-  .players-table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 1100px;
-  }
-
-  .players-table th {
-    padding: 12px 6px;
-    text-align: center;
-    font-size: 11px;
-    font-weight: 600;
-    color: #666;
-    background: #fafafa;
-    border-bottom: 1px solid #eee;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .players-table th:hover {
-    background: #f0f0f0;
-  }
-
-  .th-content {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-  }
-
-  .sort-icon {
-    font-size: 10px;
-    opacity: 0.3;
-  }
-
-  .sort-icon.active {
-    opacity: 1;
-    color: #0066cc;
-  }
-
-  .players-table td {
-    padding: 8px 6px;
-    text-align: center;
-    font-size: 13px;
-    color: #333;
-    border-bottom: 1px solid #f0f0f0;
-  }
-
-  .players-table tr:hover {
-    background: #f8f9fa;
-  }
-
-  .players-table tr.injured {
-    background: #fff8f8;
-  }
-
-  .col-rank {
-    width: 40px;
-    padding-left: 8px !important;
-  }
-
-  .rank {
-    display: inline-block;
-    width: 28px;
-    height: 28px;
-    line-height: 28px;
-    text-align: center;
-    background: #f0f0f0;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #666;
-  }
-
-  .rank.top10 {
-    background: #fef3c7;
-    color: #92400e;
-  }
-
-  .rank.top50 {
-    background: #dbeafe;
-    color: #1e40af;
-  }
-
-  .col-player-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    text-align: left !important;
-    min-width: 160px;
-  }
-
-  .player-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 13px;
-    font-weight: 600;
-    flex-shrink: 0;
-  }
-
-  .player-name {
-    font-weight: 600;
-    color: #1a1a1a;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .player-meta {
-    font-size: 11px;
-    color: #888;
-    margin-top: 1px;
-  }
-
-  .injury-indicator {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    font-size: 8px;
-    font-weight: 700;
-    color: white;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .col-stat {
-    min-width: 40px;
-    color: #555;
-  }
-
-  .col-stat.highlight {
-    font-weight: 600;
-    color: #1a1a1a;
-  }
-
-  .col-stat.negative {
-    color: #dc2626;
-  }
-
-  .col-fpts {
-    min-width: 60px;
-    background: #f0fdf4;
-  }
-
-  .fpts-cell {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .fpts-total {
-    font-size: 10px;
-    color: #888;
-  }
-
-  .fpts-avg {
-    font-weight: 700;
-    color: #16a34a;
-    font-size: 14px;
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    margin-top: 16px;
-  }
-
-  .pagination button {
-    padding: 8px 14px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .pagination button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .page-numbers {
-    display: flex;
-    gap: 4px;
-  }
-
-  .page-numbers button {
-    width: 36px;
-    padding: 8px;
-  }
-
-  .page-numbers button.active {
-    background: #0066cc;
-    color: white;
-    border-color: #0066cc;
-  }
-
-  .scoring-note {
-    margin-top: 16px;
-    padding: 14px 18px;
-    background: #fff;
-    border-radius: 8px;
-    border-left: 4px solid #0066cc;
-  }
-
-  .scoring-note h4 {
-    font-size: 14px;
-    margin: 0 0 6px 0;
-  }
-
-  .scoring-note p {
-    font-size: 13px;
-    color: #666;
-    margin: 0;
-  }
-
-  .scoring-note .data-info {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #16a34a;
-  }
-
-  .loading-container, .error-container {
-    text-align: center;
-    padding: 80px 20px;
-    background: #fff;
-    border-radius: 8px;
-  }
-
-  .loading-spinner {
-    font-size: 48px;
-    animation: bounce 1s infinite;
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .retry-btn {
-    padding: 12px 24px;
-    background: #0066cc;
-    border: none;
-    border-radius: 6px;
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  @media (max-width: 768px) {
-    .page-header {
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .header-right {
-      width: 100%;
-      justify-content: space-between;
-    }
-
-    .data-source-bar {
-      flex-direction: column;
-      gap: 6px;
-      text-align: center;
-    }
-
-    .last-updated {
-      margin-left: 0;
-    }
-
-    .filters {
-      flex-direction: column;
-    }
-
-    .search-box, .filter-select {
-      width: 100%;
-    }
-
-    .stats-info {
-      margin-left: 0;
-      width: 100%;
-      justify-content: space-between;
-    }
-  }
-`;
