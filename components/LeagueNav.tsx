@@ -63,17 +63,17 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
     }
   }
 
-  const mainNav: { href: string; label: string; icon: string; badge: number }[] = [
-    { href: `/league/${slug}`, label: t("联赛主页", "League Home"), icon: "🏠", badge: 0 },
-    { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), icon: "📋", badge: 0 },
-    { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), icon: "🏪", badge: 0 },
-    { href: `/league/${slug}/trade`, label: t("交易", "Trade"), icon: "🔄", badge: pendingCount },
-    { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), icon: "🏆", badge: 0 },
-    { href: `/league/${slug}/scoreboard`, label: t("记分板", "Scoreboard"), icon: "📊", badge: 0 },
-    { href: `/league/${slug}/members`, label: t("成员", "Members"), icon: "👥", badge: 0 },
+  const mainNav: { href: string; label: string; badge: number }[] = [
+    { href: `/league/${slug}`, label: t("联赛主页", "League Home"), badge: 0 },
+    { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), badge: 0 },
+    { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), badge: 0 },
+    { href: `/league/${slug}/trade`, label: t("交易", "Trade"), badge: pendingCount },
+    { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), badge: 0 },
+    { href: `/league/${slug}/scoreboard`, label: t("记分板", "Scoreboard"), badge: 0 },
+    { href: `/league/${slug}/members`, label: t("成员", "Members"), badge: 0 },
   ];
   if (isOwner) {
-    mainNav.push({ href: `/league/${slug}/settings`, label: t("设置", "Settings"), icon: "⚙️", badge: 0 });
+    mainNav.push({ href: `/league/${slug}/settings`, label: t("设置", "Settings"), badge: 0 });
   }
 
   function isActive(href: string): boolean {
@@ -92,9 +92,8 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
             href={item.href}
             className={`league-nav-link ${isActive(item.href) ? "active" : ""}`}
           >
-            <span className="nav-icon">{item.icon}</span>
             <span className="nav-label">{item.label}</span>
-            {"badge" in item && item.badge > 0 && (
+            {item.badge > 0 && (
               <span className="trade-badge">{item.badge}</span>
             )}
           </Link>

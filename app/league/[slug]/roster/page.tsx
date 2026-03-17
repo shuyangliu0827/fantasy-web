@@ -1034,10 +1034,10 @@ const styles = `
   }
   .cancel-swap {
     padding: 4px 12px;
-    background: rgba(239, 68, 68, 0.2);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
     border-radius: 6px;
-    color: #fca5a5;
+    color: #dc2626;
     cursor: pointer;
     font-size: 13px;
   }
@@ -1094,11 +1094,11 @@ const styles = `
 
   /* Totals row */
   .totals-row {
-    background: #1a1a1a !important;
-    border-top: 2px solid #333;
+    background: #f3f4f6 !important;
+    border-top: 2px solid #e5e7eb;
     cursor: default !important;
   }
-  .totals-row:hover { background: #1a1a1a !important; }
+  .totals-row:hover { background: #f3f4f6 !important; }
   .totals-label {
     font-size: 12px;
     font-weight: 700;
@@ -1119,9 +1119,9 @@ const styles = `
     font-size: 11px;
     font-weight: 700;
   }
-  .slot-badge.starter { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
-  .slot-badge.bench { background: rgba(100, 116, 139, 0.2); color: #94a3b8; }
-  .slot-badge.unassigned { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+  .slot-badge.starter { background: #dbeafe; color: #1d4ed8; }
+  .slot-badge.bench { background: #f3f4f6; color: #6b7280; }
+  .slot-badge.unassigned { background: #fef2f2; color: #dc2626; }
 
   .col-player { padding: 0 8px; min-width: 0; }
   .player-info { display: flex; flex-direction: column; gap: 1px; }
@@ -1172,7 +1172,7 @@ const styles = `
     letter-spacing: -0.3px;
   }
   .col-stat.tov { color: #ef4444; }
-  .col-stat.pts { color: #fff; font-weight: 600; }
+  .col-stat.pts { color: #111827; font-weight: 600; }
   .col-stat.live { color: #22c55e; }
   .col-stat.live.tov { color: #ef4444; }
   .col-stat.live.pts { color: #22c55e; font-weight: 600; }

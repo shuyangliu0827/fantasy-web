@@ -162,7 +162,7 @@ export default function FreeAgentsPage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>🏪 {t("自由市场", "Free Agents")}</h1>
+            <h1>{t("自由市场", "Free Agents")}</h1>
             <p>{t("签约自由球员或放弃球员", "Add free agents or drop players from your roster")}</p>
           </div>
 
@@ -334,12 +334,12 @@ const styles = `
   .league-nav { background: #fff; border-bottom: 1px solid #e5e7eb; position: sticky; top: 60px; z-index: 40; }
   .league-nav-inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
   .league-nav-link { display: flex; align-items: center; gap: 6px; padding: 14px 16px; color: #6b7280; text-decoration: none; font-size: 14px; border-bottom: 2px solid transparent; white-space: nowrap; }
-  .league-nav-link:hover { color: #fff; }
+  .league-nav-link:hover { color: #111827; }
   .league-nav-link.active { color: #1e3a8a; border-bottom-color: #1e3a8a; }
   .page-content { min-height: calc(100vh - 200px); background: #f9fafb; padding: 24px 16px; }
   .container { max-width: 1200px; margin: 0 auto; }
   .page-header { margin-bottom: 24px; }
-  .page-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0 0 8px 0; }
+  .page-header h1 { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
   .page-header p { font-size: 14px; color: #6b7280; margin: 0; }
 
   .my-roster-section {
@@ -356,7 +356,7 @@ const styles = `
     display: flex; align-items: center; gap: 6px; padding: 6px 10px;
     background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 12px;
   }
-  .chip-name { color: #fff; font-weight: 500; }
+  .chip-name { color: #111827; font-weight: 500; }
   .chip-pos { color: #6b7280; }
   .chip-drop {
     width: 18px; height: 18px; border-radius: 50%; border: none;
@@ -371,7 +371,7 @@ const styles = `
   .search-input {
     flex: 1; min-width: 200px; padding: 10px 14px;
     background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
-    color: #fff; font-size: 14px; outline: none;
+    color: #111827; font-size: 14px; outline: none;
   }
   .search-input:focus { border-color: #1e3a8a; }
   .filter-group { display: flex; gap: 4px; }
@@ -382,7 +382,7 @@ const styles = `
   .filter-btn.active { background: #eff6ff; border-color: #1e3a8a; color: #1e3a8a; }
   .sort-select {
     padding: 8px 12px; background: #f9fafb; border: 1px solid #e5e7eb;
-    border-radius: 6px; color: #fff; font-size: 13px;
+    border-radius: 6px; color: #111827; font-size: 13px;
   }
 
   .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
@@ -400,15 +400,15 @@ const styles = `
   .col-rank { font-size: 13px; color: #6b7280; text-align: center; }
   .col-player { padding: 0 8px; }
   .player-info { display: flex; flex-direction: column; gap: 2px; }
-  .player-name { font-size: 14px; font-weight: 500; color: #fff; }
+  .player-name { font-size: 14px; font-weight: 500; color: #111827; }
   .player-meta { font-size: 12px; color: #6b7280; }
   .col-stat { font-size: 13px; color: #374151; text-align: center; }
   .col-action { text-align: center; }
   .add-btn {
-    padding: 6px 14px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);
-    border-radius: 6px; color: #6ee7b7; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 6px 14px; background: #ecfdf5; border: 1px solid #6ee7b7;
+    border-radius: 6px; color: #059669; font-size: 12px; font-weight: 600; cursor: pointer;
   }
-  .add-btn:hover { background: rgba(16, 185, 129, 0.25); }
+  .add-btn:hover { background: #d1fae5; }
   .empty-row { padding: 40px; text-align: center; color: #6b7280; font-size: 14px; }
   .more-hint { text-align: center; padding: 16px; color: #6b7280; font-size: 13px; }
 
@@ -418,27 +418,27 @@ const styles = `
     justify-content: center; z-index: 1000; padding: 20px;
   }
   .modal {
-    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 16px;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
     max-width: 500px; width: 100%; overflow: hidden;
   }
   .modal-header {
-    padding: 20px 24px; border-bottom: 1px solid #333;
+    padding: 20px 24px; border-bottom: 1px solid #e5e7eb;
     display: flex; justify-content: space-between; align-items: center;
   }
-  .modal-header h3 { margin: 0; font-size: 18px; color: #fff; }
+  .modal-header h3 { margin: 0; font-size: 18px; color: #111827; }
   .modal-close {
-    width: 32px; height: 32px; border: none; background: #333;
+    width: 32px; height: 32px; border: none; background: #f3f4f6;
     border-radius: 50%; color: #6b7280; font-size: 16px; cursor: pointer;
   }
   .modal-body { padding: 24px; }
   .add-player-card {
     background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px;
   }
-  .add-player-name { font-size: 18px; font-weight: 600; color: #fff; }
+  .add-player-name { font-size: 18px; font-weight: 600; color: #111827; }
   .add-player-meta { font-size: 13px; color: #6b7280; margin-top: 4px; }
   .add-player-stats { display: flex; gap: 16px; margin-top: 8px; font-size: 13px; color: #1e3a8a; }
   .drop-section { margin-top: 8px; }
-  .drop-label { font-size: 14px; color: #fca5a5; margin: 0 0 12px 0; }
+  .drop-label { font-size: 14px; color: #dc2626; margin: 0 0 12px 0; }
   .drop-list { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
   .drop-item {
     display: flex; justify-content: space-between; align-items: center;
@@ -447,15 +447,15 @@ const styles = `
   }
   .drop-item:hover { border-color: #6b7280; }
   .drop-item.selected { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-  .drop-name { font-size: 14px; color: #fff; }
+  .drop-name { font-size: 14px; color: #111827; }
   .drop-meta { font-size: 12px; color: #6b7280; }
   .modal-footer {
-    padding: 16px 24px; border-top: 1px solid #333;
+    padding: 16px 24px; border-top: 1px solid #e5e7eb;
     display: flex; gap: 12px; justify-content: flex-end;
   }
   .btn-cancel {
-    padding: 10px 20px; background: #333; border: none;
-    border-radius: 8px; color: #6b7280; font-weight: 600; cursor: pointer;
+    padding: 10px 20px; background: #f3f4f6; border: 1px solid #e5e7eb;
+    border-radius: 8px; color: #374151; font-weight: 600; cursor: pointer;
   }
   .btn-confirm {
     padding: 10px 20px; background: #1e3a8a; border: none;

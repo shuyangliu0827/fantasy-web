@@ -102,7 +102,7 @@ export default function StandingsPage() {
       <main className="page-content">
         <div className="container">
           <div className="page-header">
-            <h1>🏆 {t("排行榜", "Standings")}</h1>
+            <h1>{t("排行榜", "Standings")}</h1>
             <p>{t("2025 赛季排名", "2025 Season Rankings")}</p>
           </div>
 
