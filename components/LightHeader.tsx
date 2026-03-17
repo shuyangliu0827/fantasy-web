@@ -45,8 +45,8 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
       borderBottom: "1px solid #e2e8f0",
     }}>
       <div style={{
-        maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px",
-        height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32,
+        maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+        height: 64, display: "flex", alignItems: "center", gap: isMobile ? 12 : 32,
       }}>
 
         {/* Logo */}
@@ -56,7 +56,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
         </Link>
 
         {/* Nav */}
-        <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
+        <nav style={{ display: "flex", gap: 2, flex: 1, overflowX: "auto", overflowY: "hidden" }}>
           {NAV.map(item => {
             const isActive = item.href === activeHref;
             return (
@@ -82,7 +82,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
         </nav>
 
         {/* Right actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexShrink: 0 }}>
           <button
             onClick={() => setLang(lang === "zh" ? "en" : "zh")}
             style={{
@@ -102,7 +102,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
           {!user ? (
             <>
               <Link href="/auth/login" style={{
-                padding: isMobile ? "7px 10px" : "8px 18px",
+                padding: isMobile ? "8px 12px" : "8px 18px",
                 border: "1px solid #e2e8f0",
                 borderRadius: 8,
                 fontSize: 14,
@@ -114,7 +114,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 {t("登录", "Login")}
               </Link>
               <Link href="/auth/signup" style={{
-                padding: isMobile ? "7px 10px" : "8px 20px",
+                padding: isMobile ? "8px 12px" : "8px 20px",
                 background: "#1e3a8a",
                 borderRadius: 8,
                 fontSize: 14,
