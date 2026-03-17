@@ -93,6 +93,13 @@ const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UT
 const STARTER_SLOTS = new Set(["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"]);
 const BENCH_SLOTS = new Set(["BE1", "BE2", "BE3"]);
 
+function getWeekdayScoringDates(dateStrings: string[]): string[] {
+  return dateStrings.filter((dateStr) => {
+    const day = new Date(`${dateStr}T00:00:00`).getDay();
+    return day >= 1 && day <= 5;
+  });
+}
+
 function getSlotDisplayLabel(slot: string): string {
   if (slot.startsWith("UTIL")) return "UTIL";
   if (slot.startsWith("BE")) return "Bench";
@@ -139,6 +146,7 @@ export default function MatchupDetailPage() {
 
   const weekDates = getWeekDates(week);
   const dateStrings = getWeekDateStrings(week);
+  const scoringDateStrings = getWeekdayScoringDates(dateStrings);
   const todayStr = getTodayStr();
 
   const [league, setLeague] = useState<League | null>(null);
@@ -348,7 +356,7 @@ export default function MatchupDetailPage() {
   function calcPlayerWeekTotals(player: RosterPlayer): DayStats | null {
     const totals = { ...ZERO_STATS };
     let gamesPlayed = 0;
-    for (const dateStr of dateStrings) {
+    for (const dateStr of scoringDateStrings) {
       const dayStats = getPlayerDayStats(player, dateStr);
       if (dayStats) {
         gamesPlayed++;
@@ -375,15 +383,17 @@ export default function MatchupDetailPage() {
   const getMemberName = (m: LeagueMember) =>
     m.user?.username || m.user?.name || "Anonymous";
 
-  const calcDailyTeamScore = (roster: RosterPlayer[], dateStr: string): number => {
-    return roster.reduce((sum, p) => {
+  const calcDailyTeamScore = (roster: RosterPlayer[], lineup: LineupMap, dateStr: string): number => {
+    const { starters } = buildSlottedRows(roster, lineup);
+    return starters.reduce((sum, row) => {
+      const p = row.player;
       const stats = getPlayerDayStats(p, dateStr);
       return sum + (stats?.fpts || 0);
     }, 0);
   };
 
-  const calcWeekTotal = (roster: RosterPlayer[]): number => {
-    return dateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, dateStr), 0);
+  const calcWeekTotal = (roster: RosterPlayer[], lineup: LineupMap): number => {
+    return scoringDateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, lineup, dateStr), 0);
   };
 
   // ── OPP / STATUS helpers ──────────────────────────────────────────────────
@@ -587,8 +597,8 @@ export default function MatchupDetailPage() {
     );
   }
 
-  const homeScore  = calcWeekTotal(homeRoster);
-  const awayScore  = calcWeekTotal(awayRoster);
+  const homeScore  = calcWeekTotal(homeRoster, homeLineup);
+  const awayScore  = calcWeekTotal(awayRoster, awayLineup);
   const homeName   = homeTeam.fantasy?.name || getMemberName(homeTeam.member);
   const awayName   = awayTeam.fantasy?.name || getMemberName(awayTeam.member);
   const homeOwner  = getMemberName(homeTeam.member);
@@ -598,9 +608,9 @@ export default function MatchupDetailPage() {
   const isOwner    = user && league.commissioner_id === user.id;
 
   // Day labels for the daily breakdown table header
-  const dayLabels = weekDates.map((d) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  );
+  const dayLabels = weekDates
+    .filter((d) => d.getDay() >= 1 && d.getDay() <= 5)
+    .map((d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
 
   return (
     <div className="app">
@@ -609,7 +619,7 @@ export default function MatchupDetailPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span>🏆</span>
+            <span></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -676,16 +686,16 @@ export default function MatchupDetailPage() {
                   <tbody>
                     <tr>
                       <td className="col-team-name">{homeName}</td>
-                      {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(homeRoster, dateStr) * 10) / 10;
+                      {scoringDateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(homeRoster, homeLineup, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(homeScore * 10) / 10}</strong></td>
                     </tr>
                     <tr>
                       <td className="col-team-name">{awayName}</td>
-                      {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(awayRoster, dateStr) * 10) / 10;
+                      {scoringDateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(awayRoster, awayLineup, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(awayScore * 10) / 10}</strong></td>
@@ -705,14 +715,14 @@ export default function MatchupDetailPage() {
               className="view-dropdown"
             >
               <option value="total">
-                {viewMode === "total" ? "✓ " : ""}{t("总计", "Total")}
+                {viewMode === "total" ? " " : ""}{t("总计", "Total")}
               </option>
-              {weekDates.map((d, i) => {
-                const ds = dateStrings[i];
+              {scoringDateStrings.map((ds) => {
+                const d = new Date(`${ds}T00:00:00`);
                 const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                 return (
                   <option key={ds} value={ds}>
-                    {viewMode === ds ? "✓ " : ""}{label}
+                    {viewMode === ds ? " " : ""}{label}
                   </option>
                 );
               })}

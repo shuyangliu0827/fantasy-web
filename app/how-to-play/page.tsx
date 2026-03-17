@@ -17,7 +17,7 @@ const JOURNEY = [
 const CARDS = [
   {
     num: "01",
-    icon: "📋",
+    icon: "",
     iconBg: "#dbeafe",
     titleZh: "什么是范特西篮球?",
     titleEn: "What is Fantasy Basketball?",
@@ -26,7 +26,7 @@ const CARDS = [
   },
   {
     num: "02",
-    icon: "🎯",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "蛇形选秀机制",
     titleEn: "Snake Draft System",
@@ -35,7 +35,7 @@ const CARDS = [
   },
   {
     num: "03",
-    icon: "📊",
+    icon: "",
     iconBg: "#dbeafe",
     titleZh: "积分是怎么算的?",
     titleEn: "How is Scoring Calculated?",
@@ -44,7 +44,7 @@ const CARDS = [
   },
   {
     num: "04",
-    icon: "🔄",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "赛季管理",
     titleEn: "Season Management",
@@ -53,7 +53,7 @@ const CARDS = [
   },
   {
     num: "05",
-    icon: "🏆",
+    icon: "",
     iconBg: "#fef3c7",
     titleZh: "如何赢得联赛?",
     titleEn: "How to Win the League?",
@@ -97,7 +97,7 @@ export default function HowToPlayPage() {
                   border: i === 0 ? "none" : i === 1 ? "2.5px solid #1e3a8a" : "2px solid #d1d5db",
                   transition: "all 0.2s",
                 }}>
-                  {i === 0 ? "✓" : i + 1}
+                  {i === 0 ? "" : i + 1}
                 </div>
 
                 {/* Right line */}
@@ -164,7 +164,7 @@ export default function HowToPlayPage() {
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 20, marginBottom: 12,
             }}>
-              🚀
+              
             </div>
             <div style={{ fontSize: 40, fontWeight: 800, color: "rgba(255,255,255,0.15)", lineHeight: 1, marginBottom: 8 }}>
               GO

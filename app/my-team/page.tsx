@@ -154,7 +154,7 @@ export default function MyTeamPage() {
             <div key={p.id} onClick={() => handleAddPlayer(p)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, cursor: "pointer", transition: "background 0.15s" }}
               onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🏀</div>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{p.name}</div>
                 <div style={{ fontSize: 12, color: "#6b7280" }}>{p.team} · {p.position} · {p.ppg} PPG</div>
@@ -178,7 +178,7 @@ export default function MyTeamPage() {
       <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
         <LightHeader activeHref="/my-team" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", padding: "40px 24px" }}>
-          <div style={{ fontSize: 52, marginBottom: 16 }}>🏀</div>
+          <div style={{ fontSize: 52, marginBottom: 16 }}></div>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>{t("请先登录", "Please Log In")}</h1>
           <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 28px 0" }}>{t("登录后可以管理你的 Fantasy 球队", "Log in to manage your Fantasy team")}</p>
           <Link href="/auth/login" style={{ padding: "12px 28px", fontSize: 15, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, textDecoration: "none" }}>
@@ -195,7 +195,7 @@ export default function MyTeamPage() {
       <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
         <LightHeader activeHref="/my-team" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", padding: "40px 24px" }}>
-          <div style={{ fontSize: 52, marginBottom: 16 }}>🏆</div>
+          <div style={{ fontSize: 52, marginBottom: 16 }}></div>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 12px 0" }}>{t("还没有球队", "No Team Yet")}</h1>
           <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 28px 0" }}>{t("创建你的第一支范特西篮球队开始比赛！", "Create your first Fantasy basketball team to get started!")}</p>
           <button onClick={() => setShowCreateTeam(true)} style={{ padding: "12px 28px", fontSize: 15, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: FONT }}>
@@ -230,7 +230,7 @@ export default function MyTeamPage() {
                 </div>
               )}
               <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 6px 0" }}>
-                {activeTeam?.name || t("我的球队", "My Team")} 🐯
+                {activeTeam?.name || t("我的球队", "My Team")} 
               </h1>
               <p style={{ fontSize: 14, color: "#6b7280", margin: 0 }}>
                 {t("公开联赛 S4 · 第3名（6胜2负）· 第12周", "Open League S4 · #3 (6W-2L) · Week 12")}
@@ -261,7 +261,7 @@ export default function MyTeamPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {teamPlayers.length === 0 ? (
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "56px 32px", textAlign: "center" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🏀</div>
+              <div style={{ fontSize: 40, marginBottom: 12 }}></div>
               <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 20px 0" }}>{t("还没有球员，点击添加吧", "No players yet — add some!")}</p>
               <button onClick={() => setShowAddPlayer(true)} style={{ padding: "11px 24px", fontSize: 14, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: FONT }}>
                 + {t("添加球员", "Add Player")}
@@ -291,7 +291,7 @@ export default function MyTeamPage() {
                           <div key={player.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderBottom: idx < group.length - 1 ? "1px solid #f9fafb" : "none" }}>
                             {/* Icon */}
                             <div style={{ width: 38, height: 38, borderRadius: "50%", background: cfg.bgColor, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>
-                              🏀
+                              
                             </div>
                             {/* Name + info */}
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -363,7 +363,7 @@ export default function MyTeamPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {WAIVER.map((w, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🏀</div>
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{t(w.nameZh, w.nameEn)}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af" }}>{w.team} · {w.pos} · {w.ppg} PPG</div>

@@ -120,7 +120,7 @@ export default function SettingsPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -159,11 +159,11 @@ export default function SettingsPage() {
               <div className="radio-group">
                 <label className={`radio-option ${visibility === "public" ? "selected" : ""}`}>
                   <input type="radio" checked={visibility === "public"} onChange={() => setVisibility("public")} />
-                  🌍 {t("公开", "Public")}
+                   {t("公开", "Public")}
                 </label>
                 <label className={`radio-option ${visibility === "private" ? "selected" : ""}`}>
                   <input type="radio" checked={visibility === "private"} onChange={() => setVisibility("private")} />
-                  🔒 {t("私密", "Private")}
+                   {t("私密", "Private")}
                 </label>
               </div>
             </div>
@@ -200,9 +200,9 @@ export default function SettingsPage() {
           </div>
 
           <div className="danger-zone">
-            <h2>⚠️ {t("危险区域", "Danger Zone")}</h2>
+            <h2> {t("危险区域", "Danger Zone")}</h2>
             <p>{t("删除联赛将永久移除所有数据", "Deleting removes all data permanently")}</p>
-            <button className="delete-btn" onClick={handleDelete}>🗑️ {t("删除联赛", "Delete League")}</button>
+            <button className="delete-btn" onClick={handleDelete}> {t("删除联赛", "Delete League")}</button>
           </div>
         </div>
       </main>

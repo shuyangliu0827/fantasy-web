@@ -111,13 +111,26 @@ export default function PlayerRankingsPage() {
   const [minPts, setMinPts] = useState(0);
   const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [isMobile, setIsMobile] = useState(false);
 
   // --- data fetching ---
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
+
+  useEffect(() => {
+    if (isMobile) setViewMode("card");
+  }, [isMobile]);
 
   async function loadData() {
     try {
@@ -255,7 +268,7 @@ export default function PlayerRankingsPage() {
   if (loading && players.length === 0) {
     return (
       <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <div style={{ fontSize: 48 }}>🏀</div>
+        <div style={{ fontSize: 48 }}></div>
         <p style={{ color: "#6b7280", fontSize: 16 }}>{t("加载中...", "Loading...")}</p>
       </div>
     );
@@ -265,7 +278,7 @@ export default function PlayerRankingsPage() {
   if (error && players.length === 0) {
     return (
       <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <p style={{ color: "#dc2626", fontSize: 18, fontWeight: 600 }}>❌ {t("加载失败", "Failed to Load")}</p>
+        <p style={{ color: "#dc2626", fontSize: 18, fontWeight: 600 }}> {t("加载失败", "Failed to Load")}</p>
         <p style={{ color: "#6b7280" }}>{error}</p>
         <button
           onClick={loadData}
@@ -345,10 +358,10 @@ export default function PlayerRankingsPage() {
       <LightHeader activeHref="/rankings" />
 
       {/* ── Page Body ── */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "24px 32px", display: "flex", gap: 24, alignItems: "flex-start" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "16px 12px 28px" : "24px 32px", display: "flex", flexDirection: isMobile ? "column" : "row", gap: 24, alignItems: "flex-start" }}>
 
         {/* ── Left Sidebar ── */}
-        <aside style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 24 }}>
+        <aside style={{ width: isMobile ? "100%" : 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: isMobile ? 16 : 24 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 20 }}>{t("筛选条件", "Filters")}</div>
 
           {/* 位置 */}
@@ -488,7 +501,7 @@ export default function PlayerRankingsPage() {
               background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10,
               padding: "9px 14px", flex: 1, maxWidth: 340,
             }}>
-              <span style={{ fontSize: 14, color: "#9ca3af" }}>🔍</span>
+              <span style={{ fontSize: 14, color: "#9ca3af" }}></span>
               <input
                 type="text"
                 placeholder={t("搜索球员姓名...", "Search players...")}
@@ -499,7 +512,7 @@ export default function PlayerRankingsPage() {
             </div>
 
             {/* Sort buttons */}
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, overflowX: isMobile ? "auto" : "visible", paddingBottom: isMobile ? 2 : 0 }}>
               {([
                 { key: "fptsAvg" as SortKey, zh: "综合得分 ↓", en: "Fantasy Pts ↓" },
                 { key: "pts" as SortKey, zh: "场均得分", en: "PPG" },
@@ -525,7 +538,7 @@ export default function PlayerRankingsPage() {
             </div>
 
             {/* View toggle */}
-            <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", marginLeft: "auto" }}>
+            <div style={{ display: "flex", background: "#f3f4f6", borderRadius: 8, overflow: "hidden", border: "1px solid #e5e7eb", marginLeft: isMobile ? 0 : "auto" }}>
               {(["table", "card"] as ViewMode[]).map((mode) => {
                 const isActive = viewMode === mode;
                 return (
@@ -601,7 +614,7 @@ export default function PlayerRankingsPage() {
                                 background: "#fff7ed", display: "flex", alignItems: "center",
                                 justifyContent: "center", fontSize: 18, flexShrink: 0,
                               }}>
-                                🏀
+                                
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
@@ -671,7 +684,7 @@ export default function PlayerRankingsPage() {
 
           {/* ── Card View ── */}
           {viewMode === "card" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16 }}>
               {paginatedPlayers.map((player) => {
                 const trend = computeTrend(player);
                 const isAdded = addedPlayers.has(player.id);
@@ -688,7 +701,7 @@ export default function PlayerRankingsPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={getRankCircleStyle(player.rank)}>{player.rank}</span>
                         <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#fff7ed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                          🏀
+                          
                         </div>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{abbreviateName(player.name)}</div>
@@ -704,7 +717,7 @@ export default function PlayerRankingsPage() {
                     </div>
 
                     {/* Stats grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
                       {[
                         { label: t("得分", "PTS"), val: player.averages.pts.toFixed(1) },
                         { label: t("篮板", "REB"), val: player.averages.reb.toFixed(1) },

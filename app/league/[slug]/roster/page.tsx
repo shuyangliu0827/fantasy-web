@@ -259,6 +259,17 @@ export default function RosterPage() {
 
   function handleSlotClick(slot: string) {
     if (viewTeamId !== myTeam?.id) return;
+    if (selectedDate < todayStr) {
+      alert(t("历史日期不可调整阵容", "Cannot edit lineup for past dates"));
+      return;
+    }
+
+    const slotPlayer = getPlayerInSlot(slot);
+    if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
+      alert(t("该球员比赛已开始或已结束，无法调整", "This player is locked and cannot be moved"));
+      return;
+    }
+
     if (swapSource === null) {
       setSwapSource(slot);
     } else if (swapSource === slot) {
@@ -271,6 +282,12 @@ export default function RosterPage() {
 
       const playerAData = roster.find(p => p.id === playerA);
       const playerBData = roster.find(p => p.id === playerB);
+
+      if ((playerAData && isPlayerLockedForLineup(playerAData)) || (playerBData && isPlayerLockedForLineup(playerBData))) {
+        alert(t("已开赛球员不能进行首发/替补交换", "Started-game players cannot be swapped"));
+        setSwapSource(null);
+        return;
+      }
 
       let canSwap = true;
       if (playerA && !isEligibleForSlot(playerAData ? getPlayerPosition(playerAData) : "", slot)) canSwap = false;
@@ -297,8 +314,21 @@ export default function RosterPage() {
 
   function handleAssignPlayer(playerId: string) {
     if (!league || !myTeam || !swapSource) return;
+    if (selectedDate < todayStr) {
+      alert(t("历史日期不可调整阵容", "Cannot edit lineup for past dates"));
+      return;
+    }
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
+    if (isPlayerLockedForLineup(player)) {
+      alert(t("该球员比赛已开始或已结束，无法排阵", "This player is locked and cannot be assigned"));
+      return;
+    }
+    const slotPlayer = getPlayerInSlot(swapSource);
+    if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
+      alert(t("已开赛球员不能被替换", "Started-game players cannot be replaced"));
+      return;
+    }
     if (!isEligibleForSlot(getPlayerPosition(player), swapSource)) {
       alert(t("位置不符合要求", "Position not eligible"));
       return;
@@ -315,6 +345,10 @@ export default function RosterPage() {
 
   function handleAutoLineup() {
     if (!league || !myTeam) return;
+    if (selectedDate <= todayStr) {
+      alert(t("当天或历史日期不可一键排阵，请仅调整未开赛球员", "Auto lineup is disabled for today/past dates"));
+      return;
+    }
     const newLineup = autoSetLineup(league.id, myTeam.id);
     setLineup(newLineup);
   }
@@ -482,6 +516,12 @@ export default function RosterPage() {
     // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
     const status = game.status.toLowerCase();
     return status === "final" || (status !== "" && status !== "scheduled" && !status.includes("scheduled"));
+  }
+
+  function isPlayerLockedForLineup(player: RosterPlayer): boolean {
+    if (selectedDate < todayStr) return true;
+    if (selectedDate > todayStr) return false;
+    return hasPlayedGame(player) || !!getGameDayStatsForPlayer(player);
   }
 
   function renderStatCells(player: RosterPlayer | undefined) {
@@ -653,7 +693,7 @@ export default function RosterPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
@@ -720,7 +760,7 @@ export default function RosterPage() {
 
           {roster.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">📋</div>
+              <div className="empty-icon"></div>
               <p>{t("该队伍还没有球员。请先完成选秀。", "No players on this team yet. Complete the draft first.")}</p>
               <Link href={`/league/${slug}`} className="back-link">
                 {t("返回联赛", "Back to League")}

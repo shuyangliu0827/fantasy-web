@@ -102,21 +102,21 @@ export default function WaiverWirePage() {
             className={`waiver-tab ${tab === "adds" ? "active" : ""}`}
             onClick={() => setTab("adds")}
           >
-            <span className="tab-icon">📈</span>
+            <span className="tab-icon"></span>
             {lang === "zh" ? "热门加入" : "Hot Adds"}
           </button>
           <button 
             className={`waiver-tab ${tab === "drops" ? "active" : ""}`}
             onClick={() => setTab("drops")}
           >
-            <span className="tab-icon">📉</span>
+            <span className="tab-icon"></span>
             {lang === "zh" ? "热门放弃" : "Hot Drops"}
           </button>
           <button 
             className={`waiver-tab ${tab === "trending" ? "active" : ""}`}
             onClick={() => setTab("trending")}
           >
-            <span className="tab-icon">🔥</span>
+            <span className="tab-icon"></span>
             {lang === "zh" ? "趋势球员" : "Trending"}
           </button>
         </div>
@@ -187,7 +187,7 @@ export default function WaiverWirePage() {
                   className={`watchlist-btn ${watchlist.includes(player.id) ? "active" : ""}`}
                   onClick={() => toggleWatchlist(player.id)}
                 >
-                  {watchlist.includes(player.id) ? "★" : "☆"}
+                  {watchlist.includes(player.id) ? "" : ""}
                 </button>
               </div>
             </div>
@@ -196,7 +196,7 @@ export default function WaiverWirePage() {
 
         {/* Info Box */}
         <div className="info-box">
-          <h4>{lang === "zh" ? "💡 小贴士" : "💡 Tips"}</h4>
+          <h4>{lang === "zh" ? " 小贴士" : " Tips"}</h4>
           <ul>
             <li>{lang === "zh" ? "关注加入率高但持有率低的球员 - 这些可能是被低估的宝藏" : "Watch players with high add rate but low ownership - these might be hidden gems"}</li>
             <li>{lang === "zh" ? "伤病恢复的球员通常会在豁免区出现机会" : "Players returning from injury often present waiver opportunities"}</li>

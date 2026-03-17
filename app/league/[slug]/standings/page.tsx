@@ -91,7 +91,7 @@ export default function StandingsPage() {
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏆</span>
+            <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
         </div>
