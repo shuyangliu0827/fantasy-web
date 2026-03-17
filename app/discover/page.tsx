@@ -159,7 +159,7 @@ export default function DiscoverPage() {
 
           {user && (
             <Link
-              href="/post/new"
+              href="/insights/new"
               style={{
                 display: "inline-flex", alignItems: "center", gap: 8,
                 padding: "12px 24px",
@@ -239,7 +239,7 @@ export default function DiscoverPage() {
                 : t("登录后发布你的第一篇笔记", "Login to post your first note")}
             </p>
             {user ? (
-              <Link href="/post/new" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", background: "#1e3a8a", color: "#fff", borderRadius: 10, fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
+              <Link href="/insights/new" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 28px", background: "#1e3a8a", color: "#fff", borderRadius: 10, fontSize: 15, fontWeight: 700, textDecoration: "none" }}>
                 + {t("发布笔记", "Write a Post")}
               </Link>
             ) : (
