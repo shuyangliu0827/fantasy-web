@@ -73,17 +73,6 @@ type DayStats = PlayerGameStats;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const result = [...arr];
-  let s = seed;
-  for (let i = result.length - 1; i > 0; i--) {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    const j = s % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 const ZERO_STATS: DayStats = {
   min: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, fg3m: 0,
   reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0,
@@ -92,6 +81,13 @@ const ZERO_STATS: DayStats = {
 const SLOT_ORDER = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
 const STARTER_SLOTS = new Set(["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"]);
 const BENCH_SLOTS = new Set(["BE1", "BE2", "BE3"]);
+
+function getWeekdayScoringDates(dateStrings: string[]): string[] {
+  return dateStrings.filter((dateStr) => {
+    const day = new Date(`${dateStr}T00:00:00`).getDay();
+    return day >= 1 && day <= 5;
+  });
+}
 
 function getSlotDisplayLabel(slot: string): string {
   if (slot.startsWith("UTIL")) return "UTIL";
@@ -139,6 +135,7 @@ export default function MatchupDetailPage() {
 
   const weekDates = getWeekDates(week);
   const dateStrings = getWeekDateStrings(week);
+  const scoringDateStrings = getWeekdayScoringDates(dateStrings);
   const todayStr = getTodayStr();
 
   const [league, setLeague] = useState<League | null>(null);
@@ -181,15 +178,14 @@ export default function MatchupDetailPage() {
           .order("draft_position", { ascending: true }),
       ]);
 
-      const n = membersData.length;
+      const participants = (teamsData || [])
+        .map((team: any) => ({ team, member: membersData.find((m) => m.user_id === team.user_id) }))
+        .filter((x: any) => !!x.member);
+
+      const n = participants.length;
       if (n >= 2 && n % 2 === 0) {
-        const sorted = [...membersData].sort((a, b) => a.user_id.localeCompare(b.user_id));
-        const seed = leagueData.id
-          .split("")
-          .reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
-        const shuffled = seededShuffle(sorted, seed);
-        const fixed = shuffled[0];
-        const rotating = shuffled.slice(1);
+        const fixed = participants[0].member;
+        const rotating = participants.slice(1).map((p: any) => p.member);
         const numRounds = n - 1;
         const round = (week - 1) % numRounds;
         const half = (n - 2) / 2;
@@ -348,7 +344,7 @@ export default function MatchupDetailPage() {
   function calcPlayerWeekTotals(player: RosterPlayer): DayStats | null {
     const totals = { ...ZERO_STATS };
     let gamesPlayed = 0;
-    for (const dateStr of dateStrings) {
+    for (const dateStr of scoringDateStrings) {
       const dayStats = getPlayerDayStats(player, dateStr);
       if (dayStats) {
         gamesPlayed++;
@@ -375,15 +371,17 @@ export default function MatchupDetailPage() {
   const getMemberName = (m: LeagueMember) =>
     m.user?.username || m.user?.name || "Anonymous";
 
-  const calcDailyTeamScore = (roster: RosterPlayer[], dateStr: string): number => {
-    return roster.reduce((sum, p) => {
+  const calcDailyTeamScore = (roster: RosterPlayer[], lineup: LineupMap, dateStr: string): number => {
+    const { starters } = buildSlottedRows(roster, lineup);
+    return starters.reduce((sum, row) => {
+      const p = row.player;
       const stats = getPlayerDayStats(p, dateStr);
       return sum + (stats?.fpts || 0);
     }, 0);
   };
 
-  const calcWeekTotal = (roster: RosterPlayer[]): number => {
-    return dateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, dateStr), 0);
+  const calcWeekTotal = (roster: RosterPlayer[], lineup: LineupMap): number => {
+    return scoringDateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, lineup, dateStr), 0);
   };
 
   // ── OPP / STATUS helpers ──────────────────────────────────────────────────
@@ -587,8 +585,8 @@ export default function MatchupDetailPage() {
     );
   }
 
-  const homeScore  = calcWeekTotal(homeRoster);
-  const awayScore  = calcWeekTotal(awayRoster);
+  const homeScore  = calcWeekTotal(homeRoster, homeLineup);
+  const awayScore  = calcWeekTotal(awayRoster, awayLineup);
   const homeName   = homeTeam.fantasy?.name || getMemberName(homeTeam.member);
   const awayName   = awayTeam.fantasy?.name || getMemberName(awayTeam.member);
   const homeOwner  = getMemberName(homeTeam.member);
@@ -598,9 +596,9 @@ export default function MatchupDetailPage() {
   const isOwner    = user && league.commissioner_id === user.id;
 
   // Day labels for the daily breakdown table header
-  const dayLabels = weekDates.map((d) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  );
+  const dayLabels = weekDates
+    .filter((d) => d.getDay() >= 1 && d.getDay() <= 5)
+    .map((d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
 
   return (
     <div className="app">
@@ -676,16 +674,16 @@ export default function MatchupDetailPage() {
                   <tbody>
                     <tr>
                       <td className="col-team-name">{homeName}</td>
-                      {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(homeRoster, dateStr) * 10) / 10;
+                      {scoringDateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(homeRoster, homeLineup, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(homeScore * 10) / 10}</strong></td>
                     </tr>
                     <tr>
                       <td className="col-team-name">{awayName}</td>
-                      {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(awayRoster, dateStr) * 10) / 10;
+                      {scoringDateStrings.map((dateStr, i) => {
+                        const v = Math.round(calcDailyTeamScore(awayRoster, awayLineup, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(awayScore * 10) / 10}</strong></td>
@@ -707,8 +705,8 @@ export default function MatchupDetailPage() {
               <option value="total">
                 {viewMode === "total" ? " " : ""}{t("总计", "Total")}
               </option>
-              {weekDates.map((d, i) => {
-                const ds = dateStrings[i];
+              {scoringDateStrings.map((ds) => {
+                const d = new Date(`${ds}T00:00:00`);
                 const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
                 return (
                   <option key={ds} value={ds}>
@@ -753,7 +751,7 @@ const styles = `
 
   .page-content {
     min-height: calc(100vh - 200px);
-    background: #0a0a0a;
+    background: #f9fafb;
     padding: 24px 16px;
   }
   .container {
@@ -763,7 +761,7 @@ const styles = `
 
   .back-link {
     display: inline-block;
-    color: #f59e0b;
+    color: #1e3a8a;
     text-decoration: none;
     font-size: 14px;
     margin-bottom: 20px;
@@ -772,8 +770,8 @@ const styles = `
 
   /* ── Banner ── */
   .banner-card {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 14px;
     overflow: hidden;
     margin-bottom: 24px;
@@ -800,7 +798,7 @@ const styles = `
     background: linear-gradient(135deg, #f59e0b, #d97706);
     font-size: 22px;
     font-weight: 700;
-    color: #000;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -808,9 +806,9 @@ const styles = `
   }
   .banner-text { display: flex; flex-direction: column; gap: 3px; }
   .banner-text-right { text-align: right; }
-  .banner-team-name { font-size: 18px; font-weight: 700; color: #fff; }
-  .banner-owner { font-size: 13px; color: #aaa; }
-  .banner-record { font-size: 13px; color: #888; }
+  .banner-team-name { font-size: 18px; font-weight: 700; color: #111827; }
+  .banner-owner { font-size: 13px; color: #6b7280; }
+  .banner-record { font-size: 13px; color: #94a3b8; }
 
   .banner-center { text-align: center; flex-shrink: 0; }
   .scores-row {
@@ -825,14 +823,14 @@ const styles = `
     min-width: 64px;
     text-align: center;
   }
-  .score-winning { color: #fff; }
-  .score-losing  { color: #555; }
-  .score-divider { font-size: 24px; color: #444; }
-  .week-label    { font-size: 13px; color: #888; margin-top: 6px; }
+  .score-winning { color: #111827; }
+  .score-losing  { color: #9ca3af; }
+  .score-divider { font-size: 24px; color: #94a3b8; }
+  .week-label    { font-size: 13px; color: #6b7280; margin-top: 6px; }
 
   /* ── Daily breakdown ── */
   .daily-section {
-    border-top: 1px solid #1e1e1e;
+    border-top: 1px solid #f1f5f9;
     padding: 0 24px 20px;
   }
   .table-scroll { overflow-x: auto; }
@@ -840,7 +838,7 @@ const styles = `
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    color: #ccc;
+    color: #374151;
     min-width: 580px;
   }
   .daily-table th {
@@ -848,24 +846,24 @@ const styles = `
     text-align: center;
     font-size: 11px;
     font-weight: 600;
-    color: #666;
-    border-bottom: 1px solid #1e1e1e;
+    color: #9ca3af;
+    border-bottom: 1px solid #e5e7eb;
     white-space: nowrap;
   }
   .daily-table td {
     padding: 10px 8px;
     text-align: center;
-    border-bottom: 1px solid #1a1a1a;
+    border-bottom: 1px solid #f3f4f6;
   }
   .col-team-name {
     text-align: left !important;
     font-weight: 600;
-    color: #fff;
+    color: #111827;
     white-space: nowrap;
     padding-right: 16px !important;
   }
-  .col-total { font-weight: 700; color: #f59e0b !important; }
-  .zero { color: #444; }
+  .col-total { font-weight: 700; color: #1e3a8a !important; }
+  .zero { color: #9ca3af; }
 
   /* ── View selector ── */
   .view-selector {
@@ -877,26 +875,26 @@ const styles = `
   .view-label {
     font-size: 14px;
     font-weight: 600;
-    color: #888;
+    color: #6b7280;
   }
   .view-dropdown {
     padding: 8px 16px;
-    background: #111;
-    border: 1px solid #333;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: #fff;
+    color: #111827;
     font-size: 14px;
     cursor: pointer;
     min-width: 140px;
   }
   .view-dropdown:hover {
-    border-color: #f59e0b;
+    border-color: #1e3a8a;
   }
 
   /* ── Box score ── */
   .box-score-section {
-    background: #111;
-    border: 1px solid #222;
+    background: #fff;
+    border: 1px solid #e5e7eb;
     border-radius: 14px;
     overflow: hidden;
     margin-bottom: 20px;
@@ -906,15 +904,15 @@ const styles = `
     align-items: center;
     gap: 12px;
     padding: 16px 20px;
-    background: #161616;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
   }
   .bs-avatar {
     width: 36px;
     height: 36px;
     border-radius: 50%;
     background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
+    color: #fff;
     font-size: 16px;
     font-weight: 700;
     display: flex;
@@ -925,13 +923,13 @@ const styles = `
     margin: 0;
     font-size: 16px;
     font-weight: 700;
-    color: #fff;
+    color: #111827;
   }
   .stats-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
-    color: #ccc;
+    color: #374151;
     min-width: 960px;
   }
   .stats-table th {
@@ -939,44 +937,44 @@ const styles = `
     text-align: center;
     font-size: 11px;
     font-weight: 600;
-    color: #666;
-    background: #141414;
-    border-bottom: 1px solid #1e1e1e;
+    color: #9ca3af;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
     white-space: nowrap;
   }
   .stats-table td {
     padding: 10px 8px;
     text-align: center;
-    border-bottom: 1px solid #1a1a1a;
+    border-bottom: 1px solid #f3f4f6;
   }
   .stats-table tr:last-child td { border-bottom: none; }
-  .stats-table tr:hover td { background: #161616; }
+  .stats-table tr:hover td { background: #f8fafc; }
 
   /* Group header row */
   .group-header-row th {
     padding: 8px;
     font-size: 11px;
     font-weight: 700;
-    color: #888;
+    color: #6b7280;
     text-transform: uppercase;
-    background: #161616;
-    border-bottom: 1px solid #222;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
   }
   .group-header-left { text-align: left !important; }
-  .group-header-mid { text-align: center; color: #666 !important; }
+  .group-header-mid { text-align: center; color: #9ca3af !important; }
   .group-header-stats { text-align: center; }
-  .group-header-total { text-align: center; color: #f59e0b !important; }
+  .group-header-total { text-align: center; color: #1e3a8a !important; }
 
   /* Slot column */
   .col-slot {
     text-align: left !important;
     min-width: 50px;
     font-weight: 600;
-    color: #888 !important;
+    color: #6b7280 !important;
   }
 
   .col-player { text-align: left !important; min-width: 180px; }
-  .col-fpts   { color: #f59e0b !important; font-weight: 600; }
+  .col-fpts   { color: #1e3a8a !important; font-weight: 600; }
 
   /* OPP column */
   .col-opp {
@@ -995,21 +993,21 @@ const styles = `
   .status-loss { color: #f87171 !important; }
 
   .player-cell { display: flex; flex-direction: column; gap: 2px; padding: 2px 0; }
-  .player-name { font-size: 14px; font-weight: 600; color: #fff; }
-  .player-team-label { font-size: 11px; color: #666; }
+  .player-name { font-size: 14px; font-weight: 600; color: #111827; }
+  .player-team-label { font-size: 11px; color: #9ca3af; }
 
   .row-played td { }
-  .row-played .col-fpts { color: #f59e0b !important; }
-  .row-played .player-name { color: #fff; }
-  .row-played .player-team-label { color: #888; }
+  .row-played .col-fpts { color: #1e3a8a !important; }
+  .row-played .player-name { color: #111827; }
+  .row-played .player-team-label { color: #6b7280; }
   .row-no-game td { color: #555; }
   .row-no-game .player-name { color: #888; }
 
   .totals-row td {
-    background: #161616;
+    background: #f9fafb;
     font-weight: 600;
-    color: #fff;
-    border-top: 1px solid #2a2a2a;
+    color: #111827;
+    border-top: 1px solid #e5e7eb;
   }
   .empty-row {
     color: #555;
@@ -1022,7 +1020,7 @@ const styles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #888;
+    color: #6b7280;
   }
 
   @media (max-width: 640px) {

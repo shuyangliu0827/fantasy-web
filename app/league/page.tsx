@@ -30,10 +30,15 @@ export default function PublicLeaguesPage() {
   const [loading, setLoading]       = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab]   = useState<Tab>("all");
+  const [isMobile, setIsMobile] = useState(false);
   const user = getSessionUser();
 
   useEffect(() => {
     load();
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   async function load() {
@@ -96,7 +101,7 @@ export default function PublicLeaguesPage() {
       {/* ── Hero Banner ── */}
       <div style={{
         background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 55%, #2563eb 100%)",
-        padding: "56px 40px 48px",
+        padding: isMobile ? "32px 16px 28px" : "56px 40px 48px",
         position: "relative",
         overflow: "hidden",
       }}>
@@ -107,7 +112,7 @@ export default function PublicLeaguesPage() {
           pointerEvents: "none",
         }} />
         <div style={{ maxWidth: 1100, margin: "0 auto", position: "relative" }}>
-          <h1 style={{ margin: "0 0 12px", fontSize: 42, fontWeight: 900, color: "#fff", lineHeight: 1.15, letterSpacing: "-0.5px" }}>
+          <h1 style={{ margin: "0 0 12px", fontSize: isMobile ? 30 : 42, fontWeight: 900, color: "#fff", lineHeight: 1.15, letterSpacing: "-0.5px" }}>
             加入公开联赛<br />与全国高手竞技
           </h1>
           <p style={{ margin: "0 0 32px", fontSize: 15, color: "rgba(255,255,255,0.78)", lineHeight: 1.7 }}>
@@ -145,8 +150,8 @@ export default function PublicLeaguesPage() {
       </div>
 
       {/* ── Tab bar ── */}
-      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 60, zIndex: 10 }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 40px", display: "flex", gap: 0 }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: isMobile ? 60 : 64, zIndex: 10 }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "0 12px" : "0 40px", display: "flex", gap: 0, overflowX: "auto" }}>
           {TABS.map(tab => (
             <button
               key={tab.key}
@@ -166,11 +171,11 @@ export default function PublicLeaguesPage() {
       </div>
 
       {/* ── Content ── */}
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 40px 64px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "20px 12px 36px" : "32px 40px 64px" }}>
 
         {/* search row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-          <div style={{ flex: 1, maxWidth: 400, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, maxWidth: isMobile ? "100%" : 400, minWidth: isMobile ? "100%" : 0, display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 12 }}>
             <span style={{ fontSize: 14, color: "#9ca3af" }}>🔍</span>
             <input
               type="text"
@@ -207,7 +212,7 @@ export default function PublicLeaguesPage() {
             )}
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 20 }}>
             {filtered.map(league => {
               const sc = STATUS_COLOR[league.status] ?? { color: "#374151", bg: "#f3f4f6" };
               const sl = STATUS_LABEL[league.status] ?? league.status;
