@@ -24,7 +24,7 @@ export default function LeaguePage() {
   const [teamName, setTeamName] = useState("");
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "history" | "draft" | "news" | "settings">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "draft" | "news" | "settings">("standings");
 
   useEffect(() => {
     init();
@@ -177,10 +177,9 @@ export default function LeaguePage() {
         : "—"
       : null;
 
-    const TABS = [
+    const TABS: { key: string; label: string; href?: string }[] = [
       { key: "standings", label: "积分榜" },
-      { key: "schedule", label: "本周赛程" },
-      { key: "history", label: "历史赛程" },
+      { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
       { key: "draft", label: "选秀记录" },
       { key: "news", label: "联赛公告" },
       { key: "settings", label: "联赛设置" },
@@ -309,7 +308,22 @@ export default function LeaguePage() {
         {/* ── Tab bar ── */}
         <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 60, zIndex: 10 }}>
           <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 32px", display: "flex", gap: 0 }}>
-            {TABS.map(tab => (
+            {TABS.map(tab => tab.href ? (
+              <Link
+                key={tab.key}
+                href={tab.href}
+                style={{
+                  padding: "16px 20px", background: "none", cursor: "pointer",
+                  fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                  color: "#6b7280",
+                  borderBottom: "2.5px solid transparent",
+                  transition: "all 0.15s",
+                  textDecoration: "none",
+                }}
+              >
+                {tab.label}
+              </Link>
+            ) : (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
