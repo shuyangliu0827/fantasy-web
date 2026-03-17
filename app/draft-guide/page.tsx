@@ -214,7 +214,7 @@ export default function DraftGuidePage() {
                 fontSize: 15,
                 fontWeight: 700,
                 color: "#fff",
-                background: "linear-gradient(90deg, #f59e0b, #f97316)",
+                background: "#1e3a8a",
                 borderRadius: 10,
                 textDecoration: "none",
                 display: "inline-block",

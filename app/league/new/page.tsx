@@ -126,7 +126,7 @@ export default function NewLeaguePage() {
               <button
                 type="submit"
                 disabled={submitting || !name.trim()}
-                style={{ flex: 2, padding: "12px", background: submitting || !name.trim() ? "#e5e7eb" : "linear-gradient(90deg, #f59e0b, #f97316)", border: "none", borderRadius: 10, color: submitting || !name.trim() ? "#9ca3af" : "#fff", fontSize: 14, fontWeight: 700, cursor: submitting || !name.trim() ? "not-allowed" : "pointer", fontFamily: FONT }}
+                style={{ flex: 2, padding: "12px", background: submitting || !name.trim() ? "#e5e7eb" : "#1e3a8a", border: "none", borderRadius: 10, color: submitting || !name.trim() ? "#9ca3af" : "#fff", fontSize: 14, fontWeight: 700, cursor: submitting || !name.trim() ? "not-allowed" : "pointer", fontFamily: FONT }}
               >
                 {submitting ? "创建中..." : "创建联赛"}
               </button>
