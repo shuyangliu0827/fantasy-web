@@ -131,6 +131,7 @@ export default function ComparePage() {
   const { t } = useLang();
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState<StrategyKey>("balanced");
@@ -147,6 +148,12 @@ export default function ComparePage() {
     if (players.length >= 2) {
       setSelectedPlayers([players[0], players[1]]);
     }
+  }, []);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const filteredPlayers = allPlayers.filter(p =>
@@ -210,7 +217,7 @@ export default function ComparePage() {
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
       <LightHeader activeHref="/compare" />
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 16px" }}>
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 12px" : "32px 16px" }}>
         {/* Page Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 28, fontWeight: 800, color: "#111827", margin: "0 0 8px 0" }}>
@@ -407,7 +414,7 @@ export default function ComparePage() {
             {/* Category Breakdown */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: 24, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 20px 0" }}>{t("类别详细分析", "Category Breakdown")}</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
                 {[
                   { key: "ppg", label: t("得分", "Scoring"), max: 35 },
                   { key: "rpg", label: t("篮板", "Rebounds"), max: 15 },
@@ -455,7 +462,7 @@ export default function ComparePage() {
                   `Scores based on "${showCustom ? "Custom" : STRATEGY_PRESETS[activeStrategy].nameEn}" strategy`)}
               </p>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
                 {selectedPlayers.sort((a, b) => calculateWeightedScore(b) - calculateWeightedScore(a)).map((player, index) => {
                   const score = calculateWeightedScore(player);
                   const cats = calculateCategoryScores(player);
@@ -480,7 +487,7 @@ export default function ComparePage() {
                         </div>
                       </div>
 
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
                         {[
                           { key: "scoring", label: t("得分", "Scoring"), value: cats.scoring },
                           { key: "rebounding", label: t("篮板", "Rebounds"), value: cats.rebounding },

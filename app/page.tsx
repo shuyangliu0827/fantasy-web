@@ -66,10 +66,16 @@ export default function HomePage() {
   const [signupHovered, setSignupHovered] = useState(false);
   const [cta1Hovered, setCta1Hovered] = useState(false);
   const [cta2Hovered, setCta2Hovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
     if (u) setUser({ name: u.name, username: u.username });
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const handleLogout = () => {
@@ -89,8 +95,8 @@ export default function HomePage() {
         borderBottom: "1px solid #e2e8f0",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
-          height: 64, display: "flex", alignItems: "center", gap: 32,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+          height: 64, display: "flex", alignItems: "center", gap: isMobile ? 12 : 32,
         }}>
 
           {/* Logo */}
@@ -100,7 +106,7 @@ export default function HomePage() {
           </Link>
 
           {/* Nav */}
-          <nav style={{ display: "flex", gap: 2, flex: 1, overflow: "hidden" }}>
+          <nav style={{ display: "flex", gap: 2, flex: 1, overflowX: "auto", overflowY: "hidden" }}>
             {NAV_ITEMS.map(item => {
               const isActive = item.href === "/";
               return (
@@ -126,7 +132,7 @@ export default function HomePage() {
           </nav>
 
           {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, flexShrink: 0 }}>
             <button
               onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{
@@ -196,8 +202,8 @@ export default function HomePage() {
 
         {/* Page tabs: 首页 / 发现 */}
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
-          display: "flex", gap: 0,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
+          display: "flex", gap: 0, overflowX: "auto",
           borderTop: "1px solid #f1f5f9",
         }}>
           {[
@@ -224,10 +230,10 @@ export default function HomePage() {
       </header>
 
       {/* Hero */}
-      <section style={{ background: "#fff", padding: "88px 24px 72px" }}>
+      <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
-          display: "flex", alignItems: "center", gap: 48,
+          display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 24 : 48,
         }}>
 
           {/* Left: copy */}
@@ -309,7 +315,7 @@ export default function HomePage() {
           </div>
 
           {/* Right: floating player cards */}
-          <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0 }}>
+          <div style={{ flex: 1, position: "relative", height: isMobile ? 280 : 400, minWidth: 0, width: "100%" }}>
 
             {/* Giannis card — dark navy */}
             <div style={{
@@ -411,8 +417,8 @@ export default function HomePage() {
       <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto",
-          padding: "36px 24px",
-          display: "flex",
+          padding: isMobile ? "24px 12px" : "36px 24px",
+          display: "flex", flexDirection: isMobile ? "column" : "row",
           alignItems: "center",
           gap: 0,
         }}>
@@ -431,11 +437,11 @@ export default function HomePage() {
       </section>
 
       {/* Feature cards */}
-      <section style={{ background: "#f8fafc", padding: "64px 24px 80px" }}>
+      <section style={{ background: "#f8fafc", padding: isMobile ? "36px 12px 44px" : "64px 24px 80px" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
             gap: 20,
           }}>
             {FEATURES.map((f, i) => (
@@ -490,7 +496,7 @@ export default function HomePage() {
               {t("查看全部排名", "View All Rankings")} →
             </Link>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 16 }}>
             {[
               { rank: 1, name: "N. Jokić", team: "DEN · C", score: 68.4, color: "#f59e0b" },
               { rank: 2, name: "L. Dončić", team: "DAL · PG", score: 64.2, color: "#64748b" },

@@ -111,13 +111,26 @@ export default function PlayerRankingsPage() {
   const [minPts, setMinPts] = useState(0);
   const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [isMobile, setIsMobile] = useState(false);
 
   // --- data fetching ---
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("resize", handleResize);
+    };
   }, []);
+
+  useEffect(() => {
+    if (isMobile) setViewMode("card");
+  }, [isMobile]);
 
   async function loadData() {
     try {
@@ -671,7 +684,7 @@ export default function PlayerRankingsPage() {
 
           {/* ── Card View ── */}
           {viewMode === "card" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16 }}>
               {paginatedPlayers.map((player) => {
                 const trend = computeTrend(player);
                 const isAdded = addedPlayers.has(player.id);
@@ -704,7 +717,7 @@ export default function PlayerRankingsPage() {
                     </div>
 
                     {/* Stats grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 6, marginBottom: 12 }}>
                       {[
                         { label: t("得分", "PTS"), val: player.averages.pts.toFixed(1) },
                         { label: t("篮板", "REB"), val: player.averages.reb.toFixed(1) },
