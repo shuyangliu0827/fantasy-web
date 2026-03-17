@@ -76,6 +76,7 @@ export default function HomePage() {
   const [signupHovered, setSignupHovered] = useState(false);
   const [cta1Hovered, setCta1Hovered] = useState(false);
   const [cta2Hovered, setCta2Hovered] = useState(false);
+  const [cta3Hovered, setCta3Hovered] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
@@ -269,7 +270,7 @@ export default function HomePage() {
                 🏀 {t("免费开始", "Get Started")} →
               </Link>
               <Link
-                href="/draft-guide"
+                href="/how-to-play"
                 onMouseEnter={() => setCta2Hovered(true)}
                 onMouseLeave={() => setCta2Hovered(false)}
                 style={{
@@ -282,6 +283,25 @@ export default function HomePage() {
                   fontWeight: 600,
                   textDecoration: "none",
                   background: cta2Hovered ? "#f8fafc" : "#fff",
+                  transition: "all 0.15s",
+                }}
+              >
+                {t("新手入门", "How To Play")}
+              </Link>
+              <Link
+                href="/draft-guide"
+                onMouseEnter={() => setCta3Hovered(true)}
+                onMouseLeave={() => setCta3Hovered(false)}
+                style={{
+                  display: "inline-flex", alignItems: "center",
+                  padding: "14px 30px",
+                  border: `2px solid ${cta3Hovered ? "#cbd5e1" : "#e2e8f0"}`,
+                  color: "#374151",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  background: cta3Hovered ? "#f8fafc" : "#fff",
                   transition: "all 0.15s",
                 }}
               >
