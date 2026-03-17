@@ -2,621 +2,481 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
 import { useLang } from "@/lib/lang";
-import { listInsights, Insight } from "@/lib/store";
+import { getSessionUser } from "@/lib/store";
 
-const CATEGORIES = [
-  { id: "all", label: "推荐", labelEn: "For You" },
-  { id: "选秀策略", label: "选秀策略", labelEn: "Draft" },
-  { id: "球员分析", label: "球员分析", labelEn: "Analysis" },
-  { id: "交易建议", label: "交易建议", labelEn: "Trade" },
-  { id: "新手指南", label: "新手指南", labelEn: "Guide" },
-  { id: "Punt策略", label: "Punt策略", labelEn: "Punt" },
+// ── Nav ──────────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { href: "/", labelZh: "首页", labelEn: "Home" },
+  { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
+  { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
+  { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
+  { href: "/draft-guide", labelZh: "选秀指南", labelEn: "Draft Guide" },
+  { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
+  { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
 ];
 
+// ── Feature cards ─────────────────────────────────────────────────────────────
+
+const FEATURES = [
+  {
+    icon: "📊",
+    iconBg: "#dbeafe",
+    titleZh: "AI 球员排名",
+    titleEn: "AI Rankings",
+    descZh: "综合30+数据维度，每日更新，精准量化每个球员的幻想价值。",
+    descEn: "30+ data dimensions updated daily to quantify every player's fantasy value.",
+    href: "/rankings",
+  },
+  {
+    icon: "🏆",
+    iconBg: "#fef3c7",
+    titleZh: "公开联赛",
+    titleEn: "Public Leagues",
+    descZh: "加入全国玩家的公开联赛，展示你的选秀实力，赢取排行榜荣耀。",
+    descEn: "Join leagues nationwide and prove your draft skills on the leaderboard.",
+    href: "/league",
+  },
+  {
+    icon: "⚡",
+    iconBg: "#dbeafe",
+    titleZh: "模拟选秀",
+    titleEn: "Mock Draft",
+    descZh: "在真实选秀前反复练习，AI对手陪你跑通每一套战略方案。",
+    descEn: "Practice with AI opponents before the real draft to test every strategy.",
+    href: "/mock-draft",
+  },
+  {
+    icon: "🔍",
+    iconBg: "#fef9ee",
+    titleZh: "球员对比",
+    titleEn: "Player Compare",
+    descZh: "任意两名球员深度数据对比，帮你在关键轮次做出最优决策。",
+    descEn: "Deep data comparison of any two players to make the best pick each round.",
+    href: "/compare",
+  },
+];
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+const STATS = [
+  { num: "480+", labelZh: "NBA球员数据库", labelEn: "NBA Players Tracked", color: "#2563eb" },
+  { num: "12K", labelZh: "活跃用户", labelEn: "Active Users", color: "#2563eb" },
+  { num: "98%", labelZh: "数据准确率", labelEn: "Data Accuracy", color: "#059669" },
+];
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function HomePage() {
-  const { t, lang } = useLang();
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [isLoading, setIsLoading] = useState(true);
+  const { t, lang, setLang } = useLang();
+  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [loginHovered, setLoginHovered] = useState(false);
+  const [signupHovered, setSignupHovered] = useState(false);
+  const [cta1Hovered, setCta1Hovered] = useState(false);
+  const [cta2Hovered, setCta2Hovered] = useState(false);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const insightsData = await listInsights();
-        setInsights(
-          insightsData.sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
-        );
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadData();
+    const u = getSessionUser();
+    if (u) setUser({ name: u.name, username: u.username });
   }, []);
 
-  const filteredInsights =
-    selectedCategory === "all"
-      ? insights
-      : insights.filter((i) => i.tags?.includes(selectedCategory));
-
-  const getAuthorName = (item: Insight) => {
-    if (item.author?.username) return item.author.username;
-    if (item.author?.name) return item.author.name;
-    return "Anonymous";
+  const handleLogout = () => {
+    localStorage.removeItem("bp_session");
+    setUser(null);
+    window.location.href = "/";
   };
-
-  const formatLikes = (num: number) => {
-    const n = Number(num || 0);
-    if (n >= 10000) return (n / 10000).toFixed(1) + "万";
-    if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-    return String(n);
-  };
-
-  // 获取封面图（优先 cover_url，否则取 images[0]）
-  const getCoverImage = (item: Insight) => {
-    if (item.cover_url) return item.cover_url;
-    if (item.images && item.images.length > 0) return item.images[0];
-    return null;
-  };
-
-  if (isLoading) {
-    return (
-      <div className="app">
-        <Header />
-        <main className="feed-page">
-          <div className="loading">
-            <div className="loading-icon">🏀</div>
-            <p>{t("加载中...", "Loading...")}</p>
-          </div>
-        </main>
-        <style jsx>{styles}</style>
-      </div>
-    );
-  }
 
   return (
-    <div className="app">
-      <Header />
+    <div style={{ background: "#fff", minHeight: "100vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif", color: "#0f172a" }}>
 
-      <main className="feed-page">
-        {/* 分类导航 */}
-        <nav className="category-nav">
-          <div className="category-scroll">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                className={`category-tab ${selectedCategory === cat.id ? "active" : ""}`}
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                {lang === "zh" ? cat.label : cat.labelEn}
-              </button>
-            ))}
+      {/* ── Header ── */}
+      <header style={{
+        position: "sticky", top: 0, zIndex: 100,
+        background: "rgba(255,255,255,0.95)",
+        backdropFilter: "blur(12px)",
+        borderBottom: "1px solid #e2e8f0",
+      }}>
+        <div style={{
+          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
+          height: 64, display: "flex", alignItems: "center", gap: 32,
+        }}>
+
+          {/* Logo */}
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
+            <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
+          </Link>
+
+          {/* Nav */}
+          <nav style={{ display: "flex", gap: 2, flex: 1, overflow: "hidden" }}>
+            {NAV_ITEMS.map(item => {
+              const isActive = item.href === "/";
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    padding: "7px 13px",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? "#0f172a" : "#64748b",
+                    background: isActive ? "#f1f5f9" : "transparent",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {lang === "zh" ? item.labelZh : item.labelEn}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Right actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+              style={{
+                padding: "7px 14px",
+                border: "1px solid #e2e8f0",
+                borderRadius: 999,
+                background: "#fff",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#64748b",
+                cursor: "pointer",
+              }}
+            >
+              中 / EN
+            </button>
+
+            {!user ? (
+              <>
+                <Link
+                  href="/auth/login"
+                  onMouseEnter={() => setLoginHovered(true)}
+                  onMouseLeave={() => setLoginHovered(false)}
+                  style={{
+                    padding: "8px 18px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#374151",
+                    textDecoration: "none",
+                    background: loginHovered ? "#f8fafc" : "#fff",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  {t("登录", "Login")}
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  onMouseEnter={() => setSignupHovered(true)}
+                  onMouseLeave={() => setSignupHovered(false)}
+                  style={{
+                    padding: "8px 20px",
+                    background: signupHovered ? "#1e40af" : "#1e3a8a",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#fff",
+                    textDecoration: "none",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  {t("注册", "Sign Up")}
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href={`/u/${user.username}`} style={{ fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: "8px 4px" }}>
+                  @{user.username}
+                </Link>
+                <button onClick={handleLogout} style={{ padding: "8px 14px", fontSize: 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
+                  {t("退出", "Logout")}
+                </button>
+              </>
+            )}
           </div>
-        </nav>
+        </div>
+      </header>
 
-        <div className="feed-container">
-          {/* 联赛入口卡片 - ESPN 风格 */}
-          <div className="league-entry-card">
-            <div className="league-entry-left">
-              <div className="league-badge">🏀</div>
-              <div className="league-entry-text">
-                <h2>{t("准备好加入联赛了吗？", "READY TO JOIN A LEAGUE?")}</h2>
-                <p>{t("蓝本 Fantasy 篮球平台", "The #1 Fantasy Basketball Platform")}</p>
+      {/* ── Hero ── */}
+      <section style={{ background: "#fff", padding: "88px 24px 72px" }}>
+        <div style={{
+          maxWidth: 1200, margin: "0 auto",
+          display: "flex", alignItems: "center", gap: 48,
+        }}>
+
+          {/* Left: copy */}
+          <div style={{ flex: "0 0 52%", minWidth: 0 }}>
+
+            {/* Badge */}
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 8,
+              padding: "6px 14px",
+              background: "#eff6ff",
+              borderRadius: 999,
+              marginBottom: 28,
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb" }}>
+                {t("2024-25 NBA赛季 · 数据实时更新", "2024-25 NBA Season · Live Data")}
+              </span>
+            </div>
+
+            {/* Heading */}
+            <h1 style={{ margin: 0, lineHeight: 1.12 }}>
+              <div style={{ fontSize: 58, fontWeight: 800, color: "#0f172a", letterSpacing: "-2px" }}>
+                {t("用数据赢得", "Win Your Draft")}
+              </div>
+              <div style={{ fontSize: 58, fontWeight: 800, color: "#2563eb", letterSpacing: "-2px", fontStyle: "italic" }}>
+                {t("每一场选秀", "With Data")}
+              </div>
+            </h1>
+
+            {/* Description */}
+            <p style={{ margin: "22px 0 36px", fontSize: 16, lineHeight: 1.75, color: "#64748b", maxWidth: 430 }}>
+              {t(
+                "中国首个专业幻想篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
+                "China's first professional fantasy basketball platform. AI rankings, live data, deep analysis — so you nail every pick."
+              )}
+            </p>
+
+            {/* CTAs */}
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              <Link
+                href="/auth/signup"
+                onMouseEnter={() => setCta1Hovered(true)}
+                onMouseLeave={() => setCta1Hovered(false)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "14px 30px",
+                  background: cta1Hovered ? "#1e40af" : "#1e3a8a",
+                  color: "#fff",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 700,
+                  textDecoration: "none",
+                  transition: "background 0.15s",
+                  boxShadow: "0 4px 16px rgba(30,58,138,0.25)",
+                }}
+              >
+                🏀 {t("免费开始", "Get Started")} →
+              </Link>
+              <Link
+                href="/draft-guide"
+                onMouseEnter={() => setCta2Hovered(true)}
+                onMouseLeave={() => setCta2Hovered(false)}
+                style={{
+                  display: "inline-flex", alignItems: "center",
+                  padding: "14px 30px",
+                  border: `2px solid ${cta2Hovered ? "#cbd5e1" : "#e2e8f0"}`,
+                  color: "#374151",
+                  borderRadius: 10,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  background: cta2Hovered ? "#f8fafc" : "#fff",
+                  transition: "all 0.15s",
+                }}
+              >
+                {t("查看选秀指南", "Draft Guide")}
+              </Link>
+            </div>
+          </div>
+
+          {/* Right: floating player cards */}
+          <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0 }}>
+
+            {/* Giannis card — dark navy, back-right */}
+            <div style={{
+              position: "absolute",
+              top: 10, right: 30,
+              width: 190, height: 255,
+              background: "linear-gradient(145deg, #1e3a8a 0%, #1e40af 100%)",
+              borderRadius: 20,
+              transform: "rotate(7deg)",
+              boxShadow: "0 24px 60px rgba(30,58,138,0.28)",
+              padding: "20px 20px 24px",
+              color: "#fff",
+              zIndex: 1,
+              overflow: "hidden",
+            }}>
+              <div style={{ fontSize: 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>34</div>
+              <div style={{ position: "absolute", bottom: 24, left: 20 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>G. Antetokounmpo</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>MIL · 雄鹿</div>
               </div>
             </div>
-            <div className="league-entry-buttons">
-              <Link href="/league/new" className="entry-btn primary">
-                {t("创建联赛", "Create A League")}
-              </Link>
-              <Link href="/league" className="entry-btn secondary">
-                {t("加入公开联赛", "Join a Public League")}
-              </Link>
-              <Link href="/draft" className="entry-btn outline">
-                {t("模拟选秀练习", "Practice With a Mock Draft")}
-              </Link>
+
+            {/* Curry card — amber, back-left */}
+            <div style={{
+              position: "absolute",
+              bottom: 20, left: 10,
+              width: 185, height: 240,
+              background: "linear-gradient(145deg, #d97706 0%, #f59e0b 100%)",
+              borderRadius: 20,
+              transform: "rotate(-7deg)",
+              boxShadow: "0 20px 56px rgba(245,158,11,0.32)",
+              padding: "18px 18px 22px",
+              zIndex: 1,
+              overflow: "hidden",
+            }}>
+              <div style={{
+                display: "inline-block", padding: "3px 9px",
+                background: "rgba(255,255,255,0.28)",
+                borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#fff", marginBottom: 10,
+              }}>PG</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>S. Curry</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 22 }}>GSW · 勇士</div>
+              <div style={{ display: "flex", gap: 16 }}>
+                {[["26.4", "分"], ["4.5", "篮"], ["6.1", "助"]].map(([val, label]) => (
+                  <div key={label} style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 17, fontWeight: 800, color: "#fff" }}>{val}</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* LeBron card — white, front */}
+            <div style={{
+              position: "absolute",
+              top: 50, left: 100,
+              width: 235, height: 305,
+              background: "#fff",
+              borderRadius: 22,
+              boxShadow: "0 28px 80px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.06)",
+              padding: "22px 24px",
+              zIndex: 3,
+              overflow: "hidden",
+            }}>
+              {/* Position */}
+              <div style={{
+                display: "inline-block", padding: "4px 10px",
+                background: "#eff6ff",
+                borderRadius: 6, fontSize: 11, fontWeight: 700, color: "#2563eb", marginBottom: 14,
+              }}>SF</div>
+
+              {/* Big number watermark */}
+              <div style={{ fontSize: 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
+
+              <div style={{ fontSize: 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 22 }}>LAL · 湖人</div>
+
+              <div style={{ height: 1, background: "#f1f5f9", marginBottom: 18 }} />
+
+              <div style={{ display: "flex", gap: 0 }}>
+                {[["25.2", "分"], ["7.3", "篮"], ["8.1", "助"]].map(([val, label], i) => (
+                  <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f1f5f9" : "none", paddingBottom: 4 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px" }}>{val}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Trophy badge */}
+            <div style={{
+              position: "absolute",
+              bottom: 45, right: 18,
+              width: 48, height: 48,
+              background: "#fef9c3",
+              borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 22,
+              boxShadow: "0 4px 20px rgba(245,158,11,0.22)",
+              zIndex: 4,
+            }}>
+              🏆
             </div>
           </div>
-
-          {/* 帖子列表 */}
-          {filteredInsights.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📝</div>
-              <h3>{t("还没有内容", "No posts yet")}</h3>
-              <p>{t("成为第一个发布的人吧！", "Be the first to share!")}</p>
-              <Link href="/insights/new" className="empty-btn">
-                {t("发布笔记", "Post Note")}
-              </Link>
-            </div>
-          ) : (
-            <div className="grid">
-              {filteredInsights.map((item) => {
-                const authorName = getAuthorName(item);
-                const coverImage = getCoverImage(item);
-                const imageCount = item.images?.length || (item.cover_url ? 1 : 0);
-
-                return (
-                  <Link href={`/insights/${item.id}`} key={item.id} className="post-card">
-                    {/* 图片区域 */}
-                    <div className="post-media">
-                      {coverImage ? (
-                        <>
-                          <img src={coverImage} alt={item.title} loading="lazy" />
-                          {imageCount > 1 && (
-                            <div className="image-count">
-                              <span>📷</span> {imageCount}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="post-placeholder">
-                          <span>🏀</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 标题 */}
-                    <div className="post-body">
-                      <h3 className="post-title">{item.title}</h3>
-                    </div>
-
-                    {/* 底部：用户 + 点赞 */}
-                    <div className="post-footer">
-                      <div className="user">
-                        <span className="avatar">{authorName[0]?.toUpperCase()}</span>
-                        <span className="name">{authorName}</span>
-                      </div>
-                      <div className="like">
-                        <span>❤️</span>
-                        <span>{formatLikes(item.heat)}</span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
         </div>
+      </section>
 
-        {/* 悬浮发布按钮 */}
-        <Link href="/insights/new" className="fab">
-          <span>+</span>
-        </Link>
-      </main>
+      {/* ── Stats bar ── */}
+      <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
+        <div style={{
+          maxWidth: 1200, margin: "0 auto",
+          padding: "36px 24px",
+          display: "flex",
+          alignItems: "center",
+          gap: 0,
+        }}>
+          {STATS.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", flex: 1 }}>
+              <div>
+                <div style={{ fontSize: 38, fontWeight: 800, color: s.color, letterSpacing: "-1.5px", lineHeight: 1 }}>{s.num}</div>
+                <div style={{ fontSize: 14, color: "#64748b", marginTop: 5, fontWeight: 500 }}>{lang === "zh" ? s.labelZh : s.labelEn}</div>
+              </div>
+              {i < STATS.length - 1 && (
+                <div style={{ width: 1, height: 44, background: "#e2e8f0", margin: "0 48px", flexShrink: 0 }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <style jsx>{styles}</style>
+      {/* ── Feature cards ── */}
+      <section style={{ background: "#f8fafc", padding: "64px 24px 80px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 20,
+          }}>
+            {FEATURES.map((f, i) => (
+              <Link key={i} href={f.href} style={{ textDecoration: "none" }}>
+                <div
+                  onMouseEnter={() => setHovered(i)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    background: "#fff",
+                    borderRadius: 16,
+                    padding: "28px 26px 30px",
+                    border: `1px solid ${hovered === i ? "#dbeafe" : "#e2e8f0"}`,
+                    boxShadow: hovered === i
+                      ? "0 8px 32px rgba(30,58,138,0.10)"
+                      : "0 2px 8px rgba(0,0,0,0.05)",
+                    transition: "all 0.2s ease",
+                    transform: hovered === i ? "translateY(-3px)" : "none",
+                    cursor: "pointer",
+                    minHeight: 200,
+                  }}
+                >
+                  {/* Icon */}
+                  <div style={{
+                    width: 48, height: 48,
+                    background: f.iconBg,
+                    borderRadius: 12,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 22,
+                    marginBottom: 18,
+                  }}>
+                    {f.icon}
+                  </div>
+
+                  {/* Title */}
+                  <div style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>
+                    {lang === "zh" ? f.titleZh : f.titleEn}
+                  </div>
+
+                  {/* Description */}
+                  <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.65, margin: 0 }}>
+                    {lang === "zh" ? f.descZh : f.descEn}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
     </div>
   );
 }
-
-const styles = `
-  .feed-page {
-    min-height: 100vh;
-    background: #0a0a0a;
-  }
-
-  /* 联赛入口卡片 - ESPN 风格 */
-  .league-entry-card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 24px;
-    margin-bottom: 24px;
-    padding: 28px 32px;
-    background: linear-gradient(135deg, #1a237e 0%, #0d1442 100%);
-    border: 1px solid #283593;
-    border-radius: 16px;
-  }
-
-  .league-entry-left {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
-
-  .league-badge {
-    width: 72px;
-    height: 72px;
-    background: linear-gradient(135deg, #1565c0, #0d47a1);
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 36px;
-    border: 2px solid #42a5f5;
-  }
-
-  .league-entry-text h2 {
-    font-size: 20px;
-    font-weight: 700;
-    color: #fff;
-    margin: 0 0 6px 0;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .league-entry-text p {
-    font-size: 14px;
-    color: #90caf9;
-    margin: 0;
-  }
-
-  .league-entry-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-width: 220px;
-  }
-
-  .entry-btn {
-    display: block;
-    padding: 12px 24px;
-    border-radius: 24px;
-    font-size: 14px;
-    font-weight: 600;
-    text-align: center;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-
-  .entry-btn.primary {
-    background: #f59e0b;
-    color: #000;
-  }
-
-  .entry-btn.primary:hover {
-    background: #fbbf24;
-    transform: scale(1.02);
-  }
-
-  .entry-btn.secondary {
-    background: #e0e0e0;
-    color: #1a1a1a;
-  }
-
-  .entry-btn.secondary:hover {
-    background: #fff;
-  }
-
-  .entry-btn.outline {
-    background: transparent;
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.3);
-  }
-
-  .entry-btn.outline:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.5);
-  }
-
-  /* 分类导航 */
-  .category-nav {
-    position: sticky;
-    top: 60px;
-    z-index: 50;
-    background: #0a0a0a;
-    border-bottom: 1px solid #1a1a1a;
-  }
-
-  .category-scroll {
-    max-width: 1200px;
-    margin: 0 auto;
-    display: flex;
-    gap: 4px;
-    padding: 12px 16px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .category-scroll::-webkit-scrollbar {
-    display: none;
-  }
-
-  .category-tab {
-    padding: 8px 16px;
-    border: none;
-    background: transparent;
-    color: #888;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    white-space: nowrap;
-    border-radius: 20px;
-    transition: all 0.2s;
-  }
-
-  .category-tab:hover {
-    color: #fff;
-    background: #1a1a1a;
-  }
-
-  .category-tab.active {
-    background: #f59e0b;
-    color: #000;
-    font-weight: 600;
-  }
-
-  /* 内容区 */
-  .feed-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px 16px 100px;
-  }
-
-  /* 瀑布流网格 */
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-  }
-
-  /* 帖子卡片 */
-  .post-card {
-    display: flex;
-    flex-direction: column;
-    background: #111;
-    border: 1px solid #1a1a1a;
-    border-radius: 12px;
-    overflow: hidden;
-    text-decoration: none;
-    color: inherit;
-    transition: all 0.2s;
-  }
-
-  .post-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(245, 158, 11, 0.5);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  }
-
-  /* 图片区 */
-  .post-media {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 3 / 4;
-    background: #1a1a1a;
-    overflow: hidden;
-  }
-
-  .post-media img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s;
-  }
-
-  .post-card:hover .post-media img {
-    transform: scale(1.05);
-  }
-
-  .image-count {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 12px;
-    font-size: 12px;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .post-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 40px;
-    opacity: 0.3;
-  }
-
-  /* 标题区 */
-  .post-body {
-    padding: 12px;
-  }
-
-  .post-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-    margin: 0;
-    line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  /* 底部 */
-  .post-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px 12px;
-  }
-
-  .user {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    flex: 1;
-  }
-
-  .avatar {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #000;
-    font-size: 10px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .name {
-    font-size: 12px;
-    color: #888;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .like {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: #666;
-  }
-
-  /* 加载状态 */
-  .loading {
-    text-align: center;
-    padding: 120px 20px;
-  }
-
-  .loading-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-    animation: bounce 1s infinite;
-  }
-
-  @keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-  }
-
-  .loading p {
-    color: #666;
-  }
-
-  /* 空状态 */
-  .empty-state {
-    text-align: center;
-    padding: 80px 20px;
-    background: #111;
-    border: 1px solid #1a1a1a;
-    border-radius: 16px;
-  }
-
-  .empty-icon {
-    font-size: 56px;
-    margin-bottom: 16px;
-  }
-
-  .empty-state h3 {
-    font-size: 18px;
-    color: #fff;
-    margin: 0 0 8px 0;
-  }
-
-  .empty-state p {
-    color: #666;
-    margin: 0 0 24px 0;
-  }
-
-  .empty-btn {
-    display: inline-block;
-    padding: 12px 32px;
-    background: #f59e0b;
-    color: #000;
-    font-weight: 600;
-    border-radius: 24px;
-    text-decoration: none;
-    transition: all 0.2s;
-  }
-
-  .empty-btn:hover {
-    background: #d97706;
-    transform: scale(1.05);
-  }
-
-  /* 悬浮按钮 */
-  .fab {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 28px;
-    color: #000;
-    text-decoration: none;
-    box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4);
-    transition: all 0.2s;
-    z-index: 100;
-  }
-
-  .fab:hover {
-    transform: scale(1.1);
-    box-shadow: 0 6px 28px rgba(245, 158, 11, 0.5);
-  }
-
-  /* 响应式 */
-  @media (max-width: 1100px) {
-    .grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
-  }
-
-  @media (max-width: 900px) {
-    .grid {
-      grid-template-columns: repeat(3, 1fr);
-    }
-
-    .league-entry-card {
-      flex-direction: column;
-      text-align: center;
-    }
-
-    .league-entry-left {
-      flex-direction: column;
-    }
-
-    .league-entry-buttons {
-      width: 100%;
-      max-width: 280px;
-    }
-  }
-
-  @media (max-width: 600px) {
-    .grid {
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-
-    .post-title {
-      font-size: 13px;
-    }
-
-    .league-entry-card {
-      padding: 20px;
-    }
-
-    .league-entry-text h2 {
-      font-size: 16px;
-    }
-
-    .league-badge {
-      width: 56px;
-      height: 56px;
-      font-size: 28px;
-    }
-  }
-`;
