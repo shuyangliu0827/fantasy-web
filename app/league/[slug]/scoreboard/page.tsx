@@ -64,7 +64,6 @@ export default function ScoreboardPage() {
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
-  const [leagueTeams, setLeagueTeams] = useState<Array<{ id: string; user_id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(1);
 
@@ -90,15 +89,10 @@ export default function ScoreboardPage() {
       // Fetch all fantasy team rosters
       const { data: teamsData } = await supabase
         .from("fantasy_teams")
-        .select("id, user_id, name, roster_data, wins, losses, draft_position")
+        .select("id, user_id, name, roster_data, wins, losses")
         .eq("league_id", leagueData.id);
 
       if (teamsData) {
-        setLeagueTeams(
-          [...teamsData]
-            .sort((a, b) => (a.draft_position || 999) - (b.draft_position || 999))
-            .map((t) => ({ id: t.id, user_id: t.user_id, name: t.name || "" }))
-        );
         const rosters: Record<string, RosterPlayer[]> = {};
         const lineups: Record<string, LineupMap> = {};
         for (const team of teamsData) {
@@ -183,6 +177,17 @@ export default function ScoreboardPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
+  function seededShuffle<T>(arr: T[], seed: number): T[] {
+    const result = [...arr];
+    let s = seed;
+    for (let i = result.length - 1; i > 0; i--) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      const j = s % (i + 1);
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
+
   function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
     const byId = playerStatsCache.get(player.id);
     if (byId) return byId;
@@ -226,15 +231,15 @@ export default function ScoreboardPage() {
   }
 
   const generateMatchupsForWeek = (week: number) => {
-    const participants = leagueTeams
-      .map((team) => ({ team, member: members.find((m) => m.user_id === team.user_id) }))
-      .filter((x): x is { team: { id: string; user_id: string; name: string }; member: LeagueMember } => !!x.member);
-
-    const n = participants.length;
+    const n = members.length;
     if (n < 2 || n % 2 !== 0) return [];
 
-    const fixed = participants[0].member;
-    const rotating = participants.slice(1).map((p) => p.member);
+    const sorted = [...members].sort((a, b) => a.user_id.localeCompare(b.user_id));
+    const seed = (league?.id || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const shuffled = seededShuffle(sorted, seed);
+
+    const fixed = shuffled[0];
+    const rotating = shuffled.slice(1);
     const numRounds = n - 1;
     const round = (week - 1) % numRounds;
     const half = (n - 2) / 2;
