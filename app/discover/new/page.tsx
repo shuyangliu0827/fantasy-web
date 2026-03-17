@@ -217,11 +217,11 @@ export default function NewPostPage() {
               onClick={() => fileInputRef.current?.click()}
               disabled={submitting || images.length >= 9}
               style={{
-                width: "100%", minHeight: 200, display: "flex", flexDirection: "column",
+                width: "calc(100% - 32px)", minHeight: 200, display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center", gap: 10,
                 background: "#f8fafc", border: "2px dashed #cbd5e1",
                 borderRadius: 12, cursor: images.length >= 9 ? "not-allowed" : "pointer",
-                fontFamily: FONT, padding: 32, margin: 16, width: "calc(100% - 32px)",
+                fontFamily: FONT, padding: 32, margin: 16,
                 boxSizing: "border-box", transition: "all 0.15s",
               }}
               onMouseEnter={e => { if (images.length < 9) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1e3a8a"; (e.currentTarget as HTMLButtonElement).style.background = "#eff6ff"; } }}
