@@ -8,6 +8,7 @@
    import { supabase } from "./supabase";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
+   import { getWeekDateStrings } from "./week-utils";
    import { PLAYER_POSITIONS } from "./player-positions";
    
    // ==================== Types ====================
@@ -1094,8 +1095,8 @@
    // Lineup: { PG: playerId, SG: playerId, ... }
    export type LineupMap = Record<string, string>;
 
-   // Per-week lineup history: { weekNum: LineupMap }
-   export type LineupHistory = Record<number, LineupMap>;
+   // Per-date lineup history: { "YYYY-MM-DD": LineupMap }
+   export type LineupHistory = Record<string, LineupMap>;
 
    export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
      if (!canUseStorage()) return {};
@@ -1146,25 +1147,32 @@
    }
 
    /**
-    * Save a lineup snapshot for a specific week.
-    * This should be called whenever the user edits their lineup (for the current week only).
-    * Past week snapshots are never modified after the week ends.
+    * Save a lineup snapshot for a specific date (YYYY-MM-DD).
+    * Each date gets its own snapshot so editing tomorrow doesn't affect today.
     */
-   export function saveLineupForWeek(leagueId: string, teamId: string, week: number, lineup: LineupMap) {
+   export function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
      const history = getLineupHistory(leagueId, teamId);
-     history[week] = lineup;
+     history[date] = lineup;
      setLineupHistory(leagueId, teamId, history);
    }
 
    /**
     * Get the lineup to use when calculating scores for a given week.
-    * - Uses the week's snapshot from lineup_history if available.
-    * - Falls back to the current lineup_data.
+    * Checks each day of the week (latest first) for a snapshot,
+    * then falls back to the most recent past snapshot, then currentLineup.
     */
    export function getLineupForWeek(history: LineupHistory, currentLineup: LineupMap, week: number): LineupMap {
-     if (history[week] && Object.keys(history[week]).length > 0) {
-       return history[week];
+     const weekDates: string[] = getWeekDateStrings(week);
+     // Latest day of the week first — prefer the most recent edit within the week
+     for (const d of [...weekDates].reverse()) {
+       if (history[d] && Object.keys(history[d]).length > 0) return history[d];
      }
+     // Fall back to the most recent snapshot before this week
+     const weekStart = weekDates[0];
+     const pastKeys = Object.keys(history)
+       .filter(k => k < weekStart && /^\d{4}-\d{2}-\d{2}$/.test(k))
+       .sort();
+     if (pastKeys.length > 0) return history[pastKeys[pastKeys.length - 1]];
      return currentLineup;
    }
 
