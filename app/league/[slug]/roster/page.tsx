@@ -93,7 +93,10 @@ const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 // ── Helpers ──
 
 function formatDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getWeekDates(start: Date): Date[] {
