@@ -1094,6 +1094,9 @@
    // Lineup: { PG: playerId, SG: playerId, ... }
    export type LineupMap = Record<string, string>;
 
+   // Per-week lineup history: { weekNum: LineupMap }
+   export type LineupHistory = Record<number, LineupMap>;
+
    export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
      if (!canUseStorage()) return {};
      return safeParse<LineupMap>(
@@ -1106,6 +1109,63 @@
      localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(lineup));
      // Sync to Supabase (fire-and-forget)
      supabase.from("fantasy_teams").update({ lineup_data: lineup }).eq("id", teamId).then(() => {});
+   }
+
+   // ── Per-week lineup history ──────────────────────────────────────────────
+
+   function lineupHistoryKey(leagueId: string, teamId: string): string {
+     return `bp_league_lineup_history_${leagueId}_${teamId}`;
+   }
+
+   export function getLineupHistory(leagueId: string, teamId: string): LineupHistory {
+     if (!canUseStorage()) return {};
+     return safeParse<LineupHistory>(localStorage.getItem(lineupHistoryKey(leagueId, teamId)), {});
+   }
+
+   export function setLineupHistory(leagueId: string, teamId: string, history: LineupHistory) {
+     if (!canUseStorage()) return;
+     localStorage.setItem(lineupHistoryKey(leagueId, teamId), JSON.stringify(history));
+     // Sync to Supabase (fire-and-forget)
+     supabase.from("fantasy_teams").update({ lineup_history: history }).eq("id", teamId).then(() => {});
+   }
+
+   export async function fetchLineupHistoryFromDB(leagueId: string, teamId: string): Promise<LineupHistory> {
+     const { data, error } = await supabase
+       .from("fantasy_teams")
+       .select("lineup_history")
+       .eq("id", teamId)
+       .single();
+     if (!error && data?.lineup_history && typeof data.lineup_history === "object") {
+       const history = data.lineup_history as LineupHistory;
+       if (canUseStorage()) {
+         localStorage.setItem(lineupHistoryKey(leagueId, teamId), JSON.stringify(history));
+       }
+       return history;
+     }
+     return getLineupHistory(leagueId, teamId);
+   }
+
+   /**
+    * Save a lineup snapshot for a specific week.
+    * This should be called whenever the user edits their lineup (for the current week only).
+    * Past week snapshots are never modified after the week ends.
+    */
+   export function saveLineupForWeek(leagueId: string, teamId: string, week: number, lineup: LineupMap) {
+     const history = getLineupHistory(leagueId, teamId);
+     history[week] = lineup;
+     setLineupHistory(leagueId, teamId, history);
+   }
+
+   /**
+    * Get the lineup to use when calculating scores for a given week.
+    * - Uses the week's snapshot from lineup_history if available.
+    * - Falls back to the current lineup_data.
+    */
+   export function getLineupForWeek(history: LineupHistory, currentLineup: LineupMap, week: number): LineupMap {
+     if (history[week] && Object.keys(history[week]).length > 0) {
+       return history[week];
+     }
+     return currentLineup;
    }
 
    // Fetch roster from Supabase (shared across users), falls back to localStorage
