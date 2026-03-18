@@ -142,11 +142,11 @@ export default function DiscoverPostPage() {
   const visibleComments = comments.filter(c => !hiddenComments.includes(c.id));
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const normalized = dateStr.includes("Z") || dateStr.includes("+") ? dateStr : dateStr + "Z";
+    const date = new Date(normalized);
     const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return t("今天", "Today");
+    const days = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (days <= 0) return t("刚刚", "just now");
     if (days === 1) return t("昨天", "Yesterday");
     if (days < 7) return `${days} ${t("天前", "days ago")}`;
     return date.toLocaleDateString();

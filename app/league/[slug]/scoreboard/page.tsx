@@ -13,11 +13,14 @@ import {
   getTeamRoster,
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
+  fetchLineupHistoryFromDB,
+  getLineupForWeek,
   supabase,
   League,
   LeagueMember,
   RosterPlayer,
   LineupMap,
+  LineupHistory,
 } from "@/lib/store";
 import {
   getWeekDateStrings,
@@ -70,6 +73,7 @@ export default function ScoreboardPage() {
   // Real data state
   const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
   const [teamLineups, setTeamLineups] = useState<Record<string, LineupMap>>({});
+  const [teamLineupHistories, setTeamLineupHistories] = useState<Record<string, LineupHistory>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
   const [scoresLoading, setScoresLoading] = useState(false);
@@ -95,6 +99,7 @@ export default function ScoreboardPage() {
       if (teamsData) {
         const rosters: Record<string, RosterPlayer[]> = {};
         const lineups: Record<string, LineupMap> = {};
+        const histories: Record<string, LineupHistory> = {};
         for (const team of teamsData) {
           if (team.roster_data && Array.isArray(team.roster_data)) {
             rosters[team.user_id] = team.roster_data as RosterPlayer[];
@@ -102,9 +107,11 @@ export default function ScoreboardPage() {
             rosters[team.user_id] = getTeamRoster(leagueData.id, team.id);
           }
           lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
+          histories[team.user_id] = await fetchLineupHistoryFromDB(leagueData.id, team.id);
         }
         setTeamRosters(rosters);
         setTeamLineups(lineups);
+        setTeamLineupHistories(histories);
       }
 
       // Fetch player stats cache for name -> BDL ID mapping
@@ -249,8 +256,8 @@ export default function ScoreboardPage() {
 
     const homeRoster = teamRosters[fixed.user_id] || [];
     const awayRoster = teamRosters[rotating[round].user_id] || [];
-    const homeLineup = teamLineups[fixed.user_id] || {};
-    const awayLineup = teamLineups[rotating[round].user_id] || {};
+    const homeLineup = getLineupForWeek(teamLineupHistories[fixed.user_id] || {}, teamLineups[fixed.user_id] || {}, week);
+    const awayLineup = getLineupForWeek(teamLineupHistories[rotating[round].user_id] || {}, teamLineups[rotating[round].user_id] || {}, week);
 
     result.push({
       id: id++,
@@ -265,8 +272,8 @@ export default function ScoreboardPage() {
       const aw = rotating[(round + n - 1 - i) % (n - 1)];
       const hRoster = teamRosters[hm.user_id] || [];
       const aRoster = teamRosters[aw.user_id] || [];
-      const hLineup = teamLineups[hm.user_id] || {};
-      const aLineup = teamLineups[aw.user_id] || {};
+      const hLineup = getLineupForWeek(teamLineupHistories[hm.user_id] || {}, teamLineups[hm.user_id] || {}, week);
+      const aLineup = getLineupForWeek(teamLineupHistories[aw.user_id] || {}, teamLineups[aw.user_id] || {}, week);
       result.push({
         id: id++,
         home: hm,

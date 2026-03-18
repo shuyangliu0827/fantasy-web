@@ -52,10 +52,12 @@ export default function DiscoverPage() {
     : insights;
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    // Supabase returns `timestamp` columns without timezone suffix — treat as UTC
+    const normalized = dateStr.includes("Z") || dateStr.includes("+") ? dateStr : dateStr + "Z";
+    const date = new Date(normalized);
     const now = new Date();
     const diff = Math.floor((now.getTime() - date.getTime()) / 86400000);
-    if (diff === 0) return t("今天", "Today");
+    if (diff <= 0) return t("刚刚", "just now");
     if (diff === 1) return t("昨天", "Yesterday");
     if (diff < 7) return `${diff}${t("天前", "d ago")}`;
     return date.toLocaleDateString();

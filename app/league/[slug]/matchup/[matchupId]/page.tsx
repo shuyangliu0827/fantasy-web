@@ -13,6 +13,8 @@ import {
   getTeamRoster,
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
+  fetchLineupHistoryFromDB,
+  getLineupForWeek,
   supabase,
   League,
   LeagueMember,
@@ -218,17 +220,20 @@ export default function MatchupDetailPage() {
           setHomeTeam({ member: matchup.home, fantasy: homeFT });
           setAwayTeam({ member: matchup.away, fantasy: awayFT });
 
-          // Fetch rosters and lineups from DB
-          const [hRoster, aRoster, hLineup, aLineup] = await Promise.all([
+          // Fetch rosters, lineups, and lineup history from DB
+          const [hRoster, aRoster, hLineupCurrent, aLineupCurrent, hHistory, aHistory] = await Promise.all([
             homeFT ? fetchTeamRosterFromDB(leagueData.id, homeFT.id).catch(() => getTeamRoster(leagueData.id, homeFT.id)) : Promise.resolve([]),
             awayFT ? fetchTeamRosterFromDB(leagueData.id, awayFT.id).catch(() => getTeamRoster(leagueData.id, awayFT.id)) : Promise.resolve([]),
             homeFT ? fetchTeamLineupFromDB(leagueData.id, homeFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
             awayFT ? fetchTeamLineupFromDB(leagueData.id, awayFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
+            homeFT ? fetchLineupHistoryFromDB(leagueData.id, homeFT.id).catch(() => ({})) : Promise.resolve({}),
+            awayFT ? fetchLineupHistoryFromDB(leagueData.id, awayFT.id).catch(() => ({})) : Promise.resolve({}),
           ]);
           setHomeRoster(hRoster);
           setAwayRoster(aRoster);
-          setHomeLineup(hLineup);
-          setAwayLineup(aLineup);
+          // Use the per-week snapshot if available, otherwise fall back to current lineup
+          setHomeLineup(getLineupForWeek(hHistory, hLineupCurrent, week));
+          setAwayLineup(getLineupForWeek(aHistory, aLineupCurrent, week));
         }
       }
 

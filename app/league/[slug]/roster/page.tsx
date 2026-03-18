@@ -16,10 +16,12 @@ import {
   isEligibleForSlot,
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
+  saveLineupForWeek,
   League,
   RosterPlayer,
   LineupMap,
 } from "@/lib/store";
+import { getCurrentWeek } from "@/lib/week-utils";
 import { supabase } from "@/lib/supabase";
 
 // ── Types ──
@@ -91,7 +93,10 @@ const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 // ── Helpers ──
 
 function formatDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getWeekDates(start: Date): Date[] {
@@ -308,6 +313,7 @@ export default function RosterPage() {
 
       setLineup(newLineup);
       setTeamLineup(league.id, myTeam.id, newLineup);
+      saveLineupForWeek(league.id, myTeam.id, getCurrentWeek(), newLineup);
       setSwapSource(null);
     }
   }
@@ -340,6 +346,7 @@ export default function RosterPage() {
     newLineup[swapSource] = playerId;
     setLineup(newLineup);
     setTeamLineup(league.id, myTeam.id, newLineup);
+    saveLineupForWeek(league.id, myTeam.id, getCurrentWeek(), newLineup);
     setSwapSource(null);
   }
 
@@ -351,6 +358,7 @@ export default function RosterPage() {
     }
     const newLineup = autoSetLineup(league.id, myTeam.id);
     setLineup(newLineup);
+    saveLineupForWeek(league.id, myTeam.id, getCurrentWeek(), newLineup);
   }
 
   // ── Schedule & stats helpers ──
