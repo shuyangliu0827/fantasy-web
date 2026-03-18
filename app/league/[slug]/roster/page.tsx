@@ -311,7 +311,7 @@ export default function RosterPage() {
       }
 
       setLineup(newLineup);
-      setTeamLineup(league.id, myTeam.id, newLineup);
+      if (selectedDate === todayStr) setTeamLineup(league.id, myTeam.id, newLineup);
       saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
       setSwapSource(null);
     }
@@ -344,7 +344,7 @@ export default function RosterPage() {
     }
     newLineup[swapSource] = playerId;
     setLineup(newLineup);
-    setTeamLineup(league.id, myTeam.id, newLineup);
+    if (selectedDate === todayStr) setTeamLineup(league.id, myTeam.id, newLineup);
     saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
     setSwapSource(null);
   }
