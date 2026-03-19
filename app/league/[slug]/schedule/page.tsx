@@ -192,66 +192,9 @@ export default function SchedulePage() {
       <LeagueNav slug={slug} isOwner={isOwner} leagueId={league.id} />
 
       <main className="page-content">
-        <div className="container layout-stack">
-          <section className="hero-card">
-            <div>
-              <p className="eyebrow">{t("官方赛程", "Canonical schedule")}</p>
-              <h1>{t("统一对阵日程", "Unified matchup schedule")}</h1>
-              <p className="subcopy">{t("赛程、记分板、对阵详情与排行榜现在共享同一套周定义与对阵配对。", "Schedule, scoreboard, matchup detail, and standings now share the same week definitions and pairings.")}</p>
-            </div>
-            <div className="toolbar">
-              <label>{t("查看球队", "View team")}</label>
-              <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
-                {members.map((member) => <option key={member.id} value={member.user_id}>{teamNames[member.user_id] || getMemberName(member)}</option>)}
-              </select>
-            </div>
-          </section>
+        <div className="container">
 
-          <section className="table-card">
-            <div className="table-card-header">
-              <div>
-                <p className="table-eyebrow">{selectedMember ? getMemberName(selectedMember) : t("球队", "Team")}</p>
-                <h2>{t("对阵列表", "Matchup list")}</h2>
-              </div>
-            </div>
-            <div className="table-scroll">
-              <table className="schedule-table">
-                <thead>
-                  <tr>
-                    <th>{t("周次", "Week")}</th>
-                    <th>{t("日期", "Dates")}</th>
-                    <th>{t("对手", "Opponent")}</th>
-                    <th>{t("战绩", "Record")}</th>
-                    <th>{t("比分", "Score")}</th>
-                    <th>{t("状态", "Status")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scheduleEntries.map((entry) => {
-                    const result = resultsByWeek.get(entry.week);
-                    const weekStatus = getWeekStatus(entry.week, leagueStart);
-                    const myScore = result
-                      ? (result.homeTeamId === selectedUserId ? result.homeScore : result.awayScore)
-                      : null;
-                    const oppScore = result
-                      ? (result.homeTeamId === selectedUserId ? result.awayScore : result.homeScore)
-                      : null;
-                    return (
-                      <tr key={entry.id}>
-                        <td><Link href={`/league/${slug}/matchup/${entry.id}`}>{t(`第 ${entry.week} 周`, `Week ${entry.week}`)}</Link></td>
-                        <td>{entry.startDate} → {entry.endDate}</td>
-                        <td>{entry.isHome ? "vs" : "@"} {teamNames[entry.opponent.user_id] || getMemberName(entry.opponent)}</td>
-                        <td>{getRecordBeforeWeek(selectedUserId, entry.week)}</td>
-                        <td>{myScore === null ? "—" : `${myScore.toFixed(1)} - ${oppScore?.toFixed(1)}`}</td>
-                        <td><span className={`status-chip ${weekStatus}`}>{weekStatus}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {members.length < 2 ? (
+          {members.length < 2 ? (
               <div className="empty-state">
                 <div className="empty-icon">📅</div>
                 <h3>{t("还没有赛程", "No schedule yet")}</h3>
@@ -379,7 +322,6 @@ export default function SchedulePage() {
                 </table>
               </div>
             )}
-          </div>
         </div>
       </main>
       <style jsx>{styles}</style>
