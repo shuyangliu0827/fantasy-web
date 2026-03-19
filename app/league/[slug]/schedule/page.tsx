@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
-  getSessionUser,
-  getLeagueBySlug,
-  getLeagueMembers,
+  DailyLineupMap,
   League,
   LeagueMember,
   supabase,
@@ -48,27 +46,32 @@ type MatchupEntry = {
 
 export default function SchedulePage() {
   const { t } = useLang();
-  const params = useParams();
-  const slug = params.slug as string;
+  const { slug } = useParams<{ slug: string }>();
 
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   // Real completed-matchup scores fetched from DB
   const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
 
   useEffect(() => {
-    const u = getSessionUser();
-    setUser(u);
-    if (u) setSelectedUserId(u.id);
-    loadData();
-  }, [slug]);
+    const sessionUser = getSessionUser();
+    setUser(sessionUser);
+    if (sessionUser) setSelectedUserId(sessionUser.id);
+  }, []);
 
-  async function loadData() {
-    const leagueData = await getLeagueBySlug(slug);
-    if (leagueData) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      const leagueData = await getLeagueBySlug(slug);
+      if (!leagueData || cancelled) {
+        setLeague(null);
+        setLoading(false);
+        return;
+      }
       setLeague(leagueData);
       const [membersData, matchupsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
@@ -168,86 +171,83 @@ export default function SchedulePage() {
     return getCanonicalWeekStatus(week, leagueStart);
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   if (loading) {
-    return (
-      <div className="app">
-        <LightHeader activeHref="/league" />
-        <div className="loading-container">
-          <p>{t("加载中...", "Loading...")}</p>
-        </div>
-        <style jsx>{styles}</style>
-      </div>
-    );
+    return <div className="app"><LightHeader activeHref="/league" /><div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div><style jsx>{styles}</style></div>;
   }
 
   if (!league) {
-    return (
-      <div className="app">
-        <LightHeader activeHref="/league" />
-        <div className="error-container">
-          <p>{t("联赛不存在", "League not found")}</p>
-        </div>
-        <style jsx>{styles}</style>
-      </div>
-    );
+    return <div className="app"><LightHeader activeHref="/league" /><div className="loading-container"><p>{t("联赛不存在", "League not found")}</p></div><style jsx>{styles}</style></div>;
   }
 
   return (
     <div className="app">
       <LightHeader activeHref="/league" />
-
-      <div className="league-header-mini">
-        <div className="league-header-inner">
-          <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon">🏀</span>
-            <span>{league.name}</span>
-          </Link>
+      <div className="league-bar">
+        <div className="container league-bar-inner">
+          <Link href={`/league/${slug}`} className="league-link"><span className="league-dot" />{league.name}</Link>
+          <span className="timezone-pill">{t("官方时区", "Official timezone")}: {CANONICAL_TIMEZONE}</span>
         </div>
       </div>
-
-      <LeagueNav slug={slug} isOwner={!!isOwner} leagueId={league.id} />
+      <LeagueNav slug={slug} isOwner={isOwner} leagueId={league.id} />
 
       <main className="page-content">
-        <div className="container">
-          {/* Schedule card matching screenshot design */}
-          <div className="schedule-card">
-            <div className="schedule-card-top-border" />
+        <div className="container layout-stack">
+          <section className="hero-card">
+            <div>
+              <p className="eyebrow">{t("官方赛程", "Canonical schedule")}</p>
+              <h1>{t("统一对阵日程", "Unified matchup schedule")}</h1>
+              <p className="subcopy">{t("赛程、记分板、对阵详情与排行榜现在共享同一套周定义与对阵配对。", "Schedule, scoreboard, matchup detail, and standings now share the same week definitions and pairings.")}</p>
+            </div>
+            <div className="toolbar">
+              <label>{t("查看球队", "View team")}</label>
+              <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
+                {members.map((member) => <option key={member.id} value={member.user_id}>{teamNames[member.user_id] || getMemberName(member)}</option>)}
+              </select>
+            </div>
+          </section>
 
-            <div className="schedule-card-header">
-              <div className="schedule-title-section">
-                <h1 className="schedule-title">
-                  {selectedName.toUpperCase()} {t("赛程", "Schedule")}
-                </h1>
-                <span className="schedule-season">
-                  {"2025-26"} Fantasy Hoops
-                </span>
+          <section className="table-card">
+            <div className="table-card-header">
+              <div>
+                <p className="table-eyebrow">{selectedMember ? getMemberName(selectedMember) : t("球队", "Team")}</p>
+                <h2>{t("对阵列表", "Matchup list")}</h2>
               </div>
             </div>
-
-            <div className="schedule-controls">
-              <div className="team-selector-section">
-                <span className="selector-label">{t("队伍赛程", "Team Schedule")}</span>
-                <div className="team-dropdown-wrapper">
-                  <select
-                    className="team-dropdown"
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                  >
-                    {members.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>
-                        {getMemberName(m)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="dropdown-arrow">▾</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="season-subtitle">
-              <h2>{t("2026 赛季赛程", "2026 Season Schedule")}</h2>
+            <div className="table-scroll">
+              <table className="schedule-table">
+                <thead>
+                  <tr>
+                    <th>{t("周次", "Week")}</th>
+                    <th>{t("日期", "Dates")}</th>
+                    <th>{t("对手", "Opponent")}</th>
+                    <th>{t("战绩", "Record")}</th>
+                    <th>{t("比分", "Score")}</th>
+                    <th>{t("状态", "Status")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scheduleEntries.map((entry) => {
+                    const result = resultsByWeek.get(entry.week);
+                    const weekStatus = getWeekStatus(entry.week, leagueStart);
+                    const myScore = result
+                      ? (result.homeTeamId === selectedUserId ? result.homeScore : result.awayScore)
+                      : null;
+                    const oppScore = result
+                      ? (result.homeTeamId === selectedUserId ? result.awayScore : result.homeScore)
+                      : null;
+                    return (
+                      <tr key={entry.id}>
+                        <td><Link href={`/league/${slug}/matchup/${entry.id}`}>{t(`第 ${entry.week} 周`, `Week ${entry.week}`)}</Link></td>
+                        <td>{entry.startDate} → {entry.endDate}</td>
+                        <td>{entry.isHome ? "vs" : "@"} {teamNames[entry.opponent.user_id] || getMemberName(entry.opponent)}</td>
+                        <td>{getRecordBeforeWeek(selectedUserId, entry.week)}</td>
+                        <td>{myScore === null ? "—" : `${myScore.toFixed(1)} - ${oppScore?.toFixed(1)}`}</td>
+                        <td><span className={`status-chip ${weekStatus}`}>{weekStatus}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             {members.length < 2 ? (
@@ -381,320 +381,38 @@ export default function SchedulePage() {
           </div>
         </div>
       </main>
-
       <style jsx>{styles}</style>
     </div>
   );
 }
 
 const styles = `
-  .league-header-mini {
-    background: #1e3a8a;
-    border-bottom: none;
-  }
-  .league-header-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 16px;
-  }
-  .league-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #fff;
-    text-decoration: none;
-    font-size: 20px;
-    font-weight: 600;
-  }
-  .league-icon { font-size: 28px; }
-  .page-content {
-    min-height: calc(100vh - 200px);
-    background: #f3f4f6;
-    padding: 24px 16px;
-  }
-  .container {
-    max-width: 1100px;
-    margin: 0 auto;
-  }
-
-  /* ── Schedule card ──────────────────────────────────────────────── */
-  .schedule-card {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    overflow: hidden;
-    position: relative;
-  }
-  .schedule-card-top-border {
-    height: 4px;
-    background: linear-gradient(90deg, #f59e0b, #f97316);
-  }
-
-  .schedule-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 24px 28px 0;
-  }
-  .schedule-title-section {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .schedule-title {
-    font-size: 22px;
-    font-weight: 800;
-    color: #111827;
-    margin: 0;
-    letter-spacing: 0.3px;
-  }
-  .schedule-season {
-    font-size: 14px;
-    color: #6b7280;
-    font-weight: 400;
-  }
-
-  /* ── Controls ───────────────────────────────────────────────────── */
-  .schedule-controls {
-    padding: 20px 28px 0;
-  }
-  .team-selector-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .selector-label {
-    font-size: 13px;
-    color: #6b7280;
-    font-weight: 500;
-  }
-  .team-dropdown-wrapper {
-    position: relative;
-    display: inline-block;
-  }
-  .team-dropdown {
-    appearance: none;
-    padding: 8px 36px 8px 14px;
-    background: #fff;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    color: #111827;
-    cursor: pointer;
-    min-width: 200px;
-  }
-  .team-dropdown:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
-  }
-  .dropdown-arrow {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 12px;
-    color: #6b7280;
-    pointer-events: none;
-  }
-
-  /* ── Season subtitle ────────────────────────────────────────────── */
-  .season-subtitle {
-    padding: 24px 28px 0;
-  }
-  .season-subtitle h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0;
-  }
-
-  /* ── Table ──────────────────────────────────────────────────────── */
-  .schedule-table-wrapper {
-    padding: 16px 0 0;
-    overflow-x: auto;
-  }
-  .schedule-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-  }
-  .schedule-table thead th {
-    text-align: left;
-    padding: 10px 16px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 2px solid #e5e7eb;
-    background: #fafafa;
-  }
-  .schedule-table thead th.col-matchup {
-    padding-left: 28px;
-    width: 30%;
-  }
-  .schedule-table thead th.col-score {
-    width: 20%;
-  }
-  .schedule-table thead th.col-opponent {
-    width: 30%;
-  }
-  .schedule-table thead th.col-manager {
-    width: 20%;
-  }
-  .schedule-table tbody tr {
-    border-bottom: 1px solid #f0f0f0;
-    transition: background 0.15s;
-  }
-  .schedule-table tbody tr:hover {
-    background: #fafbfc;
-  }
-  .schedule-table tbody tr.playoff-row {
-    background: #fffbeb;
-  }
-  .schedule-table tbody tr.playoff-row:hover {
-    background: #fef3c7;
-  }
-  .schedule-table td {
-    padding: 14px 16px;
-    vertical-align: middle;
-    color: #374151;
-  }
-  .schedule-table td.col-matchup {
-    padding-left: 28px;
-  }
-
-  /* ── Matchup info ───────────────────────────────────────────────── */
-  .matchup-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .matchup-label {
-    font-weight: 500;
-    color: #374151;
-    font-size: 14px;
-  }
-  .matchup-dates {
-    font-size: 12px;
-    color: #9ca3af;
-  }
-  .playoff-row .matchup-label {
-    color: #92400e;
-    font-weight: 600;
-  }
-
-  /* ── Score ───────────────────────────────────────────────────────── */
-  .score-display {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .win-loss-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #fff;
-    flex-shrink: 0;
-  }
-  .badge-win {
-    background: #22c55e;
-  }
-  .badge-loss {
-    background: #ef4444;
-  }
-  .score-link {
-    color: #3b82f6;
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 14px;
-  }
-  .score-link:hover {
-    text-decoration: underline;
-  }
-  .status-in-progress {
-    color: #f59e0b;
-    font-weight: 500;
-    font-size: 13px;
-  }
-  .status-scheduled {
-    color: #d1d5db;
-    font-size: 16px;
-  }
-
-  /* ── Opponent ───────────────────────────────────────────────────── */
-  .opponent-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .away-indicator {
-    font-size: 13px;
-    color: #9ca3af;
-    font-weight: 500;
-    flex-shrink: 0;
-  }
-  .opponent-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    color: #fff;
-    font-size: 12px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  .opponent-name {
-    color: #3b82f6;
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 14px;
-  }
-  .opponent-name:hover {
-    text-decoration: underline;
-  }
-  .opponent-record {
-    color: #9ca3af;
-    font-size: 13px;
-    flex-shrink: 0;
-  }
-
-  /* ── Empty state ────────────────────────────────────────────────── */
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-  }
-  .empty-icon { font-size: 48px; margin-bottom: 16px; }
-  .empty-state h3 { font-size: 18px; color: #111827; margin: 0 0 8px 0; }
-  .empty-state p { font-size: 14px; color: #6b7280; margin: 0; }
-
-  .loading-container, .error-container {
-    min-height: 50vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #6b7280;
-  }
-
-  /* ── Responsive ─────────────────────────────────────────────────── */
-  @media (max-width: 768px) {
-    .schedule-card-header { padding: 16px 16px 0; }
-    .schedule-controls { padding: 16px 16px 0; }
-    .season-subtitle { padding: 16px 16px 0; }
-    .schedule-table thead th.col-matchup,
-    .schedule-table td.col-matchup { padding-left: 16px; }
-    .schedule-title { font-size: 18px; }
-    .col-manager { display: none; }
-    .schedule-table thead th.col-manager { display: none; }
-  }
+  .app { min-height:100vh; background:#f8fafc; }
+  .league-bar { background:#fff; border-bottom:1px solid #e5e7eb; }
+  .container { max-width:1200px; margin:0 auto; }
+  .league-bar-inner { padding:16px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+  .league-link { display:flex; align-items:center; gap:10px; font-weight:700; color:#111827; text-decoration:none; }
+  .league-dot { width:10px; height:10px; border-radius:50%; background:#2563eb; }
+  .timezone-pill { display:inline-flex; padding:8px 12px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:600; }
+  .page-content { padding:24px 16px 48px; }
+  .layout-stack { display:grid; gap:20px; }
+  .hero-card, .table-card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 12px 36px rgba(15,23,42,0.06); }
+  .hero-card { padding:24px; display:flex; justify-content:space-between; gap:24px; align-items:end; }
+  .eyebrow, .table-eyebrow { margin:0 0 8px; font-size:12px; text-transform:uppercase; color:#2563eb; font-weight:700; letter-spacing:0.08em; }
+  h1, h2 { margin:0; color:#0f172a; }
+  .subcopy { margin:12px 0 0; color:#64748b; max-width:720px; }
+  .toolbar { display:grid; gap:8px; min-width:220px; }
+  .toolbar label { font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; }
+  .toolbar select { border:1px solid #cbd5e1; border-radius:12px; padding:10px 12px; background:#fff; }
+  .table-card-header { padding:20px 20px 0; }
+  .table-scroll { overflow:auto; }
+  .schedule-table { width:100%; border-collapse:collapse; }
+  .schedule-table th, .schedule-table td { padding:14px 20px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  .schedule-table th { font-size:12px; text-transform:uppercase; color:#64748b; background:#f8fafc; }
+  .schedule-table tr:last-child td { border-bottom:none; }
+  .status-chip { display:inline-flex; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; text-transform:capitalize; }
+  .status-chip.past { background:#dcfce7; color:#166534; }
+  .status-chip.current { background:#dbeafe; color:#1d4ed8; }
+  .status-chip.future, .status-chip.pending { background:#f1f5f9; color:#475569; }
+  .loading-container { min-height:40vh; display:grid; place-items:center; color:#64748b; }
 `;

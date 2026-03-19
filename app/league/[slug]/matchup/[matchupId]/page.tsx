@@ -18,17 +18,14 @@ import {
   getLeagueBySlug,
   getLeagueMembers,
   getSessionUser,
-  getTeamRoster,
   supabase,
 } from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+import { getCanonicalMatchupsForWeek } from "@/lib/fantasy-schedule";
 import {
   BENCH_SLOTS,
   STARTER_SLOTS,
-  buildDailyScoreBreakdown,
-  getStarterIdsForDate,
-  getWeeklyMatchupScore,
-  getWeeklyStarterIds,
+  buildDailyScoreBreakdownByIds,
+  getWeeklyMatchupScoreByIds,
   type DateStatsMap,
   type PlayerGameStats,
 } from "@/lib/fantasy-scoring";
@@ -38,6 +35,7 @@ import {
   getScoringWeekRange,
   parseDateStr,
 } from "@/lib/week-utils";
+import { buildWeekRosterStates, fetchRosterHistoryFromDB, mergeRosterStatesByDate } from "@/lib/fantasy-roster-history";
 
 type CachedPlayerStats = {
   id: number;
@@ -89,6 +87,8 @@ export default function MatchupDetailPage() {
   const [awayTeam, setAwayTeam] = useState<TeamBundle | null>(null);
   const [homeRoster, setHomeRoster] = useState<RosterPlayer[]>([]);
   const [awayRoster, setAwayRoster] = useState<RosterPlayer[]>([]);
+  const [homeRosterByDate, setHomeRosterByDate] = useState<Record<string, RosterPlayer[]>>({});
+  const [awayRosterByDate, setAwayRosterByDate] = useState<Record<string, RosterPlayer[]>>({});
   const [homeDailyLineups, setHomeDailyLineups] = useState<DailyLineupMap>({});
   const [awayDailyLineups, setAwayDailyLineups] = useState<DailyLineupMap>({});
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
@@ -123,7 +123,7 @@ export default function MatchupDetailPage() {
         supabase.from("fantasy_teams").select("id, user_id, name, wins, losses").eq("league_id", leagueData.id),
       ]);
 
-      const generatedMatchups = generateMatchupsForWeek(membersData, leagueData.id, week || 1);
+      const generatedMatchups = getCanonicalMatchupsForWeek(membersData, leagueData.id, week || 1, getOfficialLeagueStartDate(leagueData.draft_completed_at));
       const selectedMatchup = generatedMatchups[matchupIndex || 0];
       if (!selectedMatchup || cancelled) {
         setLoading(false);
@@ -136,17 +136,23 @@ export default function MatchupDetailPage() {
       setHomeTeam({ member: selectedMatchup.home, fantasy: homeFantasy });
       setAwayTeam({ member: selectedMatchup.away, fantasy: awayFantasy });
 
-      const [resolvedHomeRoster, resolvedAwayRoster, resolvedHomeLineups, resolvedAwayLineups, statsIndex] = await Promise.all([
-        homeFantasy ? fetchTeamRosterFromDB(leagueData.id, homeFantasy.id).catch(() => getTeamRoster(leagueData.id, homeFantasy.id)) : Promise.resolve([]),
-        awayFantasy ? fetchTeamRosterFromDB(leagueData.id, awayFantasy.id).catch(() => getTeamRoster(leagueData.id, awayFantasy.id)) : Promise.resolve([]),
+      const [resolvedHomeRoster, resolvedAwayRoster, resolvedHomeLineups, resolvedAwayLineups, homeHistory, awayHistory, statsIndex] = await Promise.all([
+        homeFantasy ? fetchTeamRosterFromDB(leagueData.id, homeFantasy.id).catch(() => []) : Promise.resolve([]),
+        awayFantasy ? fetchTeamRosterFromDB(leagueData.id, awayFantasy.id).catch(() => []) : Promise.resolve([]),
         homeFantasy ? fetchTeamLineupFromDB(leagueData.id, homeFantasy.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
         awayFantasy ? fetchTeamLineupFromDB(leagueData.id, awayFantasy.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
+        homeFantasy ? fetchRosterHistoryFromDB(leagueData.id, homeFantasy.id).catch(() => []) : Promise.resolve([]),
+        awayFantasy ? fetchRosterHistoryFromDB(leagueData.id, awayFantasy.id).catch(() => []) : Promise.resolve([]),
         fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
       ]);
 
       if (cancelled) return;
-      setHomeRoster(resolvedHomeRoster);
-      setAwayRoster(resolvedAwayRoster);
+      const homeRostersByDate = weekRange ? buildWeekRosterStates(homeHistory, weekRange.dateStrings) : {};
+      const awayRostersByDate = weekRange ? buildWeekRosterStates(awayHistory, weekRange.dateStrings) : {};
+      setHomeRosterByDate(homeRostersByDate);
+      setAwayRosterByDate(awayRostersByDate);
+      setHomeRoster(weekRange ? mergeRosterStatesByDate(homeRostersByDate) : resolvedHomeRoster);
+      setAwayRoster(weekRange ? mergeRosterStatesByDate(awayRostersByDate) : resolvedAwayRoster);
       setHomeDailyLineups(resolvedHomeLineups);
       setAwayDailyLineups(resolvedAwayLineups);
 
@@ -205,14 +211,16 @@ export default function MatchupDetailPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   }
 
-  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+  function getPlayerDayStatsById(playerId: string, dateStr: string): PlayerGameStats | null {
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
-    if (dayMap[player.id]) return dayMap[player.id];
+    if (dayMap[playerId]) return dayMap[playerId];
 
-    for (const cached of playerStatsCache.values()) {
-      if (cached.name === player.name && dayMap[String(cached.id)]) {
-        return dayMap[String(cached.id)];
+    const cached = playerStatsCache.get(playerId);
+    if (cached) {
+      for (const [candidateId, stats] of Object.entries(dayMap)) {
+        const candidate = playerStatsCache.get(candidateId);
+        if (candidate?.name === cached.name) return stats;
       }
     }
 
@@ -289,7 +297,7 @@ export default function MatchupDetailPage() {
   function getPlayerTotalStats(player: RosterPlayer): PlayerGameStats {
     if (!weekRange) return EMPTY_STATS;
     return weekRange.dateStrings.reduce<PlayerGameStats>((totals, dateStr) => {
-      const stats = getPlayerDayStats(player, dateStr);
+      const stats = getPlayerDayStatsById(player.id, dateStr);
       if (!stats) return totals;
       return {
         min: totals.min + stats.min,
@@ -311,16 +319,16 @@ export default function MatchupDetailPage() {
 
   function getStatsForView(player: RosterPlayer): PlayerGameStats {
     if (viewMode === "total") return getPlayerTotalStats(player);
-    return getPlayerDayStats(player, viewMode) || EMPTY_STATS;
+    return getPlayerDayStatsById(player.id, viewMode) || EMPTY_STATS;
   }
 
   const homeName = homeTeam?.fantasy?.name || (homeTeam ? getMemberName(homeTeam.member) : "");
   const awayName = awayTeam?.fantasy?.name || (awayTeam ? getMemberName(awayTeam.member) : "");
   const rangeLabel = weekRange ? `${weekRange.startDate} → ${weekRange.endDate}` : t("待官方启用", "Pending official start");
-  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const homeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
-  const awayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const homeDailyScores = weekRange ? buildDailyScoreBreakdownByIds(homeDailyLineups, weekRange.dateStrings, getPlayerDayStatsById) : {};
+  const awayDailyScores = weekRange ? buildDailyScoreBreakdownByIds(awayDailyLineups, weekRange.dateStrings, getPlayerDayStatsById) : {};
+  const homeScore = weekRange ? getWeeklyMatchupScoreByIds(homeDailyLineups, weekRange.dateStrings, getPlayerDayStatsById) : 0;
+  const awayScore = weekRange ? getWeeklyMatchupScoreByIds(awayDailyLineups, weekRange.dateStrings, getPlayerDayStatsById) : 0;
   function renderScoreSummary(teamName: string, ownerName: string, record: string, score: number, side: "home" | "away", leading: boolean) {
     return (
       <div className={`summary-team ${leading ? "leading" : ""}`}>
@@ -335,8 +343,8 @@ export default function MatchupDetailPage() {
     );
   }
 
-  function renderLineupTable(teamName: string, roster: RosterPlayer[], dailyLineups: DailyLineupMap) {
-    const rows = getRowsForView(roster, dailyLineups);
+  function renderLineupTable(teamName: string, roster: RosterPlayer[], dailyLineups: DailyLineupMap, rosterByDate: Record<string, RosterPlayer[]>) {
+    const rows = getRowsForView(roster, dailyLineups, rosterByDate);
     return (
       <section className="table-card">
         <div className="table-card-header">
@@ -371,10 +379,9 @@ export default function MatchupDetailPage() {
               ) : (
                 rows.map((row) => {
                   const stats = getStatsForView(row.player);
-                  const starterIds = viewMode === "total"
-                    ? getWeeklyStarterIds(dailyLineups, weekRange?.dateStrings || [])
-                    : getStarterIdsForDate(dailyLineups, viewMode);
-                  const countsForScore = starterIds.has(row.player.id);
+                  const countsForScore = viewMode === "total"
+                    ? Boolean((weekRange?.dateStrings || []).some((dateStr) => STARTER_SLOTS.some((slot) => dailyLineups[dateStr]?.[slot] === row.player.id)))
+                    : STARTER_SLOTS.some((slot) => dailyLineups[viewMode]?.[slot] === row.player.id);
                   return (
                     <tr key={`${row.slot}-${row.player.id}`}>
                       <td>{row.slot === "BE" ? "BE" : row.slot.replace("UTIL", "UTIL ")}</td>
@@ -523,8 +530,8 @@ export default function MatchupDetailPage() {
           </section>
 
           <div className="tables-grid">
-            {renderLineupTable(homeName, homeRoster, homeDailyLineups)}
-            {renderLineupTable(awayName, awayRoster, awayDailyLineups)}
+            {renderLineupTable(homeName, homeRoster, homeDailyLineups, homeRosterByDate)}
+            {renderLineupTable(awayName, awayRoster, awayDailyLineups, awayRosterByDate)}
           </div>
         </div>
       </main>

@@ -24,6 +24,7 @@ import {
   DailyLineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { fetchRosterHistoryFromDB, getHistoricalRosterForDate, type RosterHistoryRecord } from "@/lib/fantasy-roster-history";
 
 // ── Types ──
 
@@ -128,6 +129,8 @@ export default function RosterPage() {
   const [league, setLeague] = useState<League | null>(null);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
+  const [activeRoster, setActiveRoster] = useState<RosterPlayer[]>([]);
+  const [rosterHistory, setRosterHistory] = useState<RosterHistoryRecord[]>([]);
   const [dailyLineups, setDailyLineups] = useState<DailyLineupMap>({});
   const [lineup, setLineup] = useState<LineupMap>({});
   const [loading, setLoading] = useState(true);
@@ -196,12 +199,17 @@ export default function RosterPage() {
         setMyTeam(myT);
         const teamId = myT.id;
         setViewTeamId(teamId);
-        const rosterData = await fetchTeamRosterFromDB(leagueData.id, teamId);
-        setRoster(rosterData);
+        const todayDate = formatDateStr(new Date());
+        const [rosterData, historyData] = await Promise.all([
+          fetchTeamRosterFromDB(leagueData.id, teamId),
+          fetchRosterHistoryFromDB(leagueData.id, teamId),
+        ]);
+        setActiveRoster(rosterData);
+        setRosterHistory(historyData);
+        setRoster(getHistoricalRosterForDate(historyData, rosterData, todayDate));
         const dailyData = await fetchTeamLineupFromDB(leagueData.id, teamId);
         setDailyLineups(dailyData);
         // Extract lineup for selected date (today by default)
-        const todayDate = formatDateStr(new Date());
         const dateLineup = dailyData[todayDate] || {};
         setLineup(dateLineup);
       }
@@ -265,13 +273,23 @@ export default function RosterPage() {
   async function switchViewTeam(teamId: string) {
     if (!league) return;
     setViewTeamId(teamId);
-    const rosterData = await fetchTeamRosterFromDB(league.id, teamId);
-    setRoster(rosterData);
+    const [rosterData, historyData] = await Promise.all([
+      fetchTeamRosterFromDB(league.id, teamId),
+      fetchRosterHistoryFromDB(league.id, teamId),
+    ]);
+    setActiveRoster(rosterData);
+    setRosterHistory(historyData);
+    setRoster(getHistoricalRosterForDate(historyData, rosterData, selectedDate));
     const dailyData = await fetchTeamLineupFromDB(league.id, teamId);
     setDailyLineups(dailyData);
     setLineup(dailyData[selectedDate] || {});
     setSwapSource(null);
   }
+
+
+  useEffect(() => {
+    setRoster(getHistoricalRosterForDate(rosterHistory, activeRoster, selectedDate));
+  }, [selectedDate, rosterHistory, activeRoster]);
 
   // Helper to persist a new lineup for the selected date and keep React state in sync.
   // Calling this ensures that (a) the correct per-date column (lineup_data) is written,

@@ -10,7 +10,6 @@ import {
   DailyLineupMap,
   League,
   LeagueMember,
-  RosterPlayer,
   fetchTeamLineupFromDB,
   getLeagueBySlug,
   getLeagueMembers,
@@ -19,8 +18,8 @@ import {
   saveWeeklyMatchupResult,
   supabase,
 } from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
-import { getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
+import { getCanonicalMatchupsForWeek } from "@/lib/fantasy-schedule";
+import { getWeeklyMatchupScoreByIds, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
@@ -47,8 +46,8 @@ export default function ScoreboardPage() {
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [loading, setLoading] = useState(true);
   const [scoresLoading, setScoresLoading] = useState(false);
-  const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
   const [teamLineups, setTeamLineups] = useState<Record<string, DailyLineupMap>>({});
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
   // Maps user_id → fantasy_team.id (needed for saveWeeklyMatchupResult)
@@ -81,25 +80,20 @@ export default function ScoreboardPage() {
 
       const [membersData, teamsResult, statsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
-        supabase.from("fantasy_teams").select("id, user_id, roster_data").eq("league_id", leagueData.id),
+        supabase.from("fantasy_teams").select("id, user_id, name").eq("league_id", leagueData.id),
         fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
       ]);
 
       if (cancelled) return;
       setMembers(membersData);
 
-      const rosters: Record<string, RosterPlayer[]> = {};
       const lineups: Record<string, DailyLineupMap> = {};
       const idMap: Record<string, string> = {};
       for (const team of teamsResult.data || []) {
-        rosters[team.user_id] = Array.isArray(team.roster_data)
-          ? (team.roster_data as RosterPlayer[])
-          : getTeamRoster(leagueData.id, team.id);
         lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
         idMap[team.user_id] = team.id; // user_id → fantasy_team.id
       }
       if (cancelled) return;
-      setTeamRosters(rosters);
       setTeamLineups(lineups);
       setTeamIdByUserId(idMap);
 
@@ -160,14 +154,16 @@ export default function ScoreboardPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   }
 
-  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+  function getPlayerDayStatsById(playerId: string, dateStr: string): PlayerGameStats | null {
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
-    if (dayMap[player.id]) return dayMap[player.id];
+    if (dayMap[playerId]) return dayMap[playerId];
 
-    for (const cached of playerStatsCache.values()) {
-      if (cached.name === player.name && dayMap[String(cached.id)]) {
-        return dayMap[String(cached.id)];
+    const cached = playerStatsCache.get(playerId);
+    if (cached) {
+      for (const [candidateId, stats] of Object.entries(dayMap)) {
+        const candidate = playerStatsCache.get(candidateId);
+        if (candidate?.name === cached.name) return stats;
       }
     }
 
@@ -176,21 +172,19 @@ export default function ScoreboardPage() {
 
   const matchupCards = useMemo(() => {
     if (!league || !weekRange) return [];
-    return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
-      const homeRoster = teamRosters[matchup.home.user_id] || [];
-      const awayRoster = teamRosters[matchup.away.user_id] || [];
+    return getCanonicalMatchupsForWeek(members, league.id, selectedWeek, leagueStart).map((matchup) => {
       const homeLineups = teamLineups[matchup.home.user_id] || {};
       const awayLineups = teamLineups[matchup.away.user_id] || {};
 
       return {
         ...matchup,
-        homeName: getMemberName(matchup.home),
-        awayName: getMemberName(matchup.away),
-        homeScore: getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats),
-        awayScore: getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats),
+        homeName: teamNames[matchup.home.user_id] || getMemberName(matchup.home),
+        awayName: teamNames[matchup.away.user_id] || getMemberName(matchup.away),
+        homeScore: getWeeklyMatchupScoreByIds(homeLineups, weekRange.dateStrings, getPlayerDayStatsById),
+        awayScore: getWeeklyMatchupScoreByIds(awayLineups, weekRange.dateStrings, getPlayerDayStatsById),
       };
     });
-  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache]);
+  }, [league, members, selectedWeek, teamLineups, teamNames, weekRange, weekDayStats, playerStatsCache, leagueStart]);
 
   // ── Persist weekly results to DB when a past week's scores are fully loaded ──
   useEffect(() => {

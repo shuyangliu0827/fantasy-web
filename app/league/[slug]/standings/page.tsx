@@ -1,19 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
-  getSessionUser,
-  getLeagueBySlug,
-  getLeagueMembers,
+  DailyLineupMap,
   League,
   LeagueMember,
   supabase,
 } from "@/lib/store";
+import { buildStandingsTable } from "@/lib/fantasy-standings";
+import { buildPlayerStatsResolver, computeLeagueWeeklyResults } from "@/lib/fantasy-results";
+import { CANONICAL_TIMEZONE, getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange } from "@/lib/week-utils";
+import type { DateStatsMap } from "@/lib/fantasy-scoring";
+
+const MAX_WEEKS = 20;
+
+type CachedPlayer = { id: number; name: string };
 
 type FantasyTeamRecord = {
   id: string;
@@ -70,8 +76,7 @@ function computeStreak(teamId: string, matchups: MatchupRow[]): string {
 
 export default function StandingsPage() {
   const { t } = useLang();
-  const params = useParams();
-  const slug = params.slug as string;
+  const { slug } = useParams<{ slug: string }>();
 
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
@@ -80,14 +85,24 @@ export default function StandingsPage() {
   const [matchupHistory, setMatchupHistory] = useState<MatchupRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
+  const currentWeek = useMemo(() => getCurrentWeek(leagueStart), [leagueStart]);
+
   useEffect(() => {
     setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+  }, []);
 
-  async function loadData() {
-    const leagueData = await getLeagueBySlug(slug);
-    if (leagueData) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      const leagueData = await getLeagueBySlug(slug);
+      if (!leagueData || cancelled) {
+        setLeague(null);
+        setLoading(false);
+        return;
+      }
       setLeague(leagueData);
       const [membersData, teamsResult, matchupsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
@@ -109,11 +124,49 @@ export default function StandingsPage() {
     setLoading(false);
   }
 
-  const isOwner = user && league && league.commissioner_id === user.id;
+      const [membersData, teamsResult, playersResult] = await Promise.all([
+        getLeagueMembers(leagueData.id),
+        supabase.from("fantasy_teams").select("id, user_id, name").eq("league_id", leagueData.id),
+        fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
+      ]);
+      if (cancelled) return;
+      setMembers(membersData);
 
-  const getMemberName = (member: LeagueMember) => {
-    return member.user?.username || member.user?.name || "Anonymous";
-  };
+      const lineupsByUserId: Record<string, DailyLineupMap> = {};
+      const namesByUserId: Record<string, string> = {};
+      for (const team of teamsResult.data || []) {
+        lineupsByUserId[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
+        namesByUserId[team.user_id] = team.name || "";
+      }
+      if (cancelled) return;
+      setTeamLineups(lineupsByUserId);
+      setTeamNames(namesByUserId);
+
+      if (playersResult.status === "success" && Array.isArray(playersResult.players)) {
+        const map = new Map<string, string>();
+        for (const player of playersResult.players as CachedPlayer[]) {
+          map.set(String(player.id), player.name);
+        }
+        setPlayerNamesById(map);
+      }
+
+      const completedWeeks = Math.max(0, currentWeek - 1);
+      const dates = new Set<string>();
+      for (let week = 1; week <= Math.min(MAX_WEEKS, completedWeeks); week += 1) {
+        const range = getScoringWeekRange(week, getOfficialLeagueStartDate(leagueData.draft_completed_at));
+        for (const dateStr of range?.dateStrings || []) dates.add(dateStr);
+      }
+
+      const statsEntries = await Promise.all(
+        [...dates].sort().map(async (dateStr) => {
+          const response = await fetch(`/api/nba-game-stats?date=${dateStr}`);
+          const payload = await response.json();
+          return [dateStr, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+        }),
+      );
+      if (!cancelled) setWeekDayStats(Object.fromEntries(statsEntries));
+      if (!cancelled) setLoading(false);
+    }
 
   // Build standings from real DB data
   const standingsData: StandingRow[] = (() => {
@@ -171,9 +224,7 @@ export default function StandingsPage() {
     return (
       <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
         <LightHeader activeHref="/league" />
-        <div className="loading-container">
-          <p>{t("加载中...", "Loading...")}</p>
-        </div>
+        <div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div>
         <style jsx>{styles}</style>
       </div>
     );
@@ -183,9 +234,7 @@ export default function StandingsPage() {
     return (
       <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
         <LightHeader activeHref="/league" />
-        <div className="error-container">
-          <p>{t("联赛不存在", "League not found")}</p>
-        </div>
+        <div className="error-container"><p>{t("联赛不存在", "League not found")}</p></div>
         <style jsx>{styles}</style>
       </div>
     );
@@ -194,13 +243,14 @@ export default function StandingsPage() {
   return (
     <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
       <LightHeader activeHref="/league" />
-      
+
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
             <span className="league-icon"></span>
             <span>{league.name}</span>
           </Link>
+          <span className="timezone-pill">{t("官方时区", "Official timezone")}: {CANONICAL_TIMEZONE}</span>
         </div>
       </div>
 
@@ -210,7 +260,7 @@ export default function StandingsPage() {
         <div className="container">
           <div className="page-header">
             <h1>{t("排行榜", "Standings")}</h1>
-            <p>{t("2025 赛季排名", "2025 Season Rankings")}</p>
+            <p>{t("基于已完成官方对阵周的真实战绩、得失分与连胜/负计算。", "Computed from completed official matchup weeks using canonical weekly scores.")}</p>
           </div>
 
           <div className="standings-table-container">
@@ -230,14 +280,12 @@ export default function StandingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {standingsData.map((team) => (
+                {standings.map((team) => (
                   <tr key={team.member.id}>
-                    <td className="rank-col">
-                      <span className={`rank-badge rank-${team.rank}`}>{team.rank}</span>
-                    </td>
+                    <td className="rank-col"><span className={`rank-badge rank-${team.rank}`}>{team.rank}</span></td>
                     <td className="team-col">
                       <div className="team-info">
-                        <span className="team-avatar">{getMemberName(team.member)[0]?.toUpperCase()}</span>
+                        <span className="team-avatar">{team.teamName[0]?.toUpperCase()}</span>
                         <div className="team-details">
                           <span className="team-name">{team.teamRecord.name || getMemberName(team.member) + "'s Team"}</span>
                           <span className="owner-name">{getMemberName(team.member)}</span>
@@ -247,22 +295,16 @@ export default function StandingsPage() {
                     <td className="stat">{team.wins}</td>
                     <td className="stat">{team.losses}</td>
                     <td className="stat">{team.ties}</td>
-                    <td className="stat">{team.pct}</td>
-                    <td className="stat">{team.gb}</td>
-                    <td className="stat">{team.pf}</td>
-                    <td className="stat">{team.pa}</td>
+                    <td className="stat">{formatPct(team.pct)}</td>
+                    <td className="stat">{formatGb(team.gb)}</td>
+                    <td className="stat">{team.pf.toFixed(1)}</td>
+                    <td className="stat">{team.pa.toFixed(1)}</td>
                     <td className="stat">{team.streak}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          {members.length === 0 && (
-            <div className="empty-state">
-              <p>{t("还没有队伍加入联赛", "No teams have joined yet")}</p>
-            </div>
-          )}
         </div>
       </main>
 
@@ -272,194 +314,31 @@ export default function StandingsPage() {
 }
 
 const styles = `
-  .league-header-mini {
-    background: #1e3a8a;
-    border-bottom: none;
-  }
-
-  .league-header-inner {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 16px;
-  }
-
-  .league-title {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #fff;
-    text-decoration: none;
-    font-size: 20px;
-    font-weight: 600;
-  }
-
-  .league-icon {
-    font-size: 28px;
-  }
-
-  .page-content {
-    min-height: calc(100vh - 200px);
-    background: #f9fafb;
-    padding: 24px 16px;
-  }
-
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .page-header {
-    margin-bottom: 24px;
-  }
-
-  .page-header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 8px 0;
-  }
-
-  .page-header p {
-    font-size: 14px;
-    color: #6b7280;
-    margin: 0;
-  }
-
-  .standings-table-container {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    overflow: hidden;
-  }
-
-  .standings-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .standings-table th {
-    padding: 14px 16px;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
-  }
-
-  .standings-table td {
-    padding: 14px 16px;
-    border-bottom: 1px solid #f3f4f6;
-  }
-
-  .standings-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  .standings-table tr:hover {
-    background: #f8fafc;
-  }
-
-  .rank-col {
-    width: 60px;
-  }
-
-  .rank-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    background: #333;
-    color: #111827;
-  }
-
-  .rank-badge.rank-1 {
-    background: #1e3a8a;
-    color: #fff;
-  }
-
-  .rank-badge.rank-2 {
-    background: linear-gradient(135deg, #94a3b8, #64748b);
-    color: #fff;
-  }
-
-  .rank-badge.rank-3 {
-    background: linear-gradient(135deg, #cd7f32, #a0522d);
-    color: #111827;
-  }
-
-  .team-col {
-    min-width: 250px;
-  }
-
-  .team-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .team-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #1e3a8a;
-    color: #fff;
-    font-size: 16px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .team-details {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .team-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #111827;
-  }
-
-  .owner-name {
-    font-size: 12px;
-    color: #6b7280;
-  }
-
-  .stat {
-    font-size: 14px;
-    color: #374151;
-    text-align: center;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: #6b7280;
-  }
-
-  .loading-container, .error-container {
-    min-height: 50vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #6b7280;
-  }
-
-  @media (max-width: 768px) {
-    .standings-table-container {
-      overflow-x: auto;
-    }
-
-    .standings-table {
-      min-width: 700px;
-    }
-  }
+  .league-header-mini { background: #ffffff; border-bottom: 1px solid #e5e7eb; }
+  .league-header-inner { max-width: 1200px; margin: 0 auto; padding: 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .league-title { display:flex; align-items:center; gap:12px; color:#111827; text-decoration:none; font-size:20px; font-weight:600; }
+  .timezone-pill { display:inline-flex; padding:8px 12px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:12px; font-weight:600; }
+  .page-content { min-height: calc(100vh - 200px); background:#f9fafb; padding:24px 16px; }
+  .container { max-width: 1200px; margin:0 auto; }
+  .page-header { margin-bottom:24px; }
+  .page-header h1 { font-size:24px; font-weight:700; color:#111827; margin:0 0 8px 0; }
+  .page-header p { font-size:14px; color:#6b7280; margin:0; }
+  .standings-table-container { background:#fff; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden; box-shadow:0 12px 36px rgba(15,23,42,0.06); }
+  .standings-table { width:100%; border-collapse:collapse; }
+  .standings-table th { padding:14px 16px; text-align:left; font-size:12px; font-weight:600; color:#6b7280; text-transform:uppercase; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+  .standings-table td { padding:14px 16px; border-bottom:1px solid #f3f4f6; }
+  .standings-table tr:last-child td { border-bottom:none; }
+  .standings-table tr:hover { background:#f8fafc; }
+  .rank-col { width:60px; }
+  .rank-badge { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; font-size:13px; font-weight:700; background:#e5e7eb; color:#111827; }
+  .rank-badge.rank-1 { background:#1d4ed8; color:#fff; }
+  .rank-badge.rank-2 { background:#cbd5e1; color:#0f172a; }
+  .rank-badge.rank-3 { background:#fed7aa; color:#9a3412; }
+  .team-col { min-width:250px; }
+  .team-info { display:flex; align-items:center; gap:12px; }
+  .team-avatar { width:40px; height:40px; border-radius:50%; background:#dbeafe; color:#1d4ed8; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .team-details { display:flex; flex-direction:column; gap:2px; }
+  .team-name { font-size:14px; font-weight:600; color:#111827; }
+  .owner-name, .stat { font-size:14px; color:#6b7280; }
+  .loading-container, .error-container { display:grid; place-items:center; min-height:40vh; color:#6b7280; }
 `;
