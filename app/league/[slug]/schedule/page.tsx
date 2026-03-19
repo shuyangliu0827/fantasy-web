@@ -8,6 +8,7 @@ import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
   DailyLineupMap,
+  getSessionUser,
   League,
   LeagueMember,
   supabase,
