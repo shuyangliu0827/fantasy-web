@@ -80,6 +80,9 @@ export default function StandingsPage() {
   const [matchupHistory, setMatchupHistory] = useState<MatchupRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const isOwner = user && league && league.commissioner_id === user.id;
+  const getMemberName = (member: LeagueMember) => member.user?.username || member.user?.name || "Anonymous";
+
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
 
   useEffect(() => {
@@ -232,7 +235,7 @@ export default function StandingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {standings.map((team) => (
+                {standingsData.map((team) => (
                   <tr key={team.member.id}>
                     <td className="rank-col"><span className={`rank-badge rank-${team.rank}`}>{team.rank}</span></td>
                     <td className="team-col">
@@ -247,10 +250,10 @@ export default function StandingsPage() {
                     <td className="stat">{team.wins}</td>
                     <td className="stat">{team.losses}</td>
                     <td className="stat">{team.ties}</td>
-                    <td className="stat">{formatPct(team.pct)}</td>
-                    <td className="stat">{formatGb(team.gb)}</td>
-                    <td className="stat">{team.pf.toFixed(1)}</td>
-                    <td className="stat">{team.pa.toFixed(1)}</td>
+                    <td className="stat">{team.pct}</td>
+                    <td className="stat">{team.gb}</td>
+                    <td className="stat">{team.pf}</td>
+                    <td className="stat">{team.pa}</td>
                     <td className="stat">{team.streak}</td>
                   </tr>
                 ))}

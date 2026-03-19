@@ -11,6 +11,9 @@
    import { PLAYER_POSITIONS } from "./player-positions";
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
+   import { dedupeRosterPlayers, pruneFutureLineupsAfterRemoval } from "./fantasy-roster-history-core";
+   import { syncRosterHistoryWithCurrentRoster } from "./fantasy-roster-history";
+   import { formatDateStr } from "./week-utils";
    
    // ==================== Types ====================
    
