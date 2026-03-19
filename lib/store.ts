@@ -9,6 +9,8 @@
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
    import { PLAYER_POSITIONS } from "./player-positions";
+   import { dedupeRosterPlayers, pruneFutureLineupsAfterRemoval, syncRosterHistoryWithCurrentRoster } from "./fantasy-roster-history";
+   import { formatDateStr } from "./week-utils";
    
    // ==================== Types ====================
    
@@ -1089,13 +1091,14 @@
    }
 
    export async function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
+     const normalizedRoster = dedupeRosterPlayers(roster);
      if (canUseStorage()) {
        const all = getLeagueRosters(leagueId);
-       all[teamId] = roster;
+       all[teamId] = normalizedRoster;
        localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
      }
-     // Return real Promise so callers can await if needed
-     await supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId);
+     await supabase.from("fantasy_teams").update({ roster_data: normalizedRoster }).eq("id", teamId);
+     await syncRosterHistoryWithCurrentRoster(leagueId, teamId, normalizedRoster);
    }
 
    // Lineup: { PG: playerId, SG: playerId, ... }
@@ -1208,7 +1211,7 @@
        .eq("id", teamId)
        .single();
      if (!error && data?.roster_data && Array.isArray(data.roster_data) && data.roster_data.length > 0) {
-       const roster = data.roster_data as RosterPlayer[];
+       const roster = dedupeRosterPlayers(data.roster_data as RosterPlayer[]);
        // Update localStorage cache
        if (canUseStorage()) {
          const all = getLeagueRosters(leagueId);
@@ -1218,7 +1221,7 @@
        return roster;
      }
      // Fallback to localStorage (e.g. data was drafted before migration)
-     const local = getTeamRoster(leagueId, teamId);
+     const local = dedupeRosterPlayers(getTeamRoster(leagueId, teamId));
      if (local.length > 0) {
        // Backfill Supabase with localStorage data
        supabase.from("fantasy_teams").update({ roster_data: local }).eq("id", teamId).then(() => {});
@@ -1283,7 +1286,7 @@
    // the caller (page.tsx handleAutoLineup) is responsible for calling saveLineupForDate
    // with the correct date, so editing tomorrow never overwrites today.
    export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
-     const roster = getTeamRoster(leagueId, teamId);
+     const roster = dedupeRosterPlayers(getTeamRoster(leagueId, teamId));
      const lineup: LineupMap = {};
      const assigned = new Set<string>();
      const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
@@ -1315,7 +1318,7 @@
 
    export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
-     const roster = getTeamRoster(leagueId, teamId);
+     const roster = dedupeRosterPlayers(getTeamRoster(leagueId, teamId));
      const allPlayers = getPlayers();
      const player = allPlayers.find(p => p.id === playerId);
      if (!player) return { ok: false, error: "Player not found" };
@@ -1334,16 +1337,7 @@
        if (dropIdx === -1) return { ok: false, error: "Drop player not found on roster" };
        roster.splice(dropIdx, 1);
        // Remove dropped player from all daily lineups (today and future)
-       const daily = getDailyLineups(leagueId, teamId);
-       const today = new Date();
-       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-       for (const [date, lineup] of Object.entries(daily)) {
-         if (date >= todayStr) {
-           for (const [slot, pid] of Object.entries(lineup)) {
-             if (pid === dropPlayerId) delete lineup[slot];
-           }
-         }
-       }
+       const daily = pruneFutureLineupsAfterRemoval(getDailyLineups(leagueId, teamId), [dropPlayerId], formatDateStr(new Date()));
        if (canUseStorage()) {
          localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
        }
@@ -1383,20 +1377,8 @@
      roster.splice(idx, 1);
      setTeamRoster(leagueId, teamId, roster);
      // Remove from all daily lineups (today and future only, preserve past)
-     const daily = getDailyLineups(leagueId, teamId);
-     const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-     let changed = false;
-     for (const [date, lineup] of Object.entries(daily)) {
-       if (date >= todayStr) {
-         for (const [slot, pid] of Object.entries(lineup)) {
-           if (pid === playerId) {
-             delete lineup[slot];
-             changed = true;
-           }
-         }
-       }
-     }
+     const daily = pruneFutureLineupsAfterRemoval(getDailyLineups(leagueId, teamId), [playerId], formatDateStr(new Date()));
+     let changed = JSON.stringify(daily) !== JSON.stringify(getDailyLineups(leagueId, teamId));
      if (changed) {
        localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
        supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
@@ -1551,22 +1533,14 @@
          const daily = await fetchTeamLineupFromDB(leagueId, tId);
          const roster = tId === trade.fromTeamId ? newFromRoster : newToRoster;
          const rosterIds = new Set(roster.map(p => p.id));
-         let changed = false;
-         for (const [date, lineup] of Object.entries(daily)) {
-           if (date >= todayStr) {
-             for (const [slot, pid] of Object.entries(lineup)) {
-               if (!rosterIds.has(pid)) {
-                 delete lineup[slot];
-                 changed = true;
-               }
-             }
-           }
-         }
+         const removedIds = Object.values(daily).flatMap((lineup) => Object.values(lineup).filter((pid) => !rosterIds.has(pid)));
+         const pruned = pruneFutureLineupsAfterRemoval(daily, removedIds, formatDateStr(new Date()));
+         let changed = JSON.stringify(pruned) !== JSON.stringify(daily);
          if (changed) {
            if (canUseStorage()) {
-             localStorage.setItem(`bp_league_lineup_${leagueId}_${tId}`, JSON.stringify(daily));
+             localStorage.setItem(`bp_league_lineup_${leagueId}_${tId}`, JSON.stringify(pruned));
            }
-           await supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", tId);
+           await supabase.from("fantasy_teams").update({ lineup_data: pruned }).eq("id", tId);
          }
        }
      }
