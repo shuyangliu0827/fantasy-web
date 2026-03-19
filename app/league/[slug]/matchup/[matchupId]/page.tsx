@@ -343,8 +343,8 @@ export default function MatchupDetailPage() {
     );
   }
 
-  function renderLineupTable(teamName: string, roster: RosterPlayer[], dailyLineups: DailyLineupMap, rosterByDate: Record<string, RosterPlayer[]>) {
-    const rows = getRowsForView(roster, dailyLineups, rosterByDate);
+  function renderLineupTable(teamName: string, roster: RosterPlayer[], dailyLineups: DailyLineupMap) {
+    const rows = getRowsForView(roster, dailyLineups);
     return (
       <section className="table-card">
         <div className="table-card-header">
@@ -530,8 +530,8 @@ export default function MatchupDetailPage() {
           </section>
 
           <div className="tables-grid">
-            {renderLineupTable(homeName, homeRoster, homeDailyLineups, homeRosterByDate)}
-            {renderLineupTable(awayName, awayRoster, awayDailyLineups, awayRosterByDate)}
+            {renderLineupTable(homeName, homeRoster, homeDailyLineups)}
+            {renderLineupTable(awayName, awayRoster, awayDailyLineups)}
           </div>
         </div>
       </main>
