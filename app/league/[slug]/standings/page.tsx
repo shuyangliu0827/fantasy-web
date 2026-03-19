@@ -240,7 +240,7 @@ export default function StandingsPage() {
                     <td className="rank-col"><span className={`rank-badge rank-${team.rank}`}>{team.rank}</span></td>
                     <td className="team-col">
                       <div className="team-info">
-                        <span className="team-avatar">{team.teamName[0]?.toUpperCase()}</span>
+                        <span className="team-avatar">{(team.teamRecord.name || getMemberName(team.member))[0]?.toUpperCase()}</span>
                         <div className="team-details">
                           <span className="team-name">{team.teamRecord.name || getMemberName(team.member) + "'s Team"}</span>
                           <span className="owner-name">{getMemberName(team.member)}</span>
