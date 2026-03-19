@@ -45,6 +45,15 @@ type PlayerGameStats = {
 
 type DateStatsMap = Record<string, PlayerGameStats>;
 
+const STARTER_SLOTS = new Set(["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"]);
+
+function getWeekdayScoringDates(dateStrings: string[]): string[] {
+  return dateStrings.filter((dateStr) => {
+    const day = new Date(`${dateStr}T00:00:00`).getDay();
+    return day >= 1 && day <= 5; // Monday–Friday
+  });
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScoreboardPage() {

@@ -283,6 +283,12 @@ export default function RosterPage() {
       const playerAData = roster.find(p => p.id === playerA);
       const playerBData = roster.find(p => p.id === playerB);
 
+      if ((playerAData && isPlayerLockedForLineup(playerAData)) || (playerBData && isPlayerLockedForLineup(playerBData))) {
+        alert(t("已开赛球员不能进行首发/替补交换", "Started-game players cannot be swapped"));
+        setSwapSource(null);
+        return;
+      }
+
       let canSwap = true;
       if (playerA && !isEligibleForSlot(playerAData ? getPlayerPosition(playerAData) : "", slot)) canSwap = false;
       if (playerB && !isEligibleForSlot(playerBData ? getPlayerPosition(playerBData) : "", swapSource)) canSwap = false;
@@ -314,6 +320,15 @@ export default function RosterPage() {
     if (selectedDate !== todayStr) return;
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
+    if (isPlayerLockedForLineup(player)) {
+      alert(t("该球员比赛已开始或已结束，无法排阵", "This player is locked and cannot be assigned"));
+      return;
+    }
+    const slotPlayer = getPlayerInSlot(swapSource);
+    if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
+      alert(t("已开赛球员不能被替换", "Started-game players cannot be replaced"));
+      return;
+    }
     if (!isEligibleForSlot(getPlayerPosition(player), swapSource)) {
       alert(t("位置不符合要求", "Position not eligible"));
       return;
@@ -331,6 +346,10 @@ export default function RosterPage() {
 
   function handleAutoLineup() {
     if (!league || !myTeam) return;
+    if (selectedDate <= todayStr) {
+      alert(t("当天或历史日期不可一键排阵，请仅调整未开赛球员", "Auto lineup is disabled for today/past dates"));
+      return;
+    }
     const newLineup = autoSetLineup(league.id, myTeam.id);
     setLineup(newLineup);
     setDailyLineups(prev => ({ ...prev, [todayStr]: newLineup }));
@@ -502,6 +521,12 @@ export default function RosterPage() {
     // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
     const status = game.status.toLowerCase();
     return status === "final" || (status !== "" && status !== "scheduled" && !status.includes("scheduled"));
+  }
+
+  function isPlayerLockedForLineup(player: RosterPlayer): boolean {
+    if (selectedDate < todayStr) return true;
+    if (selectedDate > todayStr) return false;
+    return hasPlayedGame(player) || !!getGameDayStatsForPlayer(player);
   }
 
   function renderStatCells(player: RosterPlayer | undefined) {
