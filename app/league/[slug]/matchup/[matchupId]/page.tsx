@@ -14,6 +14,7 @@ import {
   RosterPlayer,
   fetchTeamLineupFromDB,
   fetchTeamRosterFromDB,
+  getHistoricalRosterForDate,
   getLeagueBySlug,
   getLeagueMembers,
   getSessionUser,
@@ -226,11 +227,27 @@ export default function MatchupDetailPage() {
     return null;
   }
 
-  function getRowsForView(roster: RosterPlayer[], dailyLineups: DailyLineupMap, rosterByDate: Record<string, RosterPlayer[]>): SlottedPlayerRow[] {
-    const rosterForView = viewMode === "total" ? roster : (rosterByDate[viewMode] || roster);
-    const playerMap = new Map(rosterForView.map((player) => [player.id, player]));
+  function getRowsForView(roster: RosterPlayer[], dailyLineups: DailyLineupMap): SlottedPlayerRow[] {
+    // Build playerMap from the FULL roster array (includes historical entries with releasedAt).
+    // This ensures players who were on the team during this week but have since been released
+    // are still resolvable by id (they appear in the lineup snapshots).
+    const playerMap = new Map(roster.map((player) => [player.id, player]));
     const assigned = new Set<string>();
     const rows: SlottedPlayerRow[] = [];
+
+    // Determine which date to use for filtering the "unassigned" section.
+    // For total view: use the week's start date as the anchor.
+    // For per-date view: use that specific date.
+    const filterDate = viewMode === "total"
+      ? (weekRange?.dateStrings[0] ?? null)
+      : viewMode;
+
+    // Historical roster for the current view: only players who were on the team on filterDate.
+    // This prevents future pickups from appearing in past matchup views.
+    const historicalRoster = filterDate
+      ? getHistoricalRosterForDate(roster, filterDate)
+      : roster;
+    const historicalRosterIds = new Set(historicalRoster.map(p => p.id));
 
     if (viewMode === "total") {
       const assignmentByPlayer = new Map<string, { slot: string; isStarter: boolean; weight: number }>();
@@ -268,7 +285,9 @@ export default function MatchupDetailPage() {
       }
     }
 
-    for (const player of rosterForView) {
+    // Only show unassigned players who were historically on the roster on filterDate.
+    // This prevents future pickups from appearing in historical matchup views.
+    for (const player of historicalRoster) {
       if (!assigned.has(player.id)) rows.push({ slot: "BE", player, isStarter: false });
     }
 

@@ -10,20 +10,39 @@ import {
   DailyLineupMap,
   League,
   LeagueMember,
-  fetchTeamLineupFromDB,
-  getLeagueBySlug,
-  getLeagueMembers,
-  getSessionUser,
   supabase,
 } from "@/lib/store";
-import { getScheduleEntriesForMember } from "@/lib/fantasy-schedule";
-import { buildPlayerStatsResolver, computeLeagueWeeklyResults } from "@/lib/fantasy-results";
-import { CANONICAL_TIMEZONE, getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange, getWeekStatus } from "@/lib/week-utils";
-import type { DateStatsMap } from "@/lib/fantasy-scoring";
+import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+import {
+  getOfficialLeagueStartDate,
+  getWeekDateStrings,
+  getWeekStatus as getCanonicalWeekStatus,
+} from "@/lib/week-utils";
 
-const MAX_WEEKS = 20;
+// ── Schedule constants ────────────────────────────────────────────────────────
+// Season end: NBA Finals Game 7 (approx June 22, 2026) — UTC.
+const NBA_FINALS_END_UTC = new Date("2026-06-22T00:00:00.000Z");
 
-type CachedPlayer = { id: number; name: string };
+/** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
+function formatScheduleDateRange(startStr: string, endStr: string): string {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [, em, ed] = endStr.split("-").map(Number);
+  const startLabel = `${MONTHS[sm - 1]} ${sd}`;
+  if (sm === em) return `${startLabel} - ${ed}`;
+  return `${startLabel} - ${MONTHS[em - 1]} ${ed}`;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+type MatchupEntry = {
+  week: number;
+  label: string;
+  dateRange: string;
+  opponent: LeagueMember;
+  isHome: boolean;
+  isPlayoff: boolean;
+  playoffRound?: number;
+};
 
 export default function SchedulePage() {
   const { t } = useLang();
@@ -33,14 +52,8 @@ export default function SchedulePage() {
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
-  const [teamLineups, setTeamLineups] = useState<Record<string, DailyLineupMap>>({});
-  const [playerNamesById, setPlayerNamesById] = useState<Map<string, string>>(new Map());
-  const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
-  const [loading, setLoading] = useState(true);
-
-  const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
-  const currentWeek = useMemo(() => getCurrentWeek(leagueStart), [leagueStart]);
+  // Real completed-matchup scores fetched from DB
+  const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
 
   useEffect(() => {
     const sessionUser = getSessionUser();
@@ -60,96 +73,103 @@ export default function SchedulePage() {
         return;
       }
       setLeague(leagueData);
-
-      const [membersData, teamsResult, playersResult] = await Promise.all([
+      const [membersData, matchupsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
-        supabase.from("fantasy_teams").select("id, user_id, name").eq("league_id", leagueData.id),
-        fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
+        supabase
+          .from("matchups")
+          .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
+          .eq("league_id", leagueData.id)
+          .eq("status", "completed"),
       ]);
-      if (cancelled) return;
       setMembers(membersData);
-
-      if (!selectedUserId && membersData[0]) setSelectedUserId(membersData[0].user_id);
-
-      const lineupsByUserId: Record<string, DailyLineupMap> = {};
-      const namesByUserId: Record<string, string> = {};
-      for (const team of teamsResult.data || []) {
-        lineupsByUserId[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        namesByUserId[team.user_id] = team.name || "";
+      // Build lookup: "{week}-{home_team_id}-{away_team_id}" → scores
+      if (matchupsResult.data) {
+        const lookup: Record<string, { home_score: number; away_score: number; winner_id: string | null }> = {};
+        for (const row of matchupsResult.data) {
+          const key = `${row.week}-${row.home_team_id}-${row.away_team_id}`;
+          lookup[key] = { home_score: row.home_score, away_score: row.away_score, winner_id: row.winner_id };
+        }
+        setCompletedMatchups(lookup);
       }
-      if (cancelled) return;
-      setTeamLineups(lineupsByUserId);
-      setTeamNames(namesByUserId);
-
-      if (playersResult.status === "success" && Array.isArray(playersResult.players)) {
-        const map = new Map<string, string>();
-        for (const player of playersResult.players as CachedPlayer[]) map.set(String(player.id), player.name);
-        setPlayerNamesById(map);
-      }
-
-      const completedWeeks = Math.max(0, currentWeek - 1);
-      const dates = new Set<string>();
-      for (let week = 1; week <= Math.min(MAX_WEEKS, completedWeeks); week += 1) {
-        const range = getScoringWeekRange(week, getOfficialLeagueStartDate(leagueData.draft_completed_at));
-        for (const dateStr of range?.dateStrings || []) dates.add(dateStr);
-      }
-      const statsEntries = await Promise.all(
-        [...dates].sort().map(async (dateStr) => {
-          const response = await fetch(`/api/nba-game-stats?date=${dateStr}`);
-          const payload = await response.json();
-          return [dateStr, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
-        }),
-      );
-      if (!cancelled) setWeekDayStats(Object.fromEntries(statsEntries));
-      if (!cancelled) setLoading(false);
     }
+    setLoading(false);
+  }
 
-    loadData();
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, currentWeek, selectedUserId]);
+  const isOwner = user && league && league.commissioner_id === user.id;
 
-  const isOwner = Boolean(user && league && league.commissioner_id === user.id);
-  const selectedMember = members.find((member) => member.user_id === selectedUserId) || null;
-  const scheduleEntries = useMemo(
-    () => (league ? getScheduleEntriesForMember(members, league.id, selectedUserId, leagueStart, MAX_WEEKS) : []),
-    [league, members, selectedUserId, leagueStart],
+  const getMemberName = (member: LeagueMember) => {
+    return member.user?.username || member.user?.name || "Anonymous";
+  };
+
+  // ── Canonical league start and total-weeks computation ───────────────────
+  const leagueStart = useMemo(
+    () => getOfficialLeagueStartDate(league?.draft_completed_at ?? null),
+    [league?.draft_completed_at],
   );
 
-  const results = useMemo(() => {
-    if (!league) return [];
-    return computeLeagueWeeklyResults({
-      members,
-      leagueId: league.id,
-      leagueStart,
-      totalWeeks: Math.min(MAX_WEEKS, Math.max(0, currentWeek - 1)),
-      lineupsByUserId: teamLineups,
-      resolvePlayerStats: buildPlayerStatsResolver(weekDayStats, playerNamesById),
-    });
-  }, [league, members, leagueStart, currentWeek, teamLineups, weekDayStats, playerNamesById]);
+  const totalWeeks = useMemo(() => {
+    if (!leagueStart) return 20; // fallback
+    const diffMs = NBA_FINALS_END_UTC.getTime() - leagueStart.getTime();
+    return Math.max(1, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)));
+  }, [leagueStart]);
 
-  const resultsByWeek = new Map(results.map((result) => [result.week, result]));
-  const getMemberName = (member: LeagueMember) => member.user?.username || member.user?.name || "Anonymous";
+  const n = members.length;
+  const playoffRounds = n >= 8 ? 3 : n >= 4 ? 2 : 1;
+  const regularSeasonWeeks = Math.max(1, totalWeeks - playoffRounds);
 
-  const getRecordBeforeWeek = (userId: string, week: number) => {
-    let wins = 0;
-    let losses = 0;
-    let ties = 0;
-    for (const result of results) {
-      if (result.week >= week) continue;
-      if (result.homeTeamId === userId) {
-        if (result.result === "home_win") wins += 1;
-        else if (result.result === "away_win") losses += 1;
-        else ties += 1;
-      } else if (result.awayTeamId === userId) {
-        if (result.result === "away_win") wins += 1;
-        else if (result.result === "home_win") losses += 1;
-        else ties += 1;
+  // ── Generate full round-robin schedule using the SAME canonical function as scoreboard ──
+  const fullSchedule = useMemo(() => {
+    if (!league || members.length < 2 || !leagueStart) return new Map<string, MatchupEntry[]>();
+
+    const scheduleMap = new Map<string, MatchupEntry[]>();
+    for (const m of members) scheduleMap.set(m.user_id, []);
+
+    for (let week = 1; week <= totalWeeks; week++) {
+      const dateStrings = getWeekDateStrings(week, leagueStart);
+      if (dateStrings.length < 7) break;
+      const dateRange = formatScheduleDateRange(dateStrings[0], dateStrings[6]);
+      const isPlayoff = week > regularSeasonWeeks;
+      const playoffRound = isPlayoff ? week - regularSeasonWeeks : undefined;
+      const label = isPlayoff
+        ? t(`季后赛第 ${playoffRound} 轮`, `Playoff Round ${playoffRound}`)
+        : t(`第 ${week} 周`, `Matchup ${week}`);
+
+      // Use the canonical generateMatchupsForWeek — same function scoreboard uses.
+      const weekMatchups = generateMatchupsForWeek(members, league.id, week);
+      for (const matchup of weekMatchups) {
+        const homeEntry: MatchupEntry = {
+          week,
+          label,
+          dateRange: `(${dateRange})`,
+          opponent: matchup.away,
+          isHome: true,
+          isPlayoff,
+          playoffRound,
+        };
+        const awayEntry: MatchupEntry = {
+          week,
+          label,
+          dateRange: `(${dateRange})`,
+          opponent: matchup.home,
+          isHome: false,
+          isPlayoff,
+          playoffRound,
+        };
+        scheduleMap.get(matchup.home.user_id)?.push(homeEntry);
+        scheduleMap.get(matchup.away.user_id)?.push(awayEntry);
       }
     }
-    return `${wins}-${losses}-${ties}`;
-  };
+
+    return scheduleMap;
+  }, [league, members, leagueStart, totalWeeks, regularSeasonWeeks, t]);
+
+  const selectedMember = members.find((m) => m.user_id === selectedUserId);
+  const selectedSchedule = fullSchedule.get(selectedUserId) || [];
+  const selectedName = selectedMember ? getMemberName(selectedMember) : "";
+
+  function getEntryStatus(week: number): "pending" | "past" | "current" | "future" {
+    return getCanonicalWeekStatus(week, leagueStart);
+  }
 
   if (loading) {
     return <div className="app"><LightHeader activeHref="/league" /><div className="loading-container"><p>{t("加载中...", "Loading...")}</p></div><style jsx>{styles}</style></div>;
@@ -229,7 +249,136 @@ export default function SchedulePage() {
                 </tbody>
               </table>
             </div>
-          </section>
+
+            {members.length < 2 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📅</div>
+                <h3>{t("还没有赛程", "No schedule yet")}</h3>
+                <p>
+                  {t(
+                    "联赛需要至少2支队伍才能生成赛程",
+                    "League needs at least 2 teams to generate schedule"
+                  )}
+                </p>
+              </div>
+            ) : (
+              <div className="schedule-table-wrapper">
+                <table className="schedule-table">
+                  <thead>
+                    <tr>
+                      <th className="col-matchup"></th>
+                      <th className="col-score">{t("比分", "SCORE")}</th>
+                      <th className="col-opponent">{t("对手", "OPPONENT")}</th>
+                      <th className="col-manager">{t("队伍经理", "TEAM MANAGER(S)")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedSchedule.map((entry, idx) => {
+                      const status = getEntryStatus(entry.week);
+                      const opponentName = getMemberName(entry.opponent);
+
+                      // Look up real scores from DB (populated by scoreboard page when viewed)
+                      // The matchup row key uses home_team_id / away_team_id from fantasy_teams.
+                      // For schedule display we look up by week and check both team orderings.
+                      const realMatchup = Object.entries(completedMatchups).find(
+                        ([key]) => key.startsWith(`${entry.week}-`)
+                      )?.[1] ?? null;
+                      const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
+                      const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
+                      const isWin = myScore !== null && oppScore !== null && myScore > oppScore;
+                      const isLoss = myScore !== null && oppScore !== null && myScore < oppScore;
+
+                      // Avatar color based on opponent name hash
+                      const avatarSeed = opponentName
+                        .split("")
+                        .reduce((a, c) => a + c.charCodeAt(0), 0);
+                      const avatarColors = [
+                        "#e74c3c", "#3498db", "#2ecc71", "#f39c12",
+                        "#9b59b6", "#1abc9c", "#e67e22", "#34495e",
+                      ];
+                      const avatarColor = avatarColors[avatarSeed % avatarColors.length];
+
+                      return (
+                        <tr
+                          key={idx}
+                          className={`schedule-row ${entry.isPlayoff ? "playoff-row" : ""}`}
+                        >
+                          <td className="col-matchup">
+                            <div className="matchup-info">
+                              <span className="matchup-label">
+                                {entry.label}
+                              </span>
+                              <span className="matchup-dates">{entry.dateRange}</span>
+                            </div>
+                          </td>
+                          <td className="col-score">
+                            {status === "past" && realMatchup ? (
+                              <div className="score-display">
+                                <span
+                                  className={`win-loss-badge ${
+                                    isWin ? "badge-win" : isLoss ? "badge-loss" : "badge-tie"
+                                  }`}
+                                >
+                                  {isWin ? "W" : isLoss ? "L" : "T"}
+                                </span>
+                                <Link
+                                  href={`/league/${slug}/matchup/${entry.week}-0`}
+                                  className="score-link"
+                                >
+                                  {myScore?.toFixed(1)}-{oppScore?.toFixed(1)}
+                                </Link>
+                              </div>
+                            ) : status === "past" ? (
+                              <Link
+                                href={`/league/${slug}/matchup/${entry.week}-0`}
+                                className="score-link-muted"
+                              >
+                                {t("查看", "View")}
+                              </Link>
+                            ) : status === "current" ? (
+                              <span className="status-in-progress">
+                                {t("进行中", "In Progress")}
+                              </span>
+                            ) : (
+                              <span className="status-scheduled">—</span>
+                            )}
+                          </td>
+                          <td className="col-opponent">
+                            <div className="opponent-info">
+                              {!entry.isHome && (
+                                <span className="away-indicator">@</span>
+                              )}
+                              <span
+                                className="opponent-avatar"
+                                style={{ background: avatarColor }}
+                              >
+                                {opponentName[0]?.toUpperCase()}
+                              </span>
+                              <Link
+                                href={`/league/${slug}/schedule`}
+                                className="opponent-name"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setSelectedUserId(entry.opponent.user_id);
+                                  window.scrollTo({ top: 0, behavior: "smooth" });
+                                }}
+                              >
+                                {opponentName}
+                              </Link>
+                              {/* Opponent record shown on standings page */}
+                            </div>
+                          </td>
+                          <td className="col-manager">
+                            {opponentName}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </main>
       <style jsx>{styles}</style>

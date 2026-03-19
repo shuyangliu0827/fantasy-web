@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
@@ -16,6 +16,8 @@ import {
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
   saveLineupForDate,
+  getCurrentRoster,
+  getHistoricalRosterForDate,
   League,
   RosterPlayer,
   LineupMap,
@@ -144,6 +146,18 @@ export default function RosterPage() {
   const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
   const [gamesLoading, setGamesLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+
+  // ── Historical-aware roster view ──
+  // For the current date, show only active players (no releasedAt).
+  // For a past date, show only players who were on the roster on that date.
+  // The raw `roster` array retains all entries (including historical) for lookup.
+  // Note: todayStr is also declared below at the date-navigation section; this
+  // useMemo captures selectedDate and recomputes when it changes.
+  const displayRoster = useMemo(() => {
+    const today = formatDateStr(new Date());
+    if (selectedDate >= today) return getCurrentRoster(roster);
+    return getHistoricalRosterForDate(roster, selectedDate);
+  }, [roster, selectedDate]);
 
   // ── Data fetching ──
 
@@ -295,7 +309,7 @@ export default function RosterPage() {
 
   function getUnassignedPlayers(): RosterPlayer[] {
     const assignedIds = new Set(Object.values(lineup));
-    return roster.filter(p => !assignedIds.has(p.id));
+    return displayRoster.filter(p => !assignedIds.has(p.id));
   }
 
   function handleSlotClick(slot: string) {
@@ -827,7 +841,7 @@ export default function RosterPage() {
           </div>
 
           {/* Read-only indicator for past/future dates */}
-          {isMyTeam && !canEditLineup && roster.length > 0 && (
+          {isMyTeam && !canEditLineup && displayRoster.length > 0 && (
             <div className="readonly-hint">
               {isPastDate
                 ? t("过去的阵容已锁定，不可修改", "Past lineup is locked and cannot be modified")
@@ -835,7 +849,7 @@ export default function RosterPage() {
             </div>
           )}
 
-          {roster.length === 0 ? (
+          {displayRoster.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon"></div>
               <p>{t("该队伍还没有球员。请先完成选秀。", "No players on this team yet. Complete the draft first.")}</p>

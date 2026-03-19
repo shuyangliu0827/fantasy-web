@@ -14,6 +14,8 @@ import {
   getLeagueBySlug,
   getLeagueMembers,
   getSessionUser,
+  getTeamRoster,
+  saveWeeklyMatchupResult,
   supabase,
 } from "@/lib/store";
 import { getCanonicalMatchupsForWeek } from "@/lib/fantasy-schedule";
@@ -48,6 +50,8 @@ export default function ScoreboardPage() {
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
+  // Maps user_id → fantasy_team.id (needed for saveWeeklyMatchupResult)
+  const [teamIdByUserId, setTeamIdByUserId] = useState<Record<string, string>>({});
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
@@ -84,14 +88,14 @@ export default function ScoreboardPage() {
       setMembers(membersData);
 
       const lineups: Record<string, DailyLineupMap> = {};
-      const names: Record<string, string> = {};
+      const idMap: Record<string, string> = {};
       for (const team of teamsResult.data || []) {
         lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        names[team.user_id] = team.name || "";
+        idMap[team.user_id] = team.id; // user_id → fantasy_team.id
       }
       if (cancelled) return;
       setTeamLineups(lineups);
-      setTeamNames(names);
+      setTeamIdByUserId(idMap);
 
       if (statsResult.status === "success" && Array.isArray(statsResult.players)) {
         const statsMap = new Map<string, CachedPlayerStats>();
@@ -181,6 +185,28 @@ export default function ScoreboardPage() {
       };
     });
   }, [league, members, selectedWeek, teamLineups, teamNames, weekRange, weekDayStats, playerStatsCache, leagueStart]);
+
+  // ── Persist weekly results to DB when a past week's scores are fully loaded ──
+  useEffect(() => {
+    if (weekStatus !== "past" || !league || !weekRange || scoresLoading || matchupCards.length === 0) return;
+
+    // Fire-and-forget: persist each matchup's result idempotently
+    for (const card of matchupCards) {
+      const homeTeamId = teamIdByUserId[card.home.user_id];
+      const awayTeamId = teamIdByUserId[card.away.user_id];
+      if (!homeTeamId || !awayTeamId) continue;
+      saveWeeklyMatchupResult({
+        leagueId: league.id,
+        week: selectedWeek,
+        homeTeamId,
+        awayTeamId,
+        homeScore: card.homeScore,
+        awayScore: card.awayScore,
+        startDate: weekRange.startDate,
+        endDate: weekRange.endDate,
+      }).catch(console.error);
+    }
+  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, selectedWeek, teamIdByUserId]);
 
   function getStatusMeta() {
     if (weekStatus === "past") return { label: t("已结束", "Final"), className: "status-final" };
