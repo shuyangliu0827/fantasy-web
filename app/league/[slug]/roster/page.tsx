@@ -377,20 +377,30 @@ export default function RosterPage() {
       alert(t("历史阵容已锁定，不可修改", "Past lineups are locked and cannot be changed"));
       return;
     }
-    const newLineup = autoSetLineup(league.id, myTeam.id);
+
+    // Build locked slots: for today only, preserve any slot whose player's game has started.
+    // Locked players are passed directly into autoSetLineup so they are excluded from
+    // re-assignment — this prevents the same player appearing in two slots.
+    const lockedSlots: LineupMap = {};
     if (isToday) {
-      // Today: preserve slots occupied by locked (game-started) players
-      const merged: LineupMap = { ...newLineup };
       for (const [slot, pid] of Object.entries(lineup)) {
         const player = roster.find(p => p.id === pid);
         if (player && isPlayerLockedForLineup(player)) {
-          merged[slot] = pid;
+          lockedSlots[slot] = pid;
         }
       }
-      persistLineup(merged);
-    } else {
-      persistLineup(newLineup);
     }
+
+    // Build the set of player IDs who have a game on the selected date.
+    // Players with games receive a large priority bonus so they beat equally-ranked
+    // players who sit out that day.
+    const playersWithGames = new Set<string>(
+      displayRoster.filter(p => getGameForPlayer(p) !== null).map(p => p.id)
+    );
+
+    // autoSetLineup is pure and idempotent: same inputs → same output, no duplicates.
+    const newLineup = autoSetLineup(displayRoster, lockedSlots, playersWithGames);
+    persistLineup(newLineup);
   }
 
   // ── Schedule & stats helpers ──

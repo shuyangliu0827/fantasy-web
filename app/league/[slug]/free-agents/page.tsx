@@ -15,6 +15,7 @@ import {
   fetchTeamRosterFromDB,
   addFreeAgent,
   dropPlayer,
+  getCurrentRoster,
   League,
   Player,
   RosterPlayer,
@@ -57,7 +58,8 @@ export default function FreeAgentsPage() {
       const myT = teamsData?.find((t: { user_id: string }) => t.user_id === currentUser.id);
       if (myT) {
         setMyTeam(myT);
-        setMyRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id));
+        // Filter to only active (non-released) players so count and drop UI are correct.
+        setMyRoster(getCurrentRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id)));
       }
     }
 
@@ -92,8 +94,8 @@ export default function FreeAgentsPage() {
       alert(result.error);
       return;
     }
-    // Refresh data
-    setMyRoster(getTeamRoster(league.id, myTeam.id));
+    // Refresh data — filter to active players so count and UI stay correct
+    setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
     setFreeAgents(getUndraftedPlayers(league.id));
     setShowAddModal(null);
     setDropPlayerId(null);
@@ -107,7 +109,7 @@ export default function FreeAgentsPage() {
       alert(result.error);
       return;
     }
-    setMyRoster(getTeamRoster(league.id, myTeam.id));
+    setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
     setFreeAgents(getUndraftedPlayers(league.id));
   }
 

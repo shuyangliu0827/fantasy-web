@@ -11,6 +11,7 @@
    import { PLAYER_POSITIONS } from "./player-positions";
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
+   export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
    
    // ==================== Types ====================
    
@@ -1054,31 +1055,6 @@
    export const LINEUP_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"] as const;
    export type LineupSlot = typeof LINEUP_SLOTS[number];
 
-   // Which positions are eligible for which slot
-   const SLOT_ELIGIBLE: Record<string, string[]> = {
-     PG: ["PG"],
-     SG: ["SG"],
-     SF: ["SF"],
-     PF: ["PF"],
-     C: ["C"],
-     G: ["PG", "SG"],
-     F: ["SF", "PF"],
-     UTIL1: ["PG", "SG", "SF", "PF", "C"],
-     UTIL2: ["PG", "SG", "SF", "PF", "C"],
-     UTIL3: ["PG", "SG", "SF", "PF", "C"],
-     BE1: ["PG", "SG", "SF", "PF", "C"],
-     BE2: ["PG", "SG", "SF", "PF", "C"],
-     BE3: ["PG", "SG", "SF", "PF", "C"],
-   };
-
-   export function isEligibleForSlot(playerPosition: string, slot: string): boolean {
-     const eligible = SLOT_ELIGIBLE[slot];
-     if (!eligible) return false;
-     // Player position can be "PG", "SG/SF", "PF/C" etc.
-     const positions = playerPosition.split("/").map(p => p.trim());
-     return positions.some(p => eligible.includes(p));
-   }
-
    export function getLeagueRosters(leagueId: string): Record<string, RosterPlayer[]> {
      if (!canUseStorage()) return {};
      return safeParse<Record<string, RosterPlayer[]>>(
@@ -1283,26 +1259,7 @@
      return result;
    }
 
-   // Auto-set lineup for today: greedy by PPG
-   // Auto-set lineup by PPG. Returns the computed lineup but does NOT persist it —
-   // the caller (page.tsx handleAutoLineup) is responsible for calling saveLineupForDate
-   // with the correct date, so editing tomorrow never overwrites today.
-   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
-     const roster = getCurrentRoster(getTeamRoster(leagueId, teamId));
-     const lineup: LineupMap = {};
-     const assigned = new Set<string>();
-     const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
-     for (const slot of slotOrder) {
-       const eligible = roster
-         .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
-         .sort((a, b) => b.ppg - a.ppg);
-       if (eligible.length > 0) {
-         lineup[slot] = eligible[0].id;
-         assigned.add(eligible[0].id);
-       }
-     }
-     return lineup;
-   }
+   // autoSetLineup is re-exported from lib/lineup.ts (see top of file)
 
    // ==================== Free Agency (localStorage) ====================
 
