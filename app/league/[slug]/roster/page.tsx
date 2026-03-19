@@ -24,7 +24,7 @@ import {
   DailyLineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
-import { fetchRosterHistoryFromDB, type RosterHistoryRecord } from "@/lib/fantasy-roster-history";
+import { fetchRosterHistoryFromDB, getHistoricalRosterForDate as getHistoricalRosterForDateFromHistory, type RosterHistoryRecord } from "@/lib/fantasy-roster-history";
 
 // ── Types ──
 
@@ -206,7 +206,7 @@ export default function RosterPage() {
         ]);
         setActiveRoster(rosterData);
         setRosterHistory(historyData);
-        setRoster(getHistoricalRosterForDate(historyData, rosterData, todayDate));
+        setRoster(getHistoricalRosterForDateFromHistory(historyData, rosterData, todayDate));
         const dailyData = await fetchTeamLineupFromDB(leagueData.id, teamId);
         setDailyLineups(dailyData);
         // Extract lineup for selected date (today by default)
@@ -279,7 +279,7 @@ export default function RosterPage() {
     ]);
     setActiveRoster(rosterData);
     setRosterHistory(historyData);
-    setRoster(getHistoricalRosterForDate(historyData, rosterData, selectedDate));
+    setRoster(getHistoricalRosterForDateFromHistory(historyData, rosterData, selectedDate));
     const dailyData = await fetchTeamLineupFromDB(league.id, teamId);
     setDailyLineups(dailyData);
     setLineup(dailyData[selectedDate] || {});
@@ -288,7 +288,7 @@ export default function RosterPage() {
 
 
   useEffect(() => {
-    setRoster(getHistoricalRosterForDate(rosterHistory, activeRoster, selectedDate));
+    setRoster(getHistoricalRosterForDateFromHistory(rosterHistory, activeRoster, selectedDate));
   }, [selectedDate, rosterHistory, activeRoster]);
 
   // Helper to persist a new lineup for the selected date and keep React state in sync.
