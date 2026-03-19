@@ -148,11 +148,13 @@ export default function RosterPage() {
   // For the current date, show only active players (no releasedAt).
   // For a past date, show only players who were on the roster on that date.
   // The raw `roster` array retains all entries (including historical) for lookup.
-  const todayStr = formatDateStr(new Date());
+  // Note: todayStr is also declared below at the date-navigation section; this
+  // useMemo captures selectedDate and recomputes when it changes.
   const displayRoster = useMemo(() => {
-    if (selectedDate >= todayStr) return getCurrentRoster(roster);
+    const today = formatDateStr(new Date());
+    if (selectedDate >= today) return getCurrentRoster(roster);
     return getHistoricalRosterForDate(roster, selectedDate);
-  }, [roster, selectedDate, todayStr]);
+  }, [roster, selectedDate]);
 
   // ── Data fetching ──
 
