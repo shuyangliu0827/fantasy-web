@@ -1,0 +1,287 @@
+// =============================================
+// Fantasy Basketball Platform - Database Schema
+// Paste this into https://dbdiagram.io
+// =============================================
+
+// --- NBA DATA CACHE (from Ball Don't Lie API) ---
+
+Table nba_teams {
+  id int [pk, note: 'From API']
+  abbreviation varchar [not null]
+  full_name varchar [not null]
+  city varchar [not null]
+  conference varchar [not null, note: 'East or West']
+  division varchar [not null]
+  updated_at timestamp [default: `now()`]
+}
+
+Table nba_players {
+  id int [pk, note: 'From API']
+  first_name varchar [not null]
+  last_name varchar [not null]
+  team_id int [not null]
+  position varchar [not null, note: 'PG, SG, SF, PF, C']
+  height varchar
+  weight varchar
+  jersey_number varchar
+  college varchar
+  country varchar
+  draft_year int
+  draft_round int
+  draft_number int
+  updated_at timestamp [default: `now()`]
+}
+
+Table nba_player_stats {
+  id uuid [pk]
+  player_id int [not null]
+  season int [not null]
+  games_played int
+  ppg decimal [note: 'Points per game']
+  rpg decimal [note: 'Rebounds per game']
+  apg decimal [note: 'Assists per game']
+  spg decimal [note: 'Steals per game']
+  bpg decimal [note: 'Blocks per game']
+  fg_pct decimal [note: 'Field goal %']
+  ft_pct decimal [note: 'Free throw %']
+  fg3_pct decimal [note: '3-point %']
+  tov decimal [note: 'Turnovers per game']
+  minutes decimal
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (player_id, season) [unique]
+  }
+}
+
+Table nba_contracts {
+  id uuid [pk]
+  player_id int [not null]
+  team_id int [not null]
+  season int [not null]
+  base_salary int [note: 'USD']
+  cap_hit int [note: 'USD']
+  total_cash int [note: 'USD']
+  updated_at timestamp [default: `now()`]
+
+  indexes {
+    (player_id, season) [unique]
+  }
+}
+
+// --- USERS & AUTH ---
+
+Table users {
+  id uuid [pk]
+  email varchar [unique, not null]
+  username varchar [unique, not null]
+  name varchar [not null]
+  avatar_url varchar
+  created_at timestamp [default: `now()`]
+}
+
+// --- FANTASY LEAGUE CORE ---
+
+Table leagues {
+  id uuid [pk]
+  name varchar [not null]
+  slug varchar [unique, not null]
+  commissioner_id uuid [not null]
+  season varchar [not null]
+  status varchar [not null, note: 'draft_pending | drafting | active | completed']
+  max_teams int [not null, default: 10]
+  draft_type varchar [not null, note: 'snake | linear | auction']
+  draft_date timestamp
+  salary_cap int [note: 'Nullable, for auction/cap leagues']
+  scoring_weights json [not null, note: '{pts:1, reb:1, ast:1, stl:2, blk:2, fg3:1, tov:-1}']
+  roster_config json [not null, note: '{pg:1, sg:1, sf:1, pf:1, c:1, g:1, f:1, util:3, bench:3, ir:1}']
+  trade_deadline date
+  waiver_type varchar [note: 'rolling | faab']
+  playoff_teams int
+  playoff_start_week int
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [default: `now()`]
+}
+
+Table league_members {
+  id uuid [pk]
+  league_id uuid [not null]
+  user_id uuid [not null]
+  role varchar [not null, note: 'owner | member']
+  joined_at timestamp [default: `now()`]
+
+  indexes {
+    (league_id, user_id) [unique]
+  }
+}
+
+// --- FANTASY TEAMS & ROSTERS ---
+
+Table fantasy_teams {
+  id uuid [pk]
+  league_id uuid [not null]
+  user_id uuid [not null]
+  name varchar [not null]
+  draft_position int
+  salary_used int [default: 0, note: 'For salary cap leagues']
+  wins int [default: 0]
+  losses int [default: 0]
+  ties int [default: 0]
+  points_for decimal [default: 0]
+  points_against decimal [default: 0]
+  created_at timestamp [default: `now()`]
+
+  indexes {
+    (league_id, user_id) [unique]
+  }
+}
+
+Table roster_players {
+  id uuid [pk]
+  team_id uuid [not null]
+  player_id int [not null]
+  slot varchar [not null, note: 'PG|SG|SF|PF|C|G|F|UTIL|BENCH|IR']
+  acquired_via varchar [not null, note: 'draft | trade | waiver | free_agent']
+  acquired_at timestamp [default: `now()`]
+  is_active boolean [default: true]
+
+  indexes {
+    (team_id, player_id) [unique]
+  }
+}
+
+// --- DRAFT SYSTEM ---
+
+Table drafts {
+  id uuid [pk]
+  league_id uuid [unique, not null, note: 'One draft per league']
+  type varchar [not null, note: 'snake | linear | auction']
+  seconds_per_pick int [default: 90]
+  total_rounds int [not null]
+  current_round int [default: 1]
+  current_pick int [default: 1]
+  is_paused boolean [default: false]
+  started_at timestamp
+  completed_at timestamp
+}
+
+Table draft_picks {
+  id uuid [pk]
+  draft_id uuid [not null]
+  team_id uuid [not null]
+  player_id int [not null]
+  round int [not null]
+  pick_number int [not null]
+  overall_pick int [not null]
+  salary int [note: 'Nullable, for auction drafts']
+  picked_at timestamp [default: `now()`]
+}
+
+// --- SEASON & MATCHUPS ---
+
+Table matchups {
+  id uuid [pk]
+  league_id uuid [not null]
+  week int [not null]
+  home_team_id uuid [not null]
+  away_team_id uuid [not null]
+  home_score decimal
+  away_score decimal
+  winner_id uuid
+  status varchar [not null, note: 'scheduled | active | completed']
+  start_date date [not null]
+  end_date date [not null]
+}
+
+// --- TRANSACTIONS ---
+
+Table transactions {
+  id uuid [pk]
+  league_id uuid [not null]
+  type varchar [not null, note: 'trade | waiver | free_agent | drop']
+  status varchar [not null, note: 'pending | approved | rejected | completed']
+  initiated_by uuid [not null]
+  processed_at timestamp
+  created_at timestamp [default: `now()`]
+}
+
+Table transaction_players {
+  id uuid [pk]
+  transaction_id uuid [not null]
+  player_id int [not null]
+  from_team_id uuid
+  to_team_id uuid
+  salary int [note: 'Cap implications']
+}
+
+// --- COMMUNITY ---
+
+Table insights {
+  id uuid [pk]
+  author_id uuid [not null]
+  league_id uuid
+  title varchar [not null]
+  body text [not null]
+  cover_url varchar
+  images text[]
+  tags text[]
+  heat int [default: 0, note: 'Like count']
+  created_at timestamp [default: `now()`]
+}
+
+Table comments {
+  id uuid [pk]
+  insight_id uuid [not null]
+  author_id uuid [not null]
+  body text [not null]
+  created_at timestamp [default: `now()`]
+}
+
+// =============================================
+// RELATIONSHIPS (named Ref blocks)
+// =============================================
+
+// NBA Data
+Ref plays_for: nba_players.team_id > nba_teams.id
+Ref has_stats: nba_player_stats.player_id > nba_players.id
+Ref has_contract: nba_contracts.player_id > nba_players.id
+Ref contract_with: nba_contracts.team_id > nba_teams.id
+
+// Leagues
+Ref manages: leagues.commissioner_id > users.id
+Ref member_of_league: league_members.league_id > leagues.id
+Ref user_joins: league_members.user_id > users.id
+
+// Fantasy Teams
+Ref belongs_to_league: fantasy_teams.league_id > leagues.id
+Ref owned_by: fantasy_teams.user_id > users.id
+
+// Rosters
+Ref on_roster: roster_players.team_id > fantasy_teams.id
+Ref rostered_player: roster_players.player_id > nba_players.id
+
+// Drafts
+Ref draft_for: drafts.league_id - leagues.id
+Ref picked_in: draft_picks.draft_id > drafts.id
+Ref picked_by: draft_picks.team_id > fantasy_teams.id
+Ref player_drafted: draft_picks.player_id > nba_players.id
+
+// Matchups
+Ref matchup_in: matchups.league_id > leagues.id
+Ref home_plays: matchups.home_team_id > fantasy_teams.id
+Ref away_plays: matchups.away_team_id > fantasy_teams.id
+Ref wins_matchup: matchups.winner_id > fantasy_teams.id
+
+// Transactions
+Ref transaction_in: transactions.league_id > leagues.id
+Ref initiated_by: transactions.initiated_by > users.id
+Ref part_of: transaction_players.transaction_id > transactions.id
+Ref player_moved: transaction_players.player_id > nba_players.id
+Ref traded_from: transaction_players.from_team_id > fantasy_teams.id
+Ref traded_to: transaction_players.to_team_id > fantasy_teams.id
+
+// Community
+Ref writes_post: insights.author_id > users.id
+Ref posted_in: insights.league_id > leagues.id
+Ref comment_on: comments.insight_id > insights.id
+Ref writes_comment: comments.author_id > users.id
