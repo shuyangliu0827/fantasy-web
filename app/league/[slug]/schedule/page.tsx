@@ -92,8 +92,9 @@ export default function SchedulePage() {
         setCompletedMatchups(lookup);
       }
     }
-    setLoading(false);
-  }
+    loadData();
+    return () => { cancelled = true; };
+  }, [slug]);
 
   const isOwner = user && league && league.commissioner_id === user.id;
 

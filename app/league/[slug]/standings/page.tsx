@@ -7,19 +7,14 @@ import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
-  DailyLineupMap,
+  getSessionUser,
+  getLeagueBySlug,
+  getLeagueMembers,
   League,
   LeagueMember,
   supabase,
 } from "@/lib/store";
-import { buildStandingsTable } from "@/lib/fantasy-standings";
-import { buildPlayerStatsResolver, computeLeagueWeeklyResults } from "@/lib/fantasy-results";
-import { CANONICAL_TIMEZONE, getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange } from "@/lib/week-utils";
-import type { DateStatsMap } from "@/lib/fantasy-scoring";
-
-const MAX_WEEKS = 20;
-
-type CachedPlayer = { id: number; name: string };
+import { CANONICAL_TIMEZONE, getOfficialLeagueStartDate } from "@/lib/week-utils";
 
 type FantasyTeamRecord = {
   id: string;
@@ -86,7 +81,6 @@ export default function StandingsPage() {
   const [loading, setLoading] = useState(true);
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
-  const currentWeek = useMemo(() => getCurrentWeek(leagueStart), [leagueStart]);
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -120,53 +114,11 @@ export default function StandingsPage() {
       setMembers(membersData);
       setTeamRecords((teamsResult.data || []) as FantasyTeamRecord[]);
       setMatchupHistory((matchupsResult.data || []) as MatchupRow[]);
+      setLoading(false);
     }
-    setLoading(false);
-  }
-
-      const [membersData, teamsResult, playersResult] = await Promise.all([
-        getLeagueMembers(leagueData.id),
-        supabase.from("fantasy_teams").select("id, user_id, name").eq("league_id", leagueData.id),
-        fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
-      ]);
-      if (cancelled) return;
-      setMembers(membersData);
-
-      const lineupsByUserId: Record<string, DailyLineupMap> = {};
-      const namesByUserId: Record<string, string> = {};
-      for (const team of teamsResult.data || []) {
-        lineupsByUserId[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        namesByUserId[team.user_id] = team.name || "";
-      }
-      if (cancelled) return;
-      setTeamLineups(lineupsByUserId);
-      setTeamNames(namesByUserId);
-
-      if (playersResult.status === "success" && Array.isArray(playersResult.players)) {
-        const map = new Map<string, string>();
-        for (const player of playersResult.players as CachedPlayer[]) {
-          map.set(String(player.id), player.name);
-        }
-        setPlayerNamesById(map);
-      }
-
-      const completedWeeks = Math.max(0, currentWeek - 1);
-      const dates = new Set<string>();
-      for (let week = 1; week <= Math.min(MAX_WEEKS, completedWeeks); week += 1) {
-        const range = getScoringWeekRange(week, getOfficialLeagueStartDate(leagueData.draft_completed_at));
-        for (const dateStr of range?.dateStrings || []) dates.add(dateStr);
-      }
-
-      const statsEntries = await Promise.all(
-        [...dates].sort().map(async (dateStr) => {
-          const response = await fetch(`/api/nba-game-stats?date=${dateStr}`);
-          const payload = await response.json();
-          return [dateStr, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
-        }),
-      );
-      if (!cancelled) setWeekDayStats(Object.fromEntries(statsEntries));
-      if (!cancelled) setLoading(false);
-    }
+    loadData();
+    return () => { cancelled = true; };
+  }, [slug]);
 
   // Build standings from real DB data
   const standingsData: StandingRow[] = (() => {
