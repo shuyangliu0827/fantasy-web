@@ -194,7 +194,13 @@
    // ==================== Auth (Supabase + localStorage for password) ====================
    
    export async function signup(name: string, email: string, password: string) {
-     const username = email.split("@")[0];
+     // Derive username from the user's chosen name (URL-safe handle).
+     // Fallback to email prefix only if name produces no URL-safe characters (e.g. pure Chinese).
+     const rawHandle = name.trim().toLowerCase()
+       .replace(/\s+/g, "_")
+       .replace(/[^a-z0-9_-]/g, "")
+       .slice(0, 30);
+     const username = rawHandle || email.split("@")[0];
 
      // Check if email already exists in users table
      const { data: existing } = await supabase
