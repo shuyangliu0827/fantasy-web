@@ -46,6 +46,19 @@ export function getStarterIdsForDate(dailyLineups: DailyLineupMap | undefined, d
   return starterIds;
 }
 
+
+export function getWeeklyStarterIds(dailyLineups: DailyLineupMap | undefined, dateStrings: string[]): Set<string> {
+  const starterIds = new Set<string>();
+
+  for (const dateStr of dateStrings) {
+    for (const playerId of getStarterIdsForDate(dailyLineups, dateStr)) {
+      starterIds.add(playerId);
+    }
+  }
+
+  return starterIds;
+}
+
 export function getDailyStarterScore(
   roster: RosterPlayer[],
   dailyLineups: DailyLineupMap | undefined,

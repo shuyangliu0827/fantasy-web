@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDailyScoreBreakdown, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
+import { buildDailyScoreBreakdown, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
 import { getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange, getWeekStatus } from "../lib/week-utils.ts";
 import type { DailyLineupMap, RosterPlayer } from "../lib/store";
 
@@ -85,4 +85,9 @@ test("timezone edge cases around midnight stay on canonical UTC dates", () => {
   assert.equal(start?.toISOString(), "2026-03-23T00:00:00.000Z");
   assert.equal(getWeekStatus(1, start!, "2026-03-22T23:59:59Z"), "pending");
   assert.equal(getWeekStatus(1, start!, "2026-03-23T00:00:00Z"), "current");
+});
+
+
+test("weekly starter labeling uses all saved daily lineups in total view", () => {
+  assert.deepEqual([...getWeeklyStarterIds(dailyLineups, ["2026-03-23", "2026-03-24", "2026-03-25"])].sort(), ["p1", "p2"]);
 });

@@ -27,6 +27,7 @@ import {
   buildDailyScoreBreakdown,
   getStarterIdsForDate,
   getWeeklyMatchupScore,
+  getWeeklyStarterIds,
   type DateStatsMap,
   type PlayerGameStats,
 } from "@/lib/fantasy-scoring";
@@ -137,8 +138,8 @@ export default function MatchupDetailPage() {
       const [resolvedHomeRoster, resolvedAwayRoster, resolvedHomeLineups, resolvedAwayLineups, statsIndex] = await Promise.all([
         homeFantasy ? fetchTeamRosterFromDB(leagueData.id, homeFantasy.id).catch(() => getTeamRoster(leagueData.id, homeFantasy.id)) : Promise.resolve([]),
         awayFantasy ? fetchTeamRosterFromDB(leagueData.id, awayFantasy.id).catch(() => getTeamRoster(leagueData.id, awayFantasy.id)) : Promise.resolve([]),
-        homeFantasy ? fetchTeamLineupFromDB(leagueData.id, homeFantasy.id) : Promise.resolve({}),
-        awayFantasy ? fetchTeamLineupFromDB(leagueData.id, awayFantasy.id) : Promise.resolve({}),
+        homeFantasy ? fetchTeamLineupFromDB(leagueData.id, homeFantasy.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
+        awayFantasy ? fetchTeamLineupFromDB(leagueData.id, awayFantasy.id).catch(() => ({} as DailyLineupMap)) : Promise.resolve({} as DailyLineupMap),
         fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
       ]);
 
@@ -218,20 +219,44 @@ export default function MatchupDetailPage() {
   }
 
   function getRowsForView(roster: RosterPlayer[], dailyLineups: DailyLineupMap): SlottedPlayerRow[] {
-    const lineupForView: LineupMap = viewMode === "total"
-      ? (weekRange?.dateStrings.find((date) => Object.keys(dailyLineups[date] || {}).length > 0) ? dailyLineups[weekRange!.dateStrings.find((date) => Object.keys(dailyLineups[date] || {}).length > 0)!] : {})
-      : (dailyLineups[viewMode] || {});
-
     const playerMap = new Map(roster.map((player) => [player.id, player]));
     const assigned = new Set<string>();
     const rows: SlottedPlayerRow[] = [];
 
-    for (const slot of SLOT_RENDER_ORDER) {
-      const playerId = lineupForView[slot];
-      const player = playerId ? playerMap.get(playerId) : undefined;
-      if (!player) continue;
-      assigned.add(player.id);
-      rows.push({ slot, player, isStarter: STARTER_SLOTS.includes(slot as typeof STARTER_SLOTS[number]) });
+    if (viewMode === "total") {
+      const assignmentByPlayer = new Map<string, { slot: string; isStarter: boolean; weight: number }>();
+
+      for (const [index, dateStr] of (weekRange?.dateStrings || []).entries()) {
+        const lineup = dailyLineups[dateStr] || {};
+        for (const [slot, playerId] of Object.entries(lineup)) {
+          if (!playerId) continue;
+          const isStarter = STARTER_SLOTS.includes(slot as typeof STARTER_SLOTS[number]);
+          const candidateWeight = index * 10 + (isStarter ? 1 : 0);
+          const existing = assignmentByPlayer.get(playerId);
+          if (!existing || candidateWeight >= existing.weight) {
+            assignmentByPlayer.set(playerId, { slot, isStarter, weight: candidateWeight });
+          }
+        }
+      }
+
+      for (const slot of SLOT_RENDER_ORDER) {
+        for (const [playerId, assignment] of assignmentByPlayer.entries()) {
+          if (assignment.slot !== slot) continue;
+          const player = playerMap.get(playerId);
+          if (!player || assigned.has(playerId)) continue;
+          assigned.add(playerId);
+          rows.push({ slot: assignment.slot, player, isStarter: assignment.isStarter });
+        }
+      }
+    } else {
+      const lineupForView: LineupMap = dailyLineups[viewMode] || {};
+      for (const slot of SLOT_RENDER_ORDER) {
+        const playerId = lineupForView[slot];
+        const player = playerId ? playerMap.get(playerId) : undefined;
+        if (!player) continue;
+        assigned.add(player.id);
+        rows.push({ slot, player, isStarter: STARTER_SLOTS.includes(slot as typeof STARTER_SLOTS[number]) });
+      }
     }
 
     for (const player of roster) {
@@ -327,9 +352,9 @@ export default function MatchupDetailPage() {
                 rows.map((row) => {
                   const stats = getStatsForView(row.player);
                   const starterIds = viewMode === "total"
-                    ? new Set(weekRange?.dateStrings.flatMap((dateStr) => [...getStarterIdsForDate(dailyLineups, dateStr)]) || [])
+                    ? getWeeklyStarterIds(dailyLineups, weekRange?.dateStrings || [])
                     : getStarterIdsForDate(dailyLineups, viewMode);
-                  const countsForScore = starterIds.has(row.player.id) && row.isStarter;
+                  const countsForScore = starterIds.has(row.player.id);
                   return (
                     <tr key={`${row.slot}-${row.player.id}`}>
                       <td>{row.slot === "BE" ? "BE" : row.slot.replace("UTIL", "UTIL ")}</td>
