@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/nba-games/route.ts
 // Fetches NBA games for a date range from Ball Don't Lie API.
 // Returns games indexed by team abbreviation and date for quick roster lookups.

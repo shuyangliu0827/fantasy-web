@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/nba-stats/route.ts
 // Reads persisted player stats from Supabase player_stats_cache.
 // Falls back to fetching full-season averages from BDL API (and persisting) if the table is empty.
@@ -22,8 +23,8 @@ const FANTASY_WEIGHTS = {
 
 // Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 );
 
 // ──────────────────────────────────────────────

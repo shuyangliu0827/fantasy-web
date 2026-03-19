@@ -14,7 +14,6 @@ import {
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
   fetchLineupHistoryFromDB,
-  getLineupForWeek,
   supabase,
   League,
   LeagueMember,
@@ -232,9 +231,8 @@ export default function MatchupDetailPage() {
           ]);
           setHomeRoster(hRoster);
           setAwayRoster(aRoster);
-          // Use the per-week snapshot if available, otherwise fall back to current lineup
-          setHomeLineup(getLineupForWeek(hHistory, hLineupCurrent, week));
-          setAwayLineup(getLineupForWeek(aHistory, aLineupCurrent, week));
+          setHomeDailyLineups(hLineupCurrent as DailyLineupMap);
+          setAwayDailyLineups(aLineupCurrent as DailyLineupMap);
         }
       }
 

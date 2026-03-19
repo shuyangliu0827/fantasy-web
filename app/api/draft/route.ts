@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/draft/route.ts
 // 选秀系统API
 
