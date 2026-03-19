@@ -1100,12 +1100,25 @@
    // Per-date lineup history: { "YYYY-MM-DD": LineupMap }
    export type LineupHistory = Record<string, LineupMap>;
 
-   export function getTeamLineup(leagueId: string, teamId: string): LineupMap {
+   function isOldFlatLineup(data: any): boolean {
+     if (!data || typeof data !== 'object') return false;
+     const keys = Object.keys(data);
+     if (keys.length === 0) return false;
+     return !keys[0].match(/^\d{4}-\d{2}-\d{2}$/);
+   }
+
+   function migrateFlatLineup(flat: LineupMap): DailyLineupMap {
+     const today = new Date();
+     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     return { [todayStr]: flat };
+   }
+
+   export function getDailyLineups(leagueId: string, teamId: string): DailyLineupMap {
      if (!canUseStorage()) return {};
      const raw = safeParse<any>(
        localStorage.getItem(`bp_league_lineup_${leagueId}_${teamId}`), {}
      );
-     if (isOldFlatLineup(raw)) return migrateFlatLineup(raw);
+     if (isOldFlatLineup(raw)) return migrateFlatLineup(raw as LineupMap);
      return raw as DailyLineupMap;
    }
 

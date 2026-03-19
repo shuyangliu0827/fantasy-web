@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/nba-game-stats/route.ts
 // Fetches individual player box score stats for a specific date from Ball Don't Lie API.
 // Used to show actual game-day stats instead of season averages on the roster page.
