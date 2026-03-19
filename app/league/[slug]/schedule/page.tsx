@@ -194,7 +194,7 @@ export default function SchedulePage() {
           <span className="timezone-pill">{t("官方时区", "Official timezone")}: {CANONICAL_TIMEZONE}</span>
         </div>
       </div>
-      <LeagueNav slug={slug} isOwner={isOwner} leagueId={league.id} />
+      <LeagueNav slug={slug} isOwner={!!isOwner} leagueId={league.id} />
 
       <main className="page-content">
         <div className="container">
