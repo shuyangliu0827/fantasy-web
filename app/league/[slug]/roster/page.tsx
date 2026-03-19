@@ -10,9 +10,8 @@ import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getTeamLineup,
   setLineupForDate,
-  autoSetLineupWeek,
+  autoSetLineup,
   isEligibleForSlot,
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
@@ -332,25 +331,9 @@ export default function RosterPage() {
 
   function handleAutoLineup() {
     if (!league || !myTeam) return;
-    // Collect injured/DTD player IDs from stats cache
-    const injuredIds = new Set<string>();
-    for (const player of roster) {
-      const cached = getStatsForPlayer(player);
-      if (cached?.injury) {
-        // Any injury status (day-to-day, out, etc.) → bench
-        injuredIds.add(player.id);
-      }
-    }
-    // Build position overrides map from PLAYER_POSITIONS
-    const posOverrides: Record<string, string> = {};
-    for (const player of roster) {
-      const pos = PLAYER_POSITIONS[player.name];
-      if (pos) posOverrides[player.name] = pos;
-    }
-    const newDaily = autoSetLineupWeek(league.id, myTeam.id, injuredIds, posOverrides);
-    setDailyLineups(newDaily);
-    // Show the lineup for the currently selected date
-    setLineup(newDaily[selectedDate] || {});
+    const newLineup = autoSetLineup(league.id, myTeam.id);
+    setLineup(newLineup);
+    setDailyLineups(prev => ({ ...prev, [todayStr]: newLineup }));
   }
 
   // ── Schedule & stats helpers ──

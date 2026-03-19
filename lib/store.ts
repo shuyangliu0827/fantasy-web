@@ -1228,79 +1228,21 @@
      return result;
    }
 
-   // Build a single-day lineup: injured/DTD players go to bench, best PPG starters
-   export function buildAutoLineup(
-     roster: RosterPlayer[],
-     injuredPlayerIds: Set<string>,
-     positionOverrides?: Record<string, string>,
-   ): LineupMap {
+   // Auto-set lineup for today: greedy by PPG
+   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
+     const roster = getTeamRoster(leagueId, teamId);
      const lineup: LineupMap = {};
      const assigned = new Set<string>();
      const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
-
-     // First pass: assign healthy players to starter slots, injured to bench
-     const healthy = roster.filter(p => !injuredPlayerIds.has(p.id));
-     const injured = roster.filter(p => injuredPlayerIds.has(p.id));
-
-     // Fill starter slots with healthy players
-     const starterSlots = slotOrder.filter(s => !s.startsWith("BE"));
-     for (const slot of starterSlots) {
-       const eligible = healthy
-         .filter(p => !assigned.has(p.id) && isEligibleForSlot(positionOverrides?.[p.name] || p.position, slot))
+     for (const slot of slotOrder) {
+       const eligible = roster
+         .filter(p => !assigned.has(p.id) && isEligibleForSlot(p.position, slot))
          .sort((a, b) => b.ppg - a.ppg);
        if (eligible.length > 0) {
          lineup[slot] = eligible[0].id;
          assigned.add(eligible[0].id);
        }
      }
-
-     // Fill bench slots with remaining healthy + injured players
-     const benchSlots = slotOrder.filter(s => s.startsWith("BE"));
-     const remaining = [...healthy.filter(p => !assigned.has(p.id)), ...injured.filter(p => !assigned.has(p.id))];
-     for (const slot of benchSlots) {
-       const eligible = remaining
-         .filter(p => !assigned.has(p.id) && isEligibleForSlot(positionOverrides?.[p.name] || p.position, slot))
-         .sort((a, b) => b.ppg - a.ppg);
-       if (eligible.length > 0) {
-         lineup[slot] = eligible[0].id;
-         assigned.add(eligible[0].id);
-       }
-     }
-
-     return lineup;
-   }
-
-   // Auto-set lineup for today + next 6 days (7 days total).
-   // injuredPlayerIds: set of player IDs that are injured/DTD (should go to bench).
-   // Does NOT change past dates or dates beyond the 7-day window.
-   export function autoSetLineupWeek(
-     leagueId: string,
-     teamId: string,
-     injuredPlayerIds: Set<string>,
-     positionOverrides?: Record<string, string>,
-   ): DailyLineupMap {
-     const roster = getTeamRoster(leagueId, teamId);
-     const daily = getDailyLineups(leagueId, teamId);
-     const today = new Date();
-
-     for (let i = 0; i < 7; i++) {
-       const d = new Date(today);
-       d.setDate(today.getDate() + i);
-       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-       daily[dateStr] = buildAutoLineup(roster, injuredPlayerIds, positionOverrides);
-     }
-
-     if (canUseStorage()) {
-       localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
-     }
-     supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
-     return daily;
-   }
-
-   // Legacy compat: auto-set for today only
-   export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
-     const roster = getTeamRoster(leagueId, teamId);
-     const lineup = buildAutoLineup(roster, new Set());
      setTeamLineup(leagueId, teamId, lineup);
      return lineup;
    }

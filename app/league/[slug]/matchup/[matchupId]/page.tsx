@@ -376,15 +376,31 @@ export default function MatchupDetailPage() {
   const getMemberName = (m: LeagueMember) =>
     m.user?.username || m.user?.name || "Anonymous";
 
-  const calcDailyTeamScore = (roster: RosterPlayer[], dateStr: string): number => {
-    return roster.reduce((sum, p) => {
+  // Get starter player IDs for a specific date from daily lineup
+  function getStarterIds(dailyLineups: DailyLineupMap, dateStr: string): Set<string> {
+    const lineup = dailyLineups[dateStr] || {};
+    const ids = new Set<string>();
+    for (const [slot, pid] of Object.entries(lineup)) {
+      // Only count starter slots (not bench)
+      if (!slot.startsWith("BE") && pid) {
+        ids.add(pid);
+      }
+    }
+    return ids;
+  }
+
+  const calcDailyTeamScore = (roster: RosterPlayer[], dailyLineups: DailyLineupMap, dateStr: string): number => {
+    const starterIds = getStarterIds(dailyLineups, dateStr);
+    // If no lineup set for this date, count all players (backward compat)
+    const players = starterIds.size > 0 ? roster.filter(p => starterIds.has(p.id)) : roster;
+    return players.reduce((sum, p) => {
       const stats = getPlayerDayStats(p, dateStr);
       return sum + (stats?.fpts || 0);
     }, 0);
   };
 
-  const calcWeekTotal = (roster: RosterPlayer[]): number => {
-    return dateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, dateStr), 0);
+  const calcWeekTotal = (roster: RosterPlayer[], dailyLineups: DailyLineupMap): number => {
+    return dateStrings.reduce((sum, dateStr) => sum + calcDailyTeamScore(roster, dailyLineups, dateStr), 0);
   };
 
   // ── OPP / STATUS helpers ──────────────────────────────────────────────────
@@ -602,8 +618,8 @@ export default function MatchupDetailPage() {
     );
   }
 
-  const homeScore  = calcWeekTotal(homeRoster);
-  const awayScore  = calcWeekTotal(awayRoster);
+  const homeScore  = calcWeekTotal(homeRoster, homeDailyLineups);
+  const awayScore  = calcWeekTotal(awayRoster, awayDailyLineups);
   const homeName   = homeTeam.fantasy?.name || getMemberName(homeTeam.member);
   const awayName   = awayTeam.fantasy?.name || getMemberName(awayTeam.member);
   const homeOwner  = getMemberName(homeTeam.member);
@@ -692,7 +708,7 @@ export default function MatchupDetailPage() {
                     <tr>
                       <td className="col-team-name">{homeName}</td>
                       {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(homeRoster, dateStr) * 10) / 10;
+                        const v = Math.round(calcDailyTeamScore(homeRoster, homeDailyLineups, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(homeScore * 10) / 10}</strong></td>
@@ -700,7 +716,7 @@ export default function MatchupDetailPage() {
                     <tr>
                       <td className="col-team-name">{awayName}</td>
                       {dateStrings.map((dateStr, i) => {
-                        const v = Math.round(calcDailyTeamScore(awayRoster, dateStr) * 10) / 10;
+                        const v = Math.round(calcDailyTeamScore(awayRoster, awayDailyLineups, dateStr) * 10) / 10;
                         return <td key={i}>{v > 0 ? v : <span className="zero">-</span>}</td>;
                       })}
                       <td className="col-total"><strong>{Math.round(awayScore * 10) / 10}</strong></td>
