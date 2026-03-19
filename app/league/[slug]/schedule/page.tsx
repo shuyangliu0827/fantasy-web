@@ -55,6 +55,7 @@ export default function SchedulePage() {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   // Real completed-matchup scores fetched from DB
   const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const sessionUser = getSessionUser();
