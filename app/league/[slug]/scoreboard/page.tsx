@@ -215,22 +215,18 @@ export default function ScoreboardPage() {
     return null;
   }
 
-  function getStartersFromLineup(roster: RosterPlayer[], lineup: LineupMap): RosterPlayer[] {
-    const playerMap = new Map(roster.map((p) => [p.id, p]));
-    const starters: RosterPlayer[] = [];
-    for (const slot of Object.keys(lineup)) {
-      if (!STARTER_SLOTS.has(slot)) continue;
-      const player = playerMap.get(lineup[slot]);
-      if (player) starters.push(player);
-    }
-    return starters;
-  }
-
-  function calcWeekTotalForRoster(roster: RosterPlayer[], lineup: LineupMap): number {
-    const scoringDates = getWeekdayScoringDates(getWeekDateStrings(selectedWeek));
-    const starters = getStartersFromLineup(roster, lineup);
-    return scoringDates.reduce((total, dateStr) => {
-      return total + starters.reduce((sum, p) => {
+  function calcWeekTotalForRoster(roster: RosterPlayer[], dailyLineups: DailyLineupMap): number {
+    const dateStrings = getWeekDateStrings(selectedWeek);
+    return dateStrings.reduce((total, dateStr) => {
+      // Get starter IDs for this date
+      const lineup = dailyLineups[dateStr] || {};
+      const starterIds = new Set<string>();
+      for (const [slot, pid] of Object.entries(lineup)) {
+        if (!slot.startsWith("BE") && pid) starterIds.add(pid);
+      }
+      // If no lineup set for this date, count all players (backward compat)
+      const players = starterIds.size > 0 ? roster.filter(p => starterIds.has(p.id)) : roster;
+      return total + players.reduce((sum, p) => {
         const stats = getPlayerDayStats(p, dateStr);
         return sum + (stats?.fpts || 0);
       }, 0);
@@ -263,8 +259,8 @@ export default function ScoreboardPage() {
       id: id++,
       home: fixed,
       away: rotating[round],
-      homeScore: calcWeekTotalForRoster(homeRoster, homeLineup),
-      awayScore: calcWeekTotalForRoster(awayRoster, awayLineup),
+      homeScore: calcWeekTotalForRoster(homeRoster, homeLineups),
+      awayScore: calcWeekTotalForRoster(awayRoster, awayLineups),
     });
 
     for (let i = 1; i <= half; i++) {
@@ -278,8 +274,8 @@ export default function ScoreboardPage() {
         id: id++,
         home: hm,
         away: aw,
-        homeScore: calcWeekTotalForRoster(hRoster, hLineup),
-        awayScore: calcWeekTotalForRoster(aRoster, aLineup),
+        homeScore: calcWeekTotalForRoster(hRoster, hLineups),
+        awayScore: calcWeekTotalForRoster(aRoster, aLineups),
       });
     }
 

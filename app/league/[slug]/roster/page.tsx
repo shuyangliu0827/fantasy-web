@@ -10,8 +10,7 @@ import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getTeamLineup,
-  setTeamLineup,
+  setLineupForDate,
   autoSetLineup,
   isEligibleForSlot,
   fetchTeamRosterFromDB,
@@ -20,6 +19,7 @@ import {
   League,
   RosterPlayer,
   LineupMap,
+  DailyLineupMap,
 } from "@/lib/store";
 import { getCurrentWeek } from "@/lib/week-utils";
 import { supabase } from "@/lib/supabase";
@@ -127,6 +127,7 @@ export default function RosterPage() {
   const [league, setLeague] = useState<League | null>(null);
   const [myTeam, setMyTeam] = useState<{ id: string; name: string } | null>(null);
   const [roster, setRoster] = useState<RosterPlayer[]>([]);
+  const [dailyLineups, setDailyLineups] = useState<DailyLineupMap>({});
   const [lineup, setLineup] = useState<LineupMap>({});
   const [loading, setLoading] = useState(true);
   const [swapSource, setSwapSource] = useState<string | null>(null);
@@ -158,6 +159,12 @@ export default function RosterPage() {
     fetchGameDayStats(selectedDate);
   }, [selectedDate]);
 
+  // When selected date changes, load that date's lineup from dailyLineups
+  useEffect(() => {
+    const dateLineup = dailyLineups[selectedDate] || {};
+    setLineup(dateLineup);
+  }, [selectedDate, dailyLineups]);
+
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (!leagueData) { setLoading(false); return; }
@@ -178,11 +185,12 @@ export default function RosterPage() {
         setViewTeamId(teamId);
         const rosterData = await fetchTeamRosterFromDB(leagueData.id, teamId);
         setRoster(rosterData);
-        let lineupData = await fetchTeamLineupFromDB(leagueData.id, teamId);
-        if (Object.keys(lineupData).length === 0 && rosterData.length > 0) {
-          lineupData = autoSetLineup(leagueData.id, teamId);
-        }
-        setLineup(lineupData);
+        const dailyData = await fetchTeamLineupFromDB(leagueData.id, teamId);
+        setDailyLineups(dailyData);
+        // Extract lineup for selected date (today by default)
+        const todayDate = formatDateStr(new Date());
+        const dateLineup = dailyData[todayDate] || {};
+        setLineup(dateLineup);
       }
     }
     setLoading(false);
@@ -246,8 +254,9 @@ export default function RosterPage() {
     setViewTeamId(teamId);
     const rosterData = await fetchTeamRosterFromDB(league.id, teamId);
     setRoster(rosterData);
-    const lineupData = await fetchTeamLineupFromDB(league.id, teamId);
-    setLineup(lineupData);
+    const dailyData = await fetchTeamLineupFromDB(league.id, teamId);
+    setDailyLineups(dailyData);
+    setLineup(dailyData[selectedDate] || {});
     setSwapSource(null);
   }
 
@@ -264,17 +273,8 @@ export default function RosterPage() {
 
   function handleSlotClick(slot: string) {
     if (viewTeamId !== myTeam?.id) return;
-    if (selectedDate < todayStr) {
-      alert(t("历史日期不可调整阵容", "Cannot edit lineup for past dates"));
-      return;
-    }
-
-    const slotPlayer = getPlayerInSlot(slot);
-    if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
-      alert(t("该球员比赛已开始或已结束，无法调整", "This player is locked and cannot be moved"));
-      return;
-    }
-
+    // Only allow swapping on today's date
+    if (selectedDate !== todayStr) return;
     if (swapSource === null) {
       setSwapSource(slot);
     } else if (swapSource === slot) {
@@ -320,10 +320,7 @@ export default function RosterPage() {
 
   function handleAssignPlayer(playerId: string) {
     if (!league || !myTeam || !swapSource) return;
-    if (selectedDate < todayStr) {
-      alert(t("历史日期不可调整阵容", "Cannot edit lineup for past dates"));
-      return;
-    }
+    if (selectedDate !== todayStr) return;
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
     if (isPlayerLockedForLineup(player)) {
@@ -408,6 +405,9 @@ export default function RosterPage() {
   // ── Computed values ──
 
   const isPastDate = selectedDate < todayStr;
+  const isFutureDate = selectedDate > todayStr;
+  const isToday = selectedDate === todayStr;
+  const canEditLineup = isToday; // Only allow editing today's lineup
   const isOwner = user && league && league.commissioner_id === user.id;
   const isMyTeam = viewTeamId === myTeam?.id;
   const starterSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "starter");
@@ -644,11 +644,12 @@ export default function RosterPage() {
   function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {
     const slotInfo = SLOT_LABELS[slot];
     const isSwapTarget = swapSource === slot;
+    const canClick = isMyTeam && canEditLineup;
     return (
       <div
         key={slot}
-        className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${isMyTeam ? "clickable" : ""}`}
-        onClick={() => isMyTeam && handleSlotClick(slot)}
+        className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${canClick ? "clickable" : ""}`}
+        onClick={() => canClick && handleSlotClick(slot)}
       >
         <div className="col-slot">
           <span className={`slot-badge ${badgeType}`}>{slotInfo?.labelEn || "-"}</span>
@@ -717,7 +718,7 @@ export default function RosterPage() {
                 <h1>{t("阵容管理", "My Team")}</h1>
                 <p>{t("设置阵容 · 查看赛程和数据", "Set Lineup · Schedule & Stats")}</p>
               </div>
-              {isMyTeam && (
+              {isMyTeam && canEditLineup && (
                 <button className="auto-btn" onClick={handleAutoLineup}>
                   {t("自动排阵", "Auto Set")}
                 </button>
@@ -766,6 +767,15 @@ export default function RosterPage() {
             <button className="date-arrow" onClick={() => shiftWeek(1)}>›</button>
           </div>
 
+          {/* Read-only indicator for past/future dates */}
+          {isMyTeam && !canEditLineup && roster.length > 0 && (
+            <div className="readonly-hint">
+              {isPastDate
+                ? t("过去的阵容已锁定，不可修改", "Past lineup is locked and cannot be modified")
+                : t("未来的阵容需要在当天设置，或使用自动排阵", "Future lineup must be set on that day. Switch to today to use Auto Set.")}
+            </div>
+          )}
+
           {roster.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon"></div>
@@ -776,7 +786,7 @@ export default function RosterPage() {
             </div>
           ) : (
             <>
-              {swapSource && isMyTeam && (
+              {swapSource && isMyTeam && canEditLineup && (
                 <div className="swap-hint">
                   {t("点击另一个位置来交换球员，或点击未分配的球员放入该位置", "Click another slot to swap, or click an unassigned player to place")}
                   <button className="cancel-swap" onClick={() => setSwapSource(null)}>{t("取消", "Cancel")}</button>
@@ -1065,6 +1075,18 @@ const styles = `
   .date-num {
     font-size: 13px;
     font-weight: 600;
+  }
+
+  /* Read-only hint */
+  .readonly-hint {
+    background: #fefce8;
+    border: 1px solid #fde68a;
+    padding: 10px 16px;
+    border-radius: 8px;
+    color: #92400e;
+    font-size: 13px;
+    margin-bottom: 16px;
+    text-align: center;
   }
 
   /* Swap hint */
