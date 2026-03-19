@@ -28,6 +28,7 @@
      commissioner_id: string;
      visibility: "public" | "private";
      created_at: string;
+     draft_completed_at?: string; // Set when draft finishes; earliest valid lineup date
    };
    
    export type Insight = {
@@ -193,7 +194,13 @@
    // ==================== Auth (Supabase + localStorage for password) ====================
    
    export async function signup(name: string, email: string, password: string) {
-     const username = email.split("@")[0];
+     // Derive username from the user's chosen name (URL-safe handle).
+     // Fallback to email prefix only if name produces no URL-safe characters (e.g. pure Chinese).
+     const rawHandle = name.trim().toLowerCase()
+       .replace(/\s+/g, "_")
+       .replace(/[^a-z0-9_-]/g, "")
+       .slice(0, 30);
+     const username = rawHandle || email.split("@")[0];
 
      // Check if email already exists in users table
      const { data: existing } = await supabase
@@ -1186,13 +1193,12 @@
    }
 
    /**
-    * Save a lineup snapshot for a specific date (YYYY-MM-DD).
-    * Each date gets its own snapshot so editing tomorrow doesn't affect today.
+    * Save a lineup for a specific date (YYYY-MM-DD).
+    * Writes to lineup_data (same column fetchTeamLineupFromDB reads), so
+    * editing one date never touches another date's lineup.
     */
    export function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
-     const history = getLineupHistory(leagueId, teamId);
-     history[date] = lineup;
-     setLineupHistory(leagueId, teamId, history);
+     setLineupForDate(leagueId, teamId, date, lineup);
    }
 
    /**
@@ -1294,6 +1300,9 @@
    }
 
    // Auto-set lineup for today: greedy by PPG
+   // Auto-set lineup by PPG. Returns the computed lineup but does NOT persist it —
+   // the caller (page.tsx handleAutoLineup) is responsible for calling saveLineupForDate
+   // with the correct date, so editing tomorrow never overwrites today.
    export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
      const roster = getTeamRoster(leagueId, teamId);
      const lineup: LineupMap = {};
@@ -1308,7 +1317,6 @@
          assigned.add(eligible[0].id);
        }
      }
-     setTeamLineup(leagueId, teamId, lineup);
      return lineup;
    }
 
