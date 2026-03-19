@@ -259,6 +259,16 @@ export default function RosterPage() {
     setSwapSource(null);
   }
 
+  // Helper to persist a new lineup for the selected date and keep React state in sync.
+  // Calling this ensures that (a) the correct per-date column (lineup_data) is written,
+  // and (b) switching between dates within the same session always shows the saved lineup.
+  function persistLineup(newLineup: LineupMap) {
+    if (!league || !myTeam) return;
+    setLineup(newLineup);
+    setDailyLineups(prev => ({ ...prev, [selectedDate]: newLineup }));
+    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
+  }
+
   function getPlayerInSlot(slot: string): RosterPlayer | undefined {
     const playerId = lineup[slot];
     if (!playerId) return undefined;
@@ -272,8 +282,7 @@ export default function RosterPage() {
 
   function handleSlotClick(slot: string) {
     if (viewTeamId !== myTeam?.id) return;
-    // Only allow swapping on today's date
-    if (selectedDate !== todayStr) return;
+    if (isPastDate) return; // Past lineups are read-only
     if (swapSource === null) {
       setSwapSource(slot);
     } else if (swapSource === slot) {
@@ -287,10 +296,13 @@ export default function RosterPage() {
       const playerAData = roster.find(p => p.id === playerA);
       const playerBData = roster.find(p => p.id === playerB);
 
-      if ((playerAData && isPlayerLockedForLineup(playerAData)) || (playerBData && isPlayerLockedForLineup(playerBData))) {
-        alert(t("已开赛球员不能进行首发/替补交换", "Started-game players cannot be swapped"));
-        setSwapSource(null);
-        return;
+      // For today: reject swaps involving locked (game-started) players
+      if (isToday) {
+        if ((playerAData && isPlayerLockedForLineup(playerAData)) || (playerBData && isPlayerLockedForLineup(playerBData))) {
+          alert(t("已开赛球员不能进行首发/替补交换", "Started-game players cannot be swapped"));
+          setSwapSource(null);
+          return;
+        }
       }
 
       let canSwap = true;
@@ -310,25 +322,27 @@ export default function RosterPage() {
         if (!newLineup[k]) delete newLineup[k];
       }
 
-      setLineup(newLineup);
-      saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
+      persistLineup(newLineup);
       setSwapSource(null);
     }
   }
 
   function handleAssignPlayer(playerId: string) {
     if (!league || !myTeam || !swapSource) return;
-    if (selectedDate !== todayStr) return;
+    if (isPastDate) return; // Past lineups are read-only
     const player = roster.find(p => p.id === playerId);
     if (!player) return;
-    if (isPlayerLockedForLineup(player)) {
-      alert(t("该球员比赛已开始或已结束，无法排阵", "This player is locked and cannot be assigned"));
-      return;
-    }
-    const slotPlayer = getPlayerInSlot(swapSource);
-    if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
-      alert(t("已开赛球员不能被替换", "Started-game players cannot be replaced"));
-      return;
+    // For today: reject if player's game has already started
+    if (isToday) {
+      if (isPlayerLockedForLineup(player)) {
+        alert(t("该球员比赛已开始或已结束，无法排阵", "This player is locked and cannot be assigned"));
+        return;
+      }
+      const slotPlayer = getPlayerInSlot(swapSource);
+      if (slotPlayer && isPlayerLockedForLineup(slotPlayer)) {
+        alert(t("已开赛球员不能被替换", "Started-game players cannot be replaced"));
+        return;
+      }
     }
     if (!isEligibleForSlot(getPlayerPosition(player), swapSource)) {
       alert(t("位置不符合要求", "Position not eligible"));
@@ -339,20 +353,30 @@ export default function RosterPage() {
       if (pid === playerId) delete newLineup[slot];
     }
     newLineup[swapSource] = playerId;
-    setLineup(newLineup);
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
+    persistLineup(newLineup);
     setSwapSource(null);
   }
 
   function handleAutoLineup() {
     if (!league || !myTeam) return;
-    if (selectedDate <= todayStr) {
-      alert(t("当天或历史日期不可一键排阵，请仅调整未开赛球员", "Auto lineup is disabled for today/past dates"));
+    if (isPastDate) {
+      alert(t("历史阵容已锁定，不可修改", "Past lineups are locked and cannot be changed"));
       return;
     }
     const newLineup = autoSetLineup(league.id, myTeam.id);
-    setLineup(newLineup);
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
+    if (isToday) {
+      // Today: preserve slots occupied by locked (game-started) players
+      const merged: LineupMap = { ...newLineup };
+      for (const [slot, pid] of Object.entries(lineup)) {
+        const player = roster.find(p => p.id === pid);
+        if (player && isPlayerLockedForLineup(player)) {
+          merged[slot] = pid;
+        }
+      }
+      persistLineup(merged);
+    } else {
+      persistLineup(newLineup);
+    }
   }
 
   // ── Schedule & stats helpers ──
@@ -394,8 +418,13 @@ export default function RosterPage() {
   function shiftWeek(direction: number) {
     const next = new Date(weekStart);
     next.setDate(weekStart.getDate() + direction * 7);
+    // Don't navigate before the league's start date
+    if (leagueMinDate && direction < 0) {
+      const minWeekStart = new Date(leagueMinDate);
+      minWeekStart.setHours(0, 0, 0, 0);
+      if (next < minWeekStart) return;
+    }
     setWeekStart(next);
-    // Select the first day of the new week
     setSelectedDate(formatDateStr(next));
   }
 
@@ -404,12 +433,20 @@ export default function RosterPage() {
   const isPastDate = selectedDate < todayStr;
   const isFutureDate = selectedDate > todayStr;
   const isToday = selectedDate === todayStr;
-  const canEditLineup = isToday; // Only allow editing today's lineup
+  // Allow editing today and future dates; past dates are always read-only
+  const canEditLineup = !isPastDate;
   const isOwner = user && league && league.commissioner_id === user.id;
   const isMyTeam = viewTeamId === myTeam?.id;
   const starterSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "starter");
   const benchSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
   const unassigned = getUnassignedPlayers();
+
+  // Earliest valid lineup date: draft completion date, then league creation date, then null
+  const leagueMinDate = league?.draft_completed_at
+    ? formatDateStr(new Date(league.draft_completed_at))
+    : league?.created_at
+    ? formatDateStr(new Date(league.created_at))
+    : null;
 
   // Calculate starter totals (past dates: only game-day stats; today/future: game-day or averages)
   const starterTotals = starterSlots.reduce(
@@ -641,11 +678,13 @@ export default function RosterPage() {
   function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {
     const slotInfo = SLOT_LABELS[slot];
     const isSwapTarget = swapSource === slot;
-    const canClick = isMyTeam && canEditLineup;
+    const isLocked = isToday && player ? isPlayerLockedForLineup(player) : false;
+    // Locked players on today's roster cannot be clicked/swapped
+    const canClick = isMyTeam && canEditLineup && !isLocked;
     return (
       <div
         key={slot}
-        className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${canClick ? "clickable" : ""}`}
+        className={`lineup-row ${isSwapTarget ? "swap-active" : ""} ${canClick ? "clickable" : ""} ${isLocked ? "locked-row" : ""}`}
         onClick={() => canClick && handleSlotClick(slot)}
       >
         <div className="col-slot">
@@ -654,7 +693,10 @@ export default function RosterPage() {
         <div className="col-player">
           {player ? (
             <div className="player-info">
-              <span className="player-name">{player.name}</span>
+              <span className="player-name">
+                {player.name}
+                {isLocked && <span className="lock-badge" title={t("已开赛，无法移动", "Game started, cannot move")}> &#x1F512;</span>}
+              </span>
               <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
             </div>
           ) : (
@@ -715,7 +757,7 @@ export default function RosterPage() {
                 <h1>{t("阵容管理", "My Team")}</h1>
                 <p>{t("设置阵容 · 查看赛程和数据", "Set Lineup · Schedule & Stats")}</p>
               </div>
-              {isMyTeam && canEditLineup && (
+              {isMyTeam && !isPastDate && (
                 <button className="auto-btn" onClick={handleAutoLineup}>
                   {t("自动排阵", "Auto Set")}
                 </button>
@@ -747,12 +789,14 @@ export default function RosterPage() {
                 const ds = formatDateStr(d);
                 const isToday = ds === todayStr;
                 const isSelected = ds === selectedDate;
+                const isBeforeLeagueStart = leagueMinDate ? ds < leagueMinDate : false;
                 const dayName = lang === "zh" ? DAY_NAMES_ZH[d.getDay()] : DAY_NAMES_EN[d.getDay()];
                 return (
                   <button
                     key={ds}
-                    className={`date-tab ${isSelected ? "active" : ""} ${isToday ? "today" : ""}`}
-                    onClick={() => setSelectedDate(ds)}
+                    disabled={isBeforeLeagueStart}
+                    className={`date-tab ${isSelected ? "active" : ""} ${isToday ? "today" : ""} ${isBeforeLeagueStart ? "disabled" : ""}`}
+                    onClick={() => !isBeforeLeagueStart && setSelectedDate(ds)}
                   >
                     <span className="date-day">{dayName}</span>
                     <span className="date-num">{d.getMonth() + 1}/{d.getDate()}</span>
@@ -1048,7 +1092,8 @@ const styles = `
     gap: 2px;
     position: relative;
   }
-  .date-tab:hover { background: rgba(255,255,255,0.05); }
+  .date-tab:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+  .date-tab.disabled, .date-tab:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
   .date-tab.active {
     background: #eff6ff;
     border-color: #1e3a8a;
@@ -1158,6 +1203,8 @@ const styles = `
     border-color: rgba(59, 130, 246, 0.2);
   }
   .lineup-row.highlight { background: #f8fafc; }
+  .lineup-row.locked-row { opacity: 0.85; cursor: not-allowed; }
+  .lock-badge { font-size: 10px; margin-left: 4px; opacity: 0.7; }
 
   /* Totals row */
   .totals-row {
