@@ -12,7 +12,61 @@ import {
   getLeagueMembers,
   League,
   LeagueMember,
+  supabase,
 } from "@/lib/store";
+
+type FantasyTeamRecord = {
+  id: string;
+  user_id: string;
+  name: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  points_for: number;
+  points_against: number;
+};
+
+type MatchupRow = {
+  week: number;
+  home_team_id: string;
+  away_team_id: string;
+  winner_id: string | null;
+};
+
+type StandingRow = {
+  rank: number;
+  member: LeagueMember;
+  teamRecord: FantasyTeamRecord;
+  wins: number;
+  losses: number;
+  ties: number;
+  pct: string;
+  gb: string;
+  pf: string;
+  pa: string;
+  streak: string;
+};
+
+/** Compute current streak from ordered matchup history (most-recent first). */
+function computeStreak(teamId: string, matchups: MatchupRow[]): string {
+  if (matchups.length === 0) return "-";
+  let count = 0;
+  let streakType = "";
+  for (const m of matchups) {
+    const isInvolved = m.home_team_id === teamId || m.away_team_id === teamId;
+    if (!isInvolved) continue;
+    const result = m.winner_id === null ? "T" : m.winner_id === teamId ? "W" : "L";
+    if (streakType === "") {
+      streakType = result;
+      count = 1;
+    } else if (result === streakType) {
+      count++;
+    } else {
+      break;
+    }
+  }
+  return streakType ? `${streakType}${count}` : "-";
+}
 
 export default function StandingsPage() {
   const { t } = useLang();
@@ -22,6 +76,8 @@ export default function StandingsPage() {
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
+  const [teamRecords, setTeamRecords] = useState<FantasyTeamRecord[]>([]);
+  const [matchupHistory, setMatchupHistory] = useState<MatchupRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,8 +89,22 @@ export default function StandingsPage() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
       setLeague(leagueData);
-      const membersData = await getLeagueMembers(leagueData.id);
+      const [membersData, teamsResult, matchupsResult] = await Promise.all([
+        getLeagueMembers(leagueData.id),
+        supabase
+          .from("fantasy_teams")
+          .select("id, user_id, name, wins, losses, ties, points_for, points_against")
+          .eq("league_id", leagueData.id),
+        supabase
+          .from("matchups")
+          .select("week, home_team_id, away_team_id, winner_id")
+          .eq("league_id", leagueData.id)
+          .eq("status", "completed")
+          .order("week", { ascending: false }),
+      ]);
       setMembers(membersData);
+      setTeamRecords((teamsResult.data || []) as FantasyTeamRecord[]);
+      setMatchupHistory((matchupsResult.data || []) as MatchupRow[]);
     }
     setLoading(false);
   }
@@ -45,20 +115,57 @@ export default function StandingsPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // 模拟排行榜数据
-  const standingsData = members.map((member, index) => ({
-    rank: index + 1,
-    member,
-    teamName: getMemberName(member) + "'s Team",
-    wins: 0,
-    losses: 0,
-    ties: 0,
-    pct: ".000",
-    gb: "-",
-    pf: 0,
-    pa: 0,
-    streak: "-",
-  }));
+  // Build standings from real DB data
+  const standingsData: StandingRow[] = (() => {
+    const rows: StandingRow[] = members.map((member) => {
+      const rec = teamRecords.find((t) => t.user_id === member.user_id) || {
+        id: "", user_id: member.user_id, name: "", wins: 0, losses: 0, ties: 0,
+        points_for: 0, points_against: 0,
+      };
+      return {
+        rank: 0,
+        member,
+        teamRecord: rec,
+        wins: rec.wins,
+        losses: rec.losses,
+        ties: rec.ties,
+        pct: ".000",
+        gb: "-",
+        pf: Number(rec.points_for).toFixed(1),
+        pa: Number(rec.points_against).toFixed(1),
+        streak: "-",
+      };
+    });
+
+    // Sort: wins DESC, then points_for DESC
+    rows.sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return Number(b.pf) - Number(a.pf);
+    });
+
+    // Assign ranks and compute derived stats
+    const leaderWins = rows[0]?.wins ?? 0;
+    const leaderLosses = rows[0]?.losses ?? 0;
+
+    rows.forEach((row, idx) => {
+      row.rank = idx + 1;
+      const total = row.wins + row.losses + row.ties;
+      const pctNum = total > 0 ? (row.wins + 0.5 * row.ties) / total : 0;
+      row.pct = pctNum.toFixed(3).replace(/^0/, "");
+      if (idx === 0) {
+        row.gb = "-";
+      } else {
+        const gb = ((leaderWins - row.wins) + (row.losses - leaderLosses)) / 2;
+        row.gb = gb % 1 === 0 ? String(gb) : gb.toFixed(1);
+      }
+      // Streak: walk matchup history most-recent first
+      if (row.teamRecord.id) {
+        row.streak = computeStreak(row.teamRecord.id, matchupHistory);
+      }
+    });
+
+    return rows;
+  })();
 
   if (loading) {
     return (
@@ -132,7 +239,7 @@ export default function StandingsPage() {
                       <div className="team-info">
                         <span className="team-avatar">{getMemberName(team.member)[0]?.toUpperCase()}</span>
                         <div className="team-details">
-                          <span className="team-name">{team.teamName}</span>
+                          <span className="team-name">{team.teamRecord.name || getMemberName(team.member) + "'s Team"}</span>
                           <span className="owner-name">{getMemberName(team.member)}</span>
                         </div>
                       </div>

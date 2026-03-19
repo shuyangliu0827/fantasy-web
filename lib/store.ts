@@ -1044,7 +1044,8 @@
      tov: number;
      round: number;
      acquiredVia?: "draft" | "free_agent" | "trade";
-     acquiredAt?: number;
+     acquiredAt?: number;  // Unix ms when this player joined this team
+     releasedAt?: number;  // Unix ms when dropped/traded away; undefined = still active
    };
 
    // Fantasy basketball lineup slots
@@ -1087,6 +1088,9 @@
      const all = getLeagueRosters(leagueId);
      return all[teamId] || [];
    }
+
+   // Re-export the canonical, supabase-free roster-history helpers.
+   export { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
 
    export async function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
      if (canUseStorage()) {
@@ -1283,7 +1287,7 @@
    // the caller (page.tsx handleAutoLineup) is responsible for calling saveLineupForDate
    // with the correct date, so editing tomorrow never overwrites today.
    export function autoSetLineup(leagueId: string, teamId: string): LineupMap {
-     const roster = getTeamRoster(leagueId, teamId);
+     const roster = getCurrentRoster(getTeamRoster(leagueId, teamId));
      const lineup: LineupMap = {};
      const assigned = new Set<string>();
      const slotOrder: string[] = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3", "BE1", "BE2", "BE3"];
@@ -1304,13 +1308,14 @@
    export function getUndraftedPlayers(leagueId: string): Player[] {
      const allPlayers = getPlayers();
      const rosters = getLeagueRosters(leagueId);
-     const draftedIds = new Set<string>();
+     const activeIds = new Set<string>();
      for (const teamPlayers of Object.values(rosters)) {
-       for (const p of teamPlayers) {
-         draftedIds.add(p.id);
+       // Only count currently active (not released) players as "taken"
+       for (const p of getCurrentRoster(teamPlayers)) {
+         activeIds.add(p.id);
        }
      }
-     return allPlayers.filter(p => !draftedIds.has(p.id));
+     return allPlayers.filter(p => !activeIds.has(p.id));
    }
 
    export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
@@ -1320,19 +1325,19 @@
      const player = allPlayers.find(p => p.id === playerId);
      if (!player) return { ok: false, error: "Player not found" };
 
-     // Check if player is already on a team
+     // Check if player is already actively on a team (ignores released/historical entries)
      const rosters = getLeagueRosters(leagueId);
      for (const [tid, teamRoster] of Object.entries(rosters)) {
-       if (teamRoster.some(p => p.id === playerId)) {
+       if (getCurrentRoster(teamRoster).some(p => p.id === playerId)) {
          return { ok: false, error: tid === teamId ? "Player already on your team" : "Player is on another team" };
        }
      }
 
      if (dropPlayerId) {
-       // Drop a player and add the free agent
-       const dropIdx = roster.findIndex(p => p.id === dropPlayerId);
+       // Drop a player and add the free agent — mark as released (preserve history)
+       const dropIdx = roster.findIndex(p => p.id === dropPlayerId && !p.releasedAt);
        if (dropIdx === -1) return { ok: false, error: "Drop player not found on roster" };
-       roster.splice(dropIdx, 1);
+       roster[dropIdx] = { ...roster[dropIdx], releasedAt: Date.now() };
        // Remove dropped player from all daily lineups (today and future)
        const daily = getDailyLineups(leagueId, teamId);
        const today = new Date();
@@ -1348,7 +1353,7 @@
          localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
        }
        supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
-     } else if (roster.length >= 13) {
+     } else if (getCurrentRoster(roster).length >= 13) {
        return { ok: false, error: "Roster is full (13 players). Drop a player first." };
      }
 
@@ -1378,9 +1383,11 @@
    export function dropPlayer(leagueId: string, teamId: string, playerId: string): { ok: boolean; error?: string } {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
      const roster = getTeamRoster(leagueId, teamId);
-     const idx = roster.findIndex(p => p.id === playerId);
+     // Find the currently active entry for this player (no releasedAt)
+     const idx = roster.findIndex(p => p.id === playerId && !p.releasedAt);
      if (idx === -1) return { ok: false, error: "Player not on roster" };
-     roster.splice(idx, 1);
+     // Mark as released (preserves history) instead of splicing out
+     roster[idx] = { ...roster[idx], releasedAt: Date.now() };
      setTeamRoster(leagueId, teamId, roster);
      // Remove from all daily lineups (today and future only, preserve past)
      const daily = getDailyLineups(leagueId, teamId);
@@ -1582,6 +1589,117 @@
        return { ok: false, error: updateError.message };
      }
      return { ok: true };
+   }
+
+   // ==================== Weekly Matchup Results ====================
+
+   /**
+    * Persist a completed weekly matchup result to Supabase.
+    * - Upserts a row in the matchups table.
+    * - Increments wins/losses/ties + points_for/against on both fantasy_teams rows.
+    * Idempotent: skips if the matchup row already has status = "completed".
+    */
+   export async function saveWeeklyMatchupResult(params: {
+     leagueId: string;
+     week: number;
+     homeTeamId: string;
+     awayTeamId: string;
+     homeScore: number;
+     awayScore: number;
+     startDate: string; // YYYY-MM-DD (Monday)
+     endDate: string;   // YYYY-MM-DD (Sunday)
+   }): Promise<void> {
+     const { leagueId, week, homeTeamId, awayTeamId, homeScore, awayScore, startDate, endDate } = params;
+
+     // Check if already saved (idempotent guard)
+     const { data: existing } = await supabase
+       .from("matchups")
+       .select("id, status")
+       .eq("league_id", leagueId)
+       .eq("week", week)
+       .eq("home_team_id", homeTeamId)
+       .eq("away_team_id", awayTeamId)
+       .single();
+
+     if (existing?.status === "completed") return; // already persisted
+
+     const winnerId =
+       homeScore > awayScore ? homeTeamId :
+       awayScore > homeScore ? awayTeamId :
+       null; // tie
+
+     // Upsert the matchup row using the unique constraint added in migration 011
+     await supabase.from("matchups").upsert({
+       league_id: leagueId,
+       week,
+       home_team_id: homeTeamId,
+       away_team_id: awayTeamId,
+       home_score: homeScore,
+       away_score: awayScore,
+       winner_id: winnerId,
+       status: "completed",
+       start_date: startDate,
+       end_date: endDate,
+     }, { onConflict: "league_id,week,home_team_id,away_team_id" });
+
+     // Update fantasy_teams records
+     const homeWin = homeScore > awayScore;
+     const awayWin = awayScore > homeScore;
+     const isTie = homeScore === awayScore;
+
+     await Promise.all([
+       supabase.rpc("increment_team_record", {
+         p_team_id: homeTeamId,
+         p_wins: homeWin ? 1 : 0,
+         p_losses: awayWin ? 1 : 0,
+         p_ties: isTie ? 1 : 0,
+         p_points_for: homeScore,
+         p_points_against: awayScore,
+       }).then(({ error }) => {
+         if (error) {
+           // Fallback: manual update if RPC not available
+           return supabase.from("fantasy_teams")
+             .select("wins, losses, ties, points_for, points_against")
+             .eq("id", homeTeamId)
+             .single()
+             .then(({ data }) => {
+               if (!data) return;
+               return supabase.from("fantasy_teams").update({
+                 wins: (data.wins ?? 0) + (homeWin ? 1 : 0),
+                 losses: (data.losses ?? 0) + (awayWin ? 1 : 0),
+                 ties: (data.ties ?? 0) + (isTie ? 1 : 0),
+                 points_for: Number(data.points_for ?? 0) + homeScore,
+                 points_against: Number(data.points_against ?? 0) + awayScore,
+               }).eq("id", homeTeamId);
+             });
+         }
+       }),
+       supabase.rpc("increment_team_record", {
+         p_team_id: awayTeamId,
+         p_wins: awayWin ? 1 : 0,
+         p_losses: homeWin ? 1 : 0,
+         p_ties: isTie ? 1 : 0,
+         p_points_for: awayScore,
+         p_points_against: homeScore,
+       }).then(({ error }) => {
+         if (error) {
+           return supabase.from("fantasy_teams")
+             .select("wins, losses, ties, points_for, points_against")
+             .eq("id", awayTeamId)
+             .single()
+             .then(({ data }) => {
+               if (!data) return;
+               return supabase.from("fantasy_teams").update({
+                 wins: (data.wins ?? 0) + (awayWin ? 1 : 0),
+                 losses: (data.losses ?? 0) + (homeWin ? 1 : 0),
+                 ties: (data.ties ?? 0) + (isTie ? 1 : 0),
+                 points_for: Number(data.points_for ?? 0) + awayScore,
+                 points_against: Number(data.points_against ?? 0) + homeScore,
+               }).eq("id", awayTeamId);
+             });
+         }
+       }),
+     ]);
    }
 
    export async function cancelTrade(leagueId: string, tradeId: string): Promise<{ ok: boolean; error?: string }> {

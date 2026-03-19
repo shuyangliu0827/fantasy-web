@@ -12,58 +12,27 @@ import {
   getLeagueMembers,
   League,
   LeagueMember,
+  supabase,
 } from "@/lib/store";
+import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+import {
+  getOfficialLeagueStartDate,
+  getWeekDateStrings,
+  getWeekStatus as getCanonicalWeekStatus,
+} from "@/lib/week-utils";
 
 // ── Schedule constants ────────────────────────────────────────────────────────
-// Week 1 starts Monday March 16, 2026. Each week is Mon–Sun (7 days).
-// Season ends at NBA Finals Game 7 (approx June 22, 2026).
-const SCHEDULE_START = new Date("2026-03-16T00:00:00");
-const NBA_FINALS_END = new Date("2026-06-22T00:00:00");
+// Season end: NBA Finals Game 7 (approx June 22, 2026) — UTC.
+const NBA_FINALS_END_UTC = new Date("2026-06-22T00:00:00.000Z");
 
-function getScheduleWeekDates(week: number): { start: Date; end: Date } {
-  const start = new Date(SCHEDULE_START);
-  start.setDate(start.getDate() + (week - 1) * 7);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start, end };
-}
-
-function formatShortDate(d: Date): string {
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
-}
-
-function formatDateRange(start: Date, end: Date): string {
-  if (start.getMonth() === end.getMonth()) {
-    return `${formatShortDate(start)} - ${end.getDate()}`;
-  }
-  return `${formatShortDate(start)} - ${formatShortDate(end)}`;
-}
-
-function getTotalWeeks(): number {
-  const diffMs = NBA_FINALS_END.getTime() - SCHEDULE_START.getTime();
-  return Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-}
-
-function getTodayDate(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-// ── Seeded shuffle for deterministic matchups ─────────────────────────────────
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const result = [...arr];
-  let s = seed;
-  for (let i = result.length - 1; i > 0; i--) {
-    s = (s * 1103515245 + 12345) & 0x7fffffff;
-    const j = s % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
+/** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
+function formatScheduleDateRange(startStr: string, endStr: string): string {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [, em, ed] = endStr.split("-").map(Number);
+  const startLabel = `${MONTHS[sm - 1]} ${sd}`;
+  if (sm === em) return `${startLabel} - ${ed}`;
+  return `${startLabel} - ${MONTHS[em - 1]} ${ed}`;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -87,6 +56,8 @@ export default function SchedulePage() {
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  // Real completed-matchup scores fetched from DB
+  const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
 
   useEffect(() => {
     const u = getSessionUser();
@@ -99,8 +70,24 @@ export default function SchedulePage() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
       setLeague(leagueData);
-      const membersData = await getLeagueMembers(leagueData.id);
+      const [membersData, matchupsResult] = await Promise.all([
+        getLeagueMembers(leagueData.id),
+        supabase
+          .from("matchups")
+          .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
+          .eq("league_id", leagueData.id)
+          .eq("status", "completed"),
+      ]);
       setMembers(membersData);
+      // Build lookup: "{week}-{home_team_id}-{away_team_id}" → scores
+      if (matchupsResult.data) {
+        const lookup: Record<string, { home_score: number; away_score: number; winner_id: string | null }> = {};
+        for (const row of matchupsResult.data) {
+          const key = `${row.week}-${row.home_team_id}-${row.away_team_id}`;
+          lookup[key] = { home_score: row.home_score, away_score: row.away_score, winner_id: row.winner_id };
+        }
+        setCompletedMatchups(lookup);
+      }
     }
     setLoading(false);
   }
@@ -111,160 +98,75 @@ export default function SchedulePage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // ── Generate full round-robin schedule ────────────────────────────────────
+  // ── Canonical league start and total-weeks computation ───────────────────
+  const leagueStart = useMemo(
+    () => getOfficialLeagueStartDate(league?.draft_completed_at ?? null),
+    [league?.draft_completed_at],
+  );
+
+  const totalWeeks = useMemo(() => {
+    if (!leagueStart) return 20; // fallback
+    const diffMs = NBA_FINALS_END_UTC.getTime() - leagueStart.getTime();
+    return Math.max(1, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)));
+  }, [leagueStart]);
+
+  const n = members.length;
+  const playoffRounds = n >= 8 ? 3 : n >= 4 ? 2 : 1;
+  const regularSeasonWeeks = Math.max(1, totalWeeks - playoffRounds);
+
+  // ── Generate full round-robin schedule using the SAME canonical function as scoreboard ──
   const fullSchedule = useMemo(() => {
-    if (!league || members.length < 2) return new Map<string, MatchupEntry[]>();
+    if (!league || members.length < 2 || !leagueStart) return new Map<string, MatchupEntry[]>();
 
-    const n = members.length;
-    const totalWeeks = getTotalWeeks();
-    // Reserve playoff weeks: 3 rounds for 8+ teams, 2 for 4+, 1 for 2+
-    const playoffRounds = n >= 8 ? 3 : n >= 4 ? 2 : 1;
-    const regularSeasonWeeks = totalWeeks - playoffRounds;
-
-    const sorted = [...members].sort((a, b) => a.user_id.localeCompare(b.user_id));
-    const seed = (league.id || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    const shuffled = seededShuffle(sorted, seed);
-
-    // Build per-user schedule map
     const scheduleMap = new Map<string, MatchupEntry[]>();
-    for (const m of members) {
-      scheduleMap.set(m.user_id, []);
-    }
+    for (const m of members) scheduleMap.set(m.user_id, []);
 
-    // Handle odd number of players with a "bye" week
-    const isOdd = n % 2 !== 0;
-    const paddedMembers = isOdd ? [...shuffled, null] : [...shuffled];
-    const pn = paddedMembers.length;
-    const numRounds = pn - 1;
+    for (let week = 1; week <= totalWeeks; week++) {
+      const dateStrings = getWeekDateStrings(week, leagueStart);
+      if (dateStrings.length < 7) break;
+      const dateRange = formatScheduleDateRange(dateStrings[0], dateStrings[6]);
+      const isPlayoff = week > regularSeasonWeeks;
+      const playoffRound = isPlayoff ? week - regularSeasonWeeks : undefined;
+      const label = isPlayoff
+        ? t(`季后赛第 ${playoffRound} 轮`, `Playoff Round ${playoffRound}`)
+        : t(`第 ${week} 周`, `Matchup ${week}`);
 
-    // Round-robin for regular season
-    for (let week = 1; week <= regularSeasonWeeks; week++) {
-      const round = (week - 1) % numRounds;
-      const { start, end } = getScheduleWeekDates(week);
-      const dateRange = formatDateRange(start, end);
-      const matchupLabel = t(`第 ${week} 周`, `Matchup ${week}`);
-
-      // Build rotation array for this round
-      const fixed = paddedMembers[0];
-      const rotating = paddedMembers.slice(1);
-      const rotated: (LeagueMember | null)[] = [];
-      for (let i = 0; i < rotating.length; i++) {
-        rotated.push(rotating[(round + i) % (pn - 1)]);
-      }
-
-      // Pair: fixed vs rotated[0], then rotated[1] vs rotated[last], rotated[2] vs rotated[last-1], etc.
-      const pairs: [LeagueMember | null, LeagueMember | null][] = [];
-      pairs.push([fixed, rotated[0]]);
-      for (let i = 1; i <= Math.floor((pn - 2) / 2); i++) {
-        pairs.push([rotated[i], rotated[pn - 1 - i - 1]]);
-      }
-
-      for (const [home, away] of pairs) {
-        if (!home || !away) continue; // skip bye
-        const dateStr = `(${dateRange})`;
+      // Use the canonical generateMatchupsForWeek — same function scoreboard uses.
+      const weekMatchups = generateMatchupsForWeek(members, league.id, week);
+      for (const matchup of weekMatchups) {
         const homeEntry: MatchupEntry = {
           week,
-          label: matchupLabel,
-          dateRange: dateStr,
-          opponent: away,
+          label,
+          dateRange: `(${dateRange})`,
+          opponent: matchup.away,
           isHome: true,
-          isPlayoff: false,
+          isPlayoff,
+          playoffRound,
         };
         const awayEntry: MatchupEntry = {
           week,
-          label: matchupLabel,
-          dateRange: dateStr,
-          opponent: home,
+          label,
+          dateRange: `(${dateRange})`,
+          opponent: matchup.home,
           isHome: false,
-          isPlayoff: false,
+          isPlayoff,
+          playoffRound,
         };
-        scheduleMap.get(home.user_id)?.push(homeEntry);
-        scheduleMap.get(away.user_id)?.push(awayEntry);
-      }
-    }
-
-    // Generate playoff matchups (simplified: top seeds play each other)
-    const playoffTeamCount = Math.min(n, n >= 8 ? 8 : n >= 4 ? 4 : 2);
-    // For playoff seeding, use member order as proxy for standings
-    const playoffSeeds = sorted.slice(0, playoffTeamCount);
-
-    for (let round = 1; round <= playoffRounds; round++) {
-      const week = regularSeasonWeeks + round;
-      const { start, end } = getScheduleWeekDates(week);
-      const dateRange = formatDateRange(start, end);
-      const roundLabel = t(`季后赛第 ${round} 轮`, `Playoff Round ${round}`);
-
-      // Determine how many matchups this round
-      const teamsInRound = Math.floor(playoffTeamCount / Math.pow(2, round - 1));
-      const matchupsInRound = Math.floor(teamsInRound / 2);
-
-      for (let i = 0; i < matchupsInRound && i * 2 + 1 < playoffSeeds.length; i++) {
-        // Seed pairing: 1v8, 2v7, 3v6, 4v5 for first round
-        const seedOffset = Math.pow(2, round - 1) - 1;
-        const homeIdx = i * Math.pow(2, round - 1);
-        const awayIdx = (i + 1) * Math.pow(2, round - 1) - 1;
-
-        if (homeIdx >= playoffSeeds.length || awayIdx >= playoffSeeds.length) continue;
-
-        const home = playoffSeeds[homeIdx];
-        const away = playoffSeeds[awayIdx];
-        const dateStr = `(${dateRange})`;
-
-        const homeEntry: MatchupEntry = {
-          week,
-          label: roundLabel,
-          dateRange: dateStr,
-          opponent: away,
-          isHome: true,
-          isPlayoff: true,
-          playoffRound: round,
-        };
-        const awayEntry: MatchupEntry = {
-          week,
-          label: roundLabel,
-          dateRange: dateStr,
-          opponent: home,
-          isHome: false,
-          isPlayoff: true,
-          playoffRound: round,
-        };
-        scheduleMap.get(home.user_id)?.push(homeEntry);
-        scheduleMap.get(away.user_id)?.push(awayEntry);
+        scheduleMap.get(matchup.home.user_id)?.push(homeEntry);
+        scheduleMap.get(matchup.away.user_id)?.push(awayEntry);
       }
     }
 
     return scheduleMap;
-  }, [league, members, t]);
+  }, [league, members, leagueStart, totalWeeks, regularSeasonWeeks, t]);
 
   const selectedMember = members.find((m) => m.user_id === selectedUserId);
   const selectedSchedule = fullSchedule.get(selectedUserId) || [];
   const selectedName = selectedMember ? getMemberName(selectedMember) : "";
 
-  const today = getTodayDate();
-
-  function getWeekStatus(week: number): "past" | "current" | "future" {
-    const { start, end } = getScheduleWeekDates(week);
-    if (today > end) return "past";
-    if (today < start) return "future";
-    return "current";
+  function getEntryStatus(week: number): "pending" | "past" | "current" | "future" {
+    return getCanonicalWeekStatus(week, leagueStart);
   }
-
-  // ── Compute mock win/loss record up to a given week ───────────────────────
-  const getRecordAtWeek = (userId: string, upToWeek: number): string => {
-    const schedule = fullSchedule.get(userId) || [];
-    let w = 0, l = 0;
-    for (const entry of schedule) {
-      if (entry.week >= upToWeek) break;
-      const status = getWeekStatus(entry.week);
-      if (status === "past") {
-        // Deterministic mock result based on seed
-        const seed = (userId + entry.week.toString()).split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-        if (seed % 3 !== 0) w++;
-        else l++;
-      }
-    }
-    return `${w}-${l}-0`;
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -372,19 +274,17 @@ export default function SchedulePage() {
                   </thead>
                   <tbody>
                     {selectedSchedule.map((entry, idx) => {
-                      const status = getWeekStatus(entry.week);
+                      const status = getEntryStatus(entry.week);
                       const opponentName = getMemberName(entry.opponent);
-                      const opponentRecord = getRecordAtWeek(
-                        entry.opponent.user_id,
-                        entry.week
-                      );
 
-                      // Deterministic mock score for past games
-                      const scoreSeed = (selectedUserId + entry.opponent.user_id + entry.week)
-                        .split("")
-                        .reduce((a, c) => a + c.charCodeAt(0), 0);
-                      const myScore = status === "past" ? 800 + (scoreSeed % 900) : null;
-                      const oppScore = status === "past" ? 700 + ((scoreSeed * 7 + 13) % 800) : null;
+                      // Look up real scores from DB (populated by scoreboard page when viewed)
+                      // The matchup row key uses home_team_id / away_team_id from fantasy_teams.
+                      // For schedule display we look up by week and check both team orderings.
+                      const realMatchup = Object.entries(completedMatchups).find(
+                        ([key]) => key.startsWith(`${entry.week}-`)
+                      )?.[1] ?? null;
+                      const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
+                      const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
                       const isWin = myScore !== null && oppScore !== null && myScore > oppScore;
                       const isLoss = myScore !== null && oppScore !== null && myScore < oppScore;
 
@@ -412,22 +312,29 @@ export default function SchedulePage() {
                             </div>
                           </td>
                           <td className="col-score">
-                            {status === "past" ? (
+                            {status === "past" && realMatchup ? (
                               <div className="score-display">
                                 <span
                                   className={`win-loss-badge ${
-                                    isWin ? "badge-win" : "badge-loss"
+                                    isWin ? "badge-win" : isLoss ? "badge-loss" : "badge-tie"
                                   }`}
                                 >
-                                  {isWin ? "W" : "L"}
+                                  {isWin ? "W" : isLoss ? "L" : "T"}
                                 </span>
                                 <Link
                                   href={`/league/${slug}/matchup/${entry.week}-0`}
                                   className="score-link"
                                 >
-                                  {myScore}-{oppScore}
+                                  {myScore?.toFixed(1)}-{oppScore?.toFixed(1)}
                                 </Link>
                               </div>
+                            ) : status === "past" ? (
+                              <Link
+                                href={`/league/${slug}/matchup/${entry.week}-0`}
+                                className="score-link-muted"
+                              >
+                                {t("查看", "View")}
+                              </Link>
                             ) : status === "current" ? (
                               <span className="status-in-progress">
                                 {t("进行中", "In Progress")}
@@ -458,9 +365,7 @@ export default function SchedulePage() {
                               >
                                 {opponentName}
                               </Link>
-                              <span className="opponent-record">
-                                ({opponentRecord})
-                              </span>
+                              {/* Opponent record shown on standings page */}
                             </div>
                           </td>
                           <td className="col-manager">
