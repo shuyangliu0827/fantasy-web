@@ -1,44 +1,51 @@
 // lib/week-utils.ts
-// Shared week date helpers for scoreboard and matchup pages.
-// Weeks run Monday–Sunday (UTC). Week 1 starts on the first Monday on or after
-// the league's draft_completed_at date.
+// Canonical matchup week helpers. Weeks run Monday–Sunday in UTC.
 
-export function formatDateStr(d: Date): string {
+export const CANONICAL_TIMEZONE = "UTC";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function normalizeUtcDate(value: Date | string): Date {
+  const src = value instanceof Date ? value : new Date(value);
+  return new Date(Date.UTC(src.getUTCFullYear(), src.getUTCMonth(), src.getUTCDate()));
+}
+
+export function formatDateStr(value: Date | string): string {
+  const d = normalizeUtcDate(value);
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-/**
- * Returns the first Monday (UTC midnight) on or after the given date.
- * If draftCompletedAt is not provided, returns the most recent Monday (or today if Monday).
- */
-export function getOfficialLeagueStartDate(draftCompletedAt?: string | null): Date {
-  const src = draftCompletedAt ? new Date(draftCompletedAt) : new Date();
-  const base = new Date(Date.UTC(src.getUTCFullYear(), src.getUTCMonth(), src.getUTCDate()));
-  const day = base.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  // Days until next Monday: 0 if already Monday, otherwise (8 - day) % 7
-  const daysToMonday = (8 - day) % 7;
-  base.setUTCDate(base.getUTCDate() + daysToMonday);
-  return base;
+export function parseDateStr(dateStr: string): Date {
+  return new Date(`${dateStr}T00:00:00.000Z`);
 }
 
-/**
- * Returns the 7 UTC Date objects for the given week number (Mon–Sun).
- * leagueStart must be a Monday (output of getOfficialLeagueStartDate).
- */
-export function getWeekDates(week: number, leagueStart: Date): Date[] {
-  const dates: Date[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(leagueStart);
-    d.setUTCDate(leagueStart.getUTCDate() + (week - 1) * 7 + i);
-    dates.push(d);
-  }
-  return dates;
+export function addUtcDays(value: Date | string, days: number): Date {
+  const d = normalizeUtcDate(value);
+  return new Date(d.getTime() + days * DAY_MS);
 }
 
-export function getWeekDateStrings(week: number, leagueStart: Date): string[] {
+export function getOfficialLeagueStartDate(draftCompletedAt?: string | null): Date | null {
+  if (!draftCompletedAt) return null;
+  const base = normalizeUtcDate(draftCompletedAt);
+  const day = base.getUTCDay();
+  const daysToMonday = day === 1 ? 0 : (8 - day) % 7;
+  return addUtcDays(base, daysToMonday);
+}
+
+export function getWeekStartDate(week: number, leagueStart: Date | null): Date | null {
+  if (!leagueStart || week < 1) return null;
+  return addUtcDays(leagueStart, (week - 1) * 7);
+}
+
+export function getWeekDates(week: number, leagueStart: Date | null): Date[] {
+  const weekStart = getWeekStartDate(week, leagueStart);
+  if (!weekStart) return [];
+  return Array.from({ length: 7 }, (_, index) => addUtcDays(weekStart, index));
+}
+
+export function getWeekDateStrings(week: number, leagueStart: Date | null): string[] {
   return getWeekDates(week, leagueStart).map(formatDateStr);
 }
 
@@ -46,18 +53,36 @@ export function getTodayStr(): string {
   return formatDateStr(new Date());
 }
 
-export function getCurrentWeek(leagueStart: Date): number {
-  const now = new Date();
-  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+export function getCurrentWeek(leagueStart: Date | null, today: Date | string = new Date()): number {
+  if (!leagueStart) return 1;
+  const todayUtc = normalizeUtcDate(today);
   const diff = todayUtc.getTime() - leagueStart.getTime();
   if (diff < 0) return 1;
-  return Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return Math.floor(diff / (7 * DAY_MS)) + 1;
 }
 
-export function getWeekStatus(week: number, leagueStart: Date): "past" | "current" | "future" {
+export function getWeekStatus(week: number, leagueStart: Date | null, today: Date | string = new Date()): "pending" | "past" | "current" | "future" {
+  if (!leagueStart) return "pending";
   const dates = getWeekDateStrings(week, leagueStart);
-  const today = getTodayStr();
-  if (today > dates[6]) return "past";
-  if (today < dates[0]) return "future";
+  if (dates.length === 0) return "pending";
+  const todayStr = formatDateStr(today);
+  if (todayStr < dates[0]) return week === 1 ? "pending" : "future";
+  if (todayStr > dates[6]) return "past";
   return "current";
+}
+
+export function getScoringWeekRange(week: number, leagueStart: Date | null): {
+  week: number;
+  startDate: string;
+  endDate: string;
+  dateStrings: string[];
+} | null {
+  const dateStrings = getWeekDateStrings(week, leagueStart);
+  if (dateStrings.length === 0) return null;
+  return {
+    week,
+    startDate: dateStrings[0],
+    endDate: dateStrings[6],
+    dateStrings,
+  };
 }
