@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -13,7 +13,6 @@ import {
   getTeamRoster,
   fetchTeamRosterFromDB,
   fetchTeamLineupFromDB,
-  fetchLineupHistoryFromDB,
   supabase,
   League,
   LeagueMember,
@@ -26,6 +25,7 @@ import {
   getWeekDateStrings,
   formatDateStr,
   getTodayStr,
+  getOfficialLeagueStartDate,
 } from "@/lib/week-utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -146,12 +146,10 @@ export default function MatchupDetailPage() {
   const week = parts[0] || 1;
   const matchupIdx = parts[1] ?? 0;
 
-  const weekDates = getWeekDates(week);
-  const dateStrings = getWeekDateStrings(week);
-  const scoringDateStrings = getWeekdayScoringDates(dateStrings);
   const todayStr = getTodayStr();
 
   const [league, setLeague] = useState<League | null>(null);
+  const [leagueStart, setLeagueStart] = useState<Date>(() => getOfficialLeagueStartDate(null));
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [homeTeam, setHomeTeam] = useState<{ member: LeagueMember; fantasy: any } | null>(null);
   const [awayTeam, setAwayTeam] = useState<{ member: LeagueMember; fantasy: any } | null>(null);
@@ -170,6 +168,13 @@ export default function MatchupDetailPage() {
   // View mode: "total" or a date string like "2026-03-09"
   const [viewMode, setViewMode] = useState<string>("total");
 
+  const weekDates = useMemo(() => getWeekDates(week, leagueStart), [week, leagueStart]);
+  const dateStrings = useMemo(() => getWeekDateStrings(week, leagueStart), [week, leagueStart]);
+  const scoringDateStrings = useMemo(
+    () => dateStrings.filter(d => { const day = new Date(`${d}T00:00:00`).getDay(); return day >= 1 && day <= 5; }),
+    [dateStrings]
+  );
+
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
@@ -181,6 +186,7 @@ export default function MatchupDetailPage() {
       const leagueData = await getLeagueBySlug(slug);
       if (!leagueData) return;
       setLeague(leagueData);
+      setLeagueStart(getOfficialLeagueStartDate(leagueData.draft_completed_at));
 
       const [membersData, { data: teamsData }] = await Promise.all([
         getLeagueMembers(leagueData.id),
@@ -220,14 +226,12 @@ export default function MatchupDetailPage() {
           setHomeTeam({ member: matchup.home, fantasy: homeFT });
           setAwayTeam({ member: matchup.away, fantasy: awayFT });
 
-          // Fetch rosters, lineups, and lineup history from DB
-          const [hRoster, aRoster, hLineupCurrent, aLineupCurrent, hHistory, aHistory] = await Promise.all([
+          // Fetch rosters and lineups from DB
+          const [hRoster, aRoster, hLineupCurrent, aLineupCurrent] = await Promise.all([
             homeFT ? fetchTeamRosterFromDB(leagueData.id, homeFT.id).catch(() => getTeamRoster(leagueData.id, homeFT.id)) : Promise.resolve([]),
             awayFT ? fetchTeamRosterFromDB(leagueData.id, awayFT.id).catch(() => getTeamRoster(leagueData.id, awayFT.id)) : Promise.resolve([]),
             homeFT ? fetchTeamLineupFromDB(leagueData.id, homeFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
             awayFT ? fetchTeamLineupFromDB(leagueData.id, awayFT.id).catch(() => ({} as LineupMap)) : Promise.resolve({} as LineupMap),
-            homeFT ? fetchLineupHistoryFromDB(leagueData.id, homeFT.id).catch(() => ({})) : Promise.resolve({}),
-            awayFT ? fetchLineupHistoryFromDB(leagueData.id, awayFT.id).catch(() => ({})) : Promise.resolve({}),
           ]);
           setHomeRoster(hRoster);
           setAwayRoster(aRoster);
