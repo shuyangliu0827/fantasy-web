@@ -17,7 +17,7 @@ import {
   League,
   LeagueMember,
   RosterPlayer,
-  LineupMap,
+  DailyLineupMap,
 } from "@/lib/store";
 import {
   getWeekDateStrings,
@@ -69,7 +69,7 @@ export default function ScoreboardPage() {
 
   // Real data state
   const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
-  const [teamLineups, setTeamLineups] = useState<Record<string, LineupMap>>({});
+  const [teamDailyLineups, setTeamDailyLineups] = useState<Record<string, DailyLineupMap>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
   const [scoresLoading, setScoresLoading] = useState(false);
@@ -94,17 +94,19 @@ export default function ScoreboardPage() {
 
       if (teamsData) {
         const rosters: Record<string, RosterPlayer[]> = {};
-        const lineups: Record<string, LineupMap> = {};
+        const lineups: Record<string, DailyLineupMap> = {};
         for (const team of teamsData) {
           if (team.roster_data && Array.isArray(team.roster_data)) {
             rosters[team.user_id] = team.roster_data as RosterPlayer[];
           } else {
             rosters[team.user_id] = getTeamRoster(leagueData.id, team.id);
           }
-          lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
+          // Load daily lineups for each team
+          const daily = await fetchTeamLineupFromDB(leagueData.id, team.id);
+          lineups[team.user_id] = daily;
         }
         setTeamRosters(rosters);
-        setTeamLineups(lineups);
+        setTeamDailyLineups(lineups);
       }
 
       // Fetch player stats cache for name -> BDL ID mapping
@@ -208,22 +210,18 @@ export default function ScoreboardPage() {
     return null;
   }
 
-  function getStartersFromLineup(roster: RosterPlayer[], lineup: LineupMap): RosterPlayer[] {
-    const playerMap = new Map(roster.map((p) => [p.id, p]));
-    const starters: RosterPlayer[] = [];
-    for (const slot of Object.keys(lineup)) {
-      if (!STARTER_SLOTS.has(slot)) continue;
-      const player = playerMap.get(lineup[slot]);
-      if (player) starters.push(player);
-    }
-    return starters;
-  }
-
-  function calcWeekTotalForRoster(roster: RosterPlayer[], lineup: LineupMap): number {
-    const scoringDates = getWeekdayScoringDates(getWeekDateStrings(selectedWeek));
-    const starters = getStartersFromLineup(roster, lineup);
-    return scoringDates.reduce((total, dateStr) => {
-      return total + starters.reduce((sum, p) => {
+  function calcWeekTotalForRoster(roster: RosterPlayer[], dailyLineups: DailyLineupMap): number {
+    const dateStrings = getWeekDateStrings(selectedWeek);
+    return dateStrings.reduce((total, dateStr) => {
+      // Get starter IDs for this date
+      const lineup = dailyLineups[dateStr] || {};
+      const starterIds = new Set<string>();
+      for (const [slot, pid] of Object.entries(lineup)) {
+        if (!slot.startsWith("BE") && pid) starterIds.add(pid);
+      }
+      // If no lineup set for this date, count all players (backward compat)
+      const players = starterIds.size > 0 ? roster.filter(p => starterIds.has(p.id)) : roster;
+      return total + players.reduce((sum, p) => {
         const stats = getPlayerDayStats(p, dateStr);
         return sum + (stats?.fpts || 0);
       }, 0);
@@ -249,15 +247,15 @@ export default function ScoreboardPage() {
 
     const homeRoster = teamRosters[fixed.user_id] || [];
     const awayRoster = teamRosters[rotating[round].user_id] || [];
-    const homeLineup = teamLineups[fixed.user_id] || {};
-    const awayLineup = teamLineups[rotating[round].user_id] || {};
+    const homeLineups = teamDailyLineups[fixed.user_id] || {};
+    const awayLineups = teamDailyLineups[rotating[round].user_id] || {};
 
     result.push({
       id: id++,
       home: fixed,
       away: rotating[round],
-      homeScore: calcWeekTotalForRoster(homeRoster, homeLineup),
-      awayScore: calcWeekTotalForRoster(awayRoster, awayLineup),
+      homeScore: calcWeekTotalForRoster(homeRoster, homeLineups),
+      awayScore: calcWeekTotalForRoster(awayRoster, awayLineups),
     });
 
     for (let i = 1; i <= half; i++) {
@@ -265,14 +263,14 @@ export default function ScoreboardPage() {
       const aw = rotating[(round + n - 1 - i) % (n - 1)];
       const hRoster = teamRosters[hm.user_id] || [];
       const aRoster = teamRosters[aw.user_id] || [];
-      const hLineup = teamLineups[hm.user_id] || {};
-      const aLineup = teamLineups[aw.user_id] || {};
+      const hLineups = teamDailyLineups[hm.user_id] || {};
+      const aLineups = teamDailyLineups[aw.user_id] || {};
       result.push({
         id: id++,
         home: hm,
         away: aw,
-        homeScore: calcWeekTotalForRoster(hRoster, hLineup),
-        awayScore: calcWeekTotalForRoster(aRoster, aLineup),
+        homeScore: calcWeekTotalForRoster(hRoster, hLineups),
+        awayScore: calcWeekTotalForRoster(aRoster, aLineups),
       });
     }
 
