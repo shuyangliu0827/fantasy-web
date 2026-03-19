@@ -1,300 +1,209 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
-  getSessionUser,
-  getLeagueBySlug,
-  getLeagueMembers,
-  getTeamRoster,
-  fetchTeamLineupFromDB,
-  supabase,
+  DailyLineupMap,
   League,
   LeagueMember,
   RosterPlayer,
-  DailyLineupMap,
+  fetchTeamLineupFromDB,
+  getLeagueBySlug,
+  getLeagueMembers,
+  getSessionUser,
+  getTeamRoster,
+  supabase,
 } from "@/lib/store";
+import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+import { getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
 import {
-  getWeekDateStrings,
-  getWeekStatus,
-  getTodayStr,
+  CANONICAL_TIMEZONE,
+  formatDateStr,
   getCurrentWeek,
   getOfficialLeagueStartDate,
+  getScoringWeekRange,
+  getWeekStatus,
 } from "@/lib/week-utils";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type LineupMap = Record<string, string>;
 
 type CachedPlayerStats = {
   id: number;
   name: string;
-  team: string;
-  averages: Record<string, number>;
-  fptsAvg: number;
-  injury?: string;
 };
 
-type PlayerGameStats = {
-  min: number; fgm: number; fga: number; fg3m: number;
-  ftm: number; fta: number; reb: number; ast: number;
-  stl: number; blk: number; tov: number; pts: number;
-  fpts: number;
-};
-
-type DateStatsMap = Record<string, PlayerGameStats>;
-
-const STARTER_SLOTS = new Set(["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"]);
-
-// ── Component ─────────────────────────────────────────────────────────────────
+const MAX_WEEKS = 20;
 
 export default function ScoreboardPage() {
   const { t } = useLang();
-  const params = useParams();
-  const slug = params.slug as string;
+  const { slug } = useParams<{ slug: string }>();
 
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(1);
-  const [leagueStart, setLeagueStart] = useState<Date>(() => getOfficialLeagueStartDate(null));
-
-  // Real data state
+  const [loading, setLoading] = useState(true);
+  const [scoresLoading, setScoresLoading] = useState(false);
   const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
   const [teamLineups, setTeamLineups] = useState<Record<string, DailyLineupMap>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
-  const [scoresLoading, setScoresLoading] = useState(false);
+
+  const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
+  const weekRange = useMemo(() => getScoringWeekRange(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
+  const weekStatus = useMemo(() => getWeekStatus(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
+  const isOwner = Boolean(user && league && league.commissioner_id === user.id);
 
   useEffect(() => {
     setUser(getSessionUser());
-    loadData();
-  }, [slug]);
-
-  async function loadData() {
-    const leagueData = await getLeagueBySlug(slug);
-    if (leagueData) {
-      setLeague(leagueData);
-      const start = getOfficialLeagueStartDate(leagueData.draft_completed_at);
-      setLeagueStart(start);
-      setSelectedWeek(getCurrentWeek(start));
-      const membersData = await getLeagueMembers(leagueData.id);
-      setMembers(membersData);
-
-      // Fetch all fantasy team rosters
-      const { data: teamsData } = await supabase
-        .from("fantasy_teams")
-        .select("id, user_id, name, roster_data, wins, losses")
-        .eq("league_id", leagueData.id);
-
-      if (teamsData) {
-        const rosters: Record<string, RosterPlayer[]> = {};
-        const lineups: Record<string, DailyLineupMap> = {};
-        for (const team of teamsData) {
-          if (team.roster_data && Array.isArray(team.roster_data)) {
-            rosters[team.user_id] = team.roster_data as RosterPlayer[];
-          } else {
-            rosters[team.user_id] = getTeamRoster(leagueData.id, team.id);
-          }
-          lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        }
-        setTeamRosters(rosters);
-        setTeamLineups(lineups);
-      }
-
-      // Fetch player stats cache for name -> BDL ID mapping
-      try {
-        const res = await fetch("/api/nba-stats");
-        const data = await res.json();
-        if (data.status === "success" && data.players) {
-          const map = new Map<string, CachedPlayerStats>();
-          for (const p of data.players) {
-            map.set(String(p.id), p);
-          }
-          setPlayerStatsCache(map);
-        }
-      } catch (err) {
-        console.error("Failed to fetch player stats:", err);
-      }
-    }
-    setLoading(false);
-  }
-
-  // Fetch week stats when selectedWeek changes
-  const fetchWeekStats = useCallback(async (week: number) => {
-    setScoresLoading(true);
-    const dateStrings = getWeekDateStrings(week, leagueStart);
-    const todayStr = getTodayStr();
-    const pastOrTodayDates = dateStrings.filter(d => d <= todayStr);
-
-    if (pastOrTodayDates.length === 0) {
-      setWeekDayStats({});
-      setScoresLoading(false);
-      return;
-    }
-
-    try {
-      const dayStatsResults = await Promise.all(
-        pastOrTodayDates.map(date =>
-          fetch(`/api/nba-game-stats?date=${date}`)
-            .then(r => r.json())
-            .then(data => ({
-              date,
-              stats: data.status === "success" ? (data.stats as DateStatsMap) : {},
-            }))
-            .catch(() => ({ date, stats: {} as DateStatsMap }))
-        )
-      );
-
-      const allDayStats: Record<string, DateStatsMap> = {};
-      for (const { date, stats } of dayStatsResults) {
-        allDayStats[date] = stats;
-      }
-      setWeekDayStats(allDayStats);
-    } catch (err) {
-      console.error("Failed to fetch week stats:", err);
-    } finally {
-      setScoresLoading(false);
-    }
-  }, [leagueStart]);
+  }, []);
 
   useEffect(() => {
-    if (!loading && league) {
-      fetchWeekStats(selectedWeek);
+    let cancelled = false;
+
+    async function loadData() {
+      setLoading(true);
+      const leagueData = await getLeagueBySlug(slug);
+      if (!leagueData || cancelled) {
+        setLeague(null);
+        setLoading(false);
+        return;
+      }
+
+      setLeague(leagueData);
+      const officialStart = getOfficialLeagueStartDate(leagueData.draft_completed_at);
+      setSelectedWeek(getCurrentWeek(officialStart));
+
+      const [membersData, teamsResult, statsResult] = await Promise.all([
+        getLeagueMembers(leagueData.id),
+        supabase.from("fantasy_teams").select("id, user_id, roster_data").eq("league_id", leagueData.id),
+        fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
+      ]);
+
+      if (cancelled) return;
+      setMembers(membersData);
+
+      const rosters: Record<string, RosterPlayer[]> = {};
+      const lineups: Record<string, DailyLineupMap> = {};
+      for (const team of teamsResult.data || []) {
+        rosters[team.user_id] = Array.isArray(team.roster_data)
+          ? (team.roster_data as RosterPlayer[])
+          : getTeamRoster(leagueData.id, team.id);
+        lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
+      }
+      if (cancelled) return;
+      setTeamRosters(rosters);
+      setTeamLineups(lineups);
+
+      if (statsResult.status === "success" && Array.isArray(statsResult.players)) {
+        const statsMap = new Map<string, CachedPlayerStats>();
+        for (const player of statsResult.players) {
+          statsMap.set(String(player.id), { id: player.id, name: player.name });
+        }
+        setPlayerStatsCache(statsMap);
+      }
+
+      setLoading(false);
     }
-  }, [selectedWeek, loading, league, fetchWeekStats, leagueStart]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+    loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
-  const isOwner = user && league && league.commissioner_id === user.id;
+  useEffect(() => {
+    let cancelled = false;
 
-  const getMemberName = (member: LeagueMember) => {
+    async function loadWeekStats() {
+      if (!weekRange) {
+        setWeekDayStats({});
+        return;
+      }
+      setScoresLoading(true);
+      try {
+        const results = await Promise.all(
+          weekRange.dateStrings.map(async (date) => {
+            const response = await fetch(`/api/nba-game-stats?date=${date}`);
+            const payload = await response.json();
+            return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+          }),
+        );
+        if (!cancelled) {
+          setWeekDayStats(Object.fromEntries(results));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch scoreboard stats", error);
+          setWeekDayStats({});
+        }
+      } finally {
+        if (!cancelled) setScoresLoading(false);
+      }
+    }
+
+    loadWeekStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [weekRange]);
+
+  function getMemberName(member: LeagueMember) {
     return member.user?.username || member.user?.name || "Anonymous";
-  };
-
-  function seededShuffle<T>(arr: T[], seed: number): T[] {
-    const result = [...arr];
-    let s = seed;
-    for (let i = result.length - 1; i > 0; i--) {
-      s = (s * 1103515245 + 12345) & 0x7fffffff;
-      const j = s % (i + 1);
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-  }
-
-  function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
-    const byId = playerStatsCache.get(player.id);
-    if (byId) return byId;
-    for (const s of playerStatsCache.values()) {
-      if (s.name === player.name) return s;
-    }
-    return null;
   }
 
   function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
-    const todayStr = getTodayStr();
-    if (dateStr > todayStr) return null;
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
     if (dayMap[player.id]) return dayMap[player.id];
-    const cached = getStatsForPlayer(player);
-    if (cached && dayMap[String(cached.id)]) return dayMap[String(cached.id)];
+
+    for (const cached of playerStatsCache.values()) {
+      if (cached.name === player.name && dayMap[String(cached.id)]) {
+        return dayMap[String(cached.id)];
+      }
+    }
+
     return null;
   }
 
-  function calcWeekTotalForRoster(roster: RosterPlayer[], dailyLineups: DailyLineupMap): number {
-    const dateStrings = getWeekDateStrings(selectedWeek, leagueStart);
-    return dateStrings.reduce((total, dateStr) => {
-      // Get starter IDs for this date from saved daily lineup
-      const lineup = dailyLineups[dateStr] || {};
-      const starterIds = new Set<string>();
-      for (const [slot, pid] of Object.entries(lineup)) {
-        if (!slot.startsWith("BE") && pid) starterIds.add(pid);
-      }
-      // No lineup set → 0 points (no fallback to all players)
-      if (starterIds.size === 0) return total;
-      const players = roster.filter(p => starterIds.has(p.id));
-      return total + players.reduce((sum, p) => {
-        const stats = getPlayerDayStats(p, dateStr);
-        return sum + (stats?.fpts || 0);
-      }, 0);
-    }, 0);
-  }
+  const matchupCards = useMemo(() => {
+    if (!league || !weekRange) return [];
+    return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
+      const homeRoster = teamRosters[matchup.home.user_id] || [];
+      const awayRoster = teamRosters[matchup.away.user_id] || [];
+      const homeLineups = teamLineups[matchup.home.user_id] || {};
+      const awayLineups = teamLineups[matchup.away.user_id] || {};
 
-  const generateMatchupsForWeek = (week: number) => {
-    const n = members.length;
-    if (n < 2 || n % 2 !== 0) return [];
-
-    const sorted = [...members].sort((a, b) => a.user_id.localeCompare(b.user_id));
-    const seed = (league?.id || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    const shuffled = seededShuffle(sorted, seed);
-
-    const fixed = shuffled[0];
-    const rotating = shuffled.slice(1);
-    const numRounds = n - 1;
-    const round = (week - 1) % numRounds;
-    const half = (n - 2) / 2;
-
-    const result = [];
-    let id = 0;
-
-    const homeRoster = teamRosters[fixed.user_id] || [];
-    const awayRoster = teamRosters[rotating[round].user_id] || [];
-
-    result.push({
-      id: id++,
-      home: fixed,
-      away: rotating[round],
-      homeScore: calcWeekTotalForRoster(homeRoster, teamLineups[fixed.user_id] || {}),
-      awayScore: calcWeekTotalForRoster(awayRoster, teamLineups[rotating[round].user_id] || {}),
+      return {
+        ...matchup,
+        homeName: getMemberName(matchup.home),
+        awayName: getMemberName(matchup.away),
+        homeScore: getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats),
+        awayScore: getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats),
+      };
     });
+  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache]);
 
-    for (let i = 1; i <= half; i++) {
-      const hm = rotating[(round + i) % (n - 1)];
-      const aw = rotating[(round + n - 1 - i) % (n - 1)];
-      const hRoster = teamRosters[hm.user_id] || [];
-      const aRoster = teamRosters[aw.user_id] || [];
-      result.push({
-        id: id++,
-        home: hm,
-        away: aw,
-        homeScore: calcWeekTotalForRoster(hRoster, teamLineups[hm.user_id] || {}),
-        awayScore: calcWeekTotalForRoster(aRoster, teamLineups[aw.user_id] || {}),
-      });
-    }
-
-    return result;
-  };
-
-  const matchups = generateMatchupsForWeek(selectedWeek);
-  const weeks = Array.from({ length: 20 }, (_, i) => i + 1);
-  const weekStatus = getWeekStatus(selectedWeek, leagueStart);
-
-  function getStatusLabel() {
-    if (weekStatus === "past") return t("已结束", "Final");
-    if (weekStatus === "current") return t("进行中", "In Progress");
-    return t("已安排", "Scheduled");
+  function getStatusMeta() {
+    if (weekStatus === "past") return { label: t("已结束", "Final"), className: "status-final" };
+    if (weekStatus === "current") return { label: t("进行中", "Live"), className: "status-live" };
+    if (weekStatus === "future") return { label: t("已安排", "Scheduled"), className: "status-scheduled" };
+    return { label: t("待启用", "Pending start"), className: "status-pending" };
   }
 
-  function getStatusClass() {
-    if (weekStatus === "past") return "status-final";
-    if (weekStatus === "current") return "status-live";
-    return "status-scheduled";
-  }
+  const statusMeta = getStatusMeta();
+  const weekOptions = Array.from({ length: MAX_WEEKS }, (_, index) => index + 1);
+  const rangeLabel = weekRange
+    ? `${weekRange.startDate} → ${weekRange.endDate}`
+    : t("选秀完成后的首个周一开始", "Starts on the first Monday after the draft completes");
 
   if (loading) {
     return (
-      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <div className="page-shell">
         <LightHeader activeHref="/league" />
-        <div className="loading-container">
-          <p>{t("加载中...", "Loading...")}</p>
-        </div>
+        <div className="state-card">{t("加载中...", "Loading...")}</div>
         <style jsx>{styles}</style>
       </div>
     );
@@ -302,371 +211,454 @@ export default function ScoreboardPage() {
 
   if (!league) {
     return (
-      <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+      <div className="page-shell">
         <LightHeader activeHref="/league" />
-        <div className="error-container">
-          <p>{t("联赛不存在", "League not found")}</p>
-        </div>
+        <div className="state-card">{t("联赛不存在", "League not found")}</div>
         <style jsx>{styles}</style>
       </div>
     );
   }
 
   return (
-    <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
+    <div className="page-shell">
       <LightHeader activeHref="/league" />
 
-      <div className="league-header-mini">
-        <div className="league-header-inner">
-          <Link href={`/league/${slug}`} className="league-title">
-            <span className="league-icon"></span>
+      <div className="league-bar">
+        <div className="container league-bar-inner">
+          <Link href={`/league/${slug}`} className="league-link">
+            <span className="league-dot" />
             <span>{league.name}</span>
           </Link>
+          <span className="timezone-pill">{t("官方时区", "Official timezone")}: {CANONICAL_TIMEZONE}</span>
         </div>
       </div>
 
-      <LeagueNav slug={slug} isOwner={!!isOwner} leagueId={league.id} />
+      <LeagueNav slug={slug} isOwner={isOwner} leagueId={league.id} />
 
       <main className="page-content">
-        <div className="container">
-          <div className="page-header">
-            <h1>{t("记分板", "Scoreboard")}</h1>
-            <div className="week-selector">
-              <button
-                className="week-nav"
-                onClick={() => setSelectedWeek(Math.max(1, selectedWeek - 1))}
-                disabled={selectedWeek === 1}
-              >
-                ←
-              </button>
-              <select
-                value={selectedWeek}
-                onChange={(e) => setSelectedWeek(Number(e.target.value))}
-                className="week-dropdown"
-              >
-                {weeks.map((week) => (
-                  <option key={week} value={week}>
-                    {t(`第 ${week} 周`, `Week ${week}`)}
-                  </option>
+        <div className="container layout-stack">
+          <section className="hero-card">
+            <div>
+              <p className="eyebrow">{t("对阵记分板", "Matchup scoreboard")}</p>
+              <h1>{t("周度比分总览", "Weekly scoring overview")}</h1>
+              <p className="subcopy">
+                {t(
+                  "所有比分均基于每日保存的首发阵容快照，并按周一到周日累计。",
+                  "All scores come from saved daily starter snapshots and roll up Monday through Sunday.",
+                )}
+              </p>
+            </div>
+            <div className="hero-meta-grid">
+              <div className="meta-card">
+                <span>{t("当前周", "Selected week")}</span>
+                <strong>{t(`第 ${selectedWeek} 周`, `Week ${selectedWeek}`)}</strong>
+                <small>{rangeLabel}</small>
+              </div>
+              <div className="meta-card">
+                <span>{t("计分状态", "Scoring status")}</span>
+                <strong>{statusMeta.label}</strong>
+                <small>
+                  {leagueStart
+                    ? t(`Week 1 从 ${formatDateStr(leagueStart)} 开始`, `Week 1 starts on ${formatDateStr(leagueStart)}`)
+                    : t("需先完成选秀", "Draft completion is required before scoring starts")}
+                </small>
+              </div>
+            </div>
+          </section>
+
+          <section className="toolbar-card">
+            <div>
+              <p className="toolbar-label">{t("周选择", "Week selector")}</p>
+              <div className="toolbar-title-row">
+                <h2>{t(`第 ${selectedWeek} 周`, `Week ${selectedWeek}`)}</h2>
+                <span className={`status-chip ${statusMeta.className}`}>{statusMeta.label}</span>
+              </div>
+            </div>
+            <div className="week-controls">
+              <button className="nav-btn" onClick={() => setSelectedWeek((prev) => Math.max(1, prev - 1))} disabled={selectedWeek === 1}>←</button>
+              <select className="week-select" value={selectedWeek} onChange={(event) => setSelectedWeek(Number(event.target.value))}>
+                {weekOptions.map((week) => (
+                  <option key={week} value={week}>{t(`第 ${week} 周`, `Week ${week}`)}</option>
                 ))}
               </select>
-              <button
-                className="week-nav"
-                onClick={() => setSelectedWeek(Math.min(20, selectedWeek + 1))}
-                disabled={selectedWeek === 20}
-              >
-                →
-              </button>
+              <button className="nav-btn" onClick={() => setSelectedWeek((prev) => Math.min(MAX_WEEKS, prev + 1))} disabled={selectedWeek === MAX_WEEKS}>→</button>
             </div>
-          </div>
+          </section>
 
-          <div className="matchups-grid">
-            {matchups.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon"></div>
-                <h3>{t("还没有对阵", "No matchups yet")}</h3>
-                <p>{t("联赛需要至少2支队伍才能生成对阵", "League needs at least 2 teams to generate matchups")}</p>
+          {!leagueStart && (
+            <section className="notice-card pending">
+              <strong>{t("官方计分尚未开始", "Official scoring has not started")}</strong>
+              <p>
+                {t(
+                  "按照产品规则，Week 1 会在选秀完成后的首个周一启动，期间不会生成或累计任何官方比分。",
+                  "Per product rules, Week 1 begins on the first Monday after the draft completes, and no official scores accumulate before then.",
+                )}
+              </p>
+            </section>
+          )}
+
+          <section className="matchups-grid">
+            {matchupCards.length === 0 ? (
+              <div className="notice-card">
+                <strong>{t("暂无可展示对阵", "No matchups to display")}</strong>
+                <p>{t("联赛至少需要 2 支且为偶数支队伍才会生成对阵。", "The league needs an even number of teams to generate matchups.")}</p>
               </div>
             ) : (
-              matchups.map((matchup) => (
-                <div key={matchup.id} className="matchup-card">
-                  <div className="matchup-header">
-                    <span className={`matchup-status ${getStatusClass()}`}>{getStatusLabel()}</span>
-                    <span className="matchup-week">{t(`第 ${selectedWeek} 周`, `Week ${selectedWeek}`)}</span>
-                  </div>
-
-                  <div className="matchup-teams">
-                    <div className="team home">
-                      <div className="team-avatar">{getMemberName(matchup.home)[0]?.toUpperCase()}</div>
-                      <div className="team-info">
-                        <span className="team-name">{getMemberName(matchup.home)}</span>
-                      </div>
-                      <span className="team-score">
-                        {scoresLoading ? "..." : Math.round(matchup.homeScore * 10) / 10}
-                      </span>
+              matchupCards.map((matchup) => {
+                const homeLeading = matchup.homeScore >= matchup.awayScore;
+                const awayLeading = matchup.awayScore >= matchup.homeScore;
+                return (
+                  <article className="matchup-card" key={matchup.id}>
+                    <div className="card-top">
+                      <span className={`status-chip ${statusMeta.className}`}>{statusMeta.label}</span>
+                      <span className="date-range">{rangeLabel}</span>
                     </div>
-
-                    <div className="vs">VS</div>
-
-                    <div className="team away">
-                      <span className="team-score">
-                        {scoresLoading ? "..." : Math.round(matchup.awayScore * 10) / 10}
-                      </span>
-                      <div className="team-info">
-                        <span className="team-name">{getMemberName(matchup.away)}</span>
+                    <div className="team-stack">
+                      <div className={`team-row ${homeLeading ? "leader" : ""}`}>
+                        <div className="identity-block">
+                          <div className="avatar">{matchup.homeName[0]?.toUpperCase()}</div>
+                          <div>
+                            <div className="team-name">{matchup.homeName}</div>
+                            <div className="team-sub">{t("保存首发累计分", "Saved starter total")}</div>
+                          </div>
+                        </div>
+                        <div className="score-block">
+                          {scoresLoading ? "..." : matchup.homeScore.toFixed(1)}
+                        </div>
                       </div>
-                      <div className="team-avatar">{getMemberName(matchup.away)[0]?.toUpperCase()}</div>
+                      <div className="versus-line">VS</div>
+                      <div className={`team-row ${awayLeading ? "leader" : ""}`}>
+                        <div className="identity-block">
+                          <div className="avatar away">{matchup.awayName[0]?.toUpperCase()}</div>
+                          <div>
+                            <div className="team-name">{matchup.awayName}</div>
+                            <div className="team-sub">{t("保存首发累计分", "Saved starter total")}</div>
+                          </div>
+                        </div>
+                        <div className="score-block">
+                          {scoresLoading ? "..." : matchup.awayScore.toFixed(1)}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="matchup-footer">
-                    <Link href={`/league/${slug}/matchup/${selectedWeek}-${matchup.id}`} className="view-matchup">
-                      {t("查看详情", "View Matchup")} →
-                    </Link>
-                  </div>
-                </div>
-              ))
+                    <div className="card-footer">
+                      <span className="footer-copy">{t("比分与详情页使用同一周度汇总逻辑", "Scoreboard and detail share one scoring pipeline")}</span>
+                      <Link href={`/league/${slug}/matchup/${selectedWeek}-${matchup.id}`} className="detail-link">
+                        {t("查看详情", "View details")} →
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })
             )}
-          </div>
+          </section>
         </div>
       </main>
-
       <style jsx>{styles}</style>
     </div>
   );
 }
 
 const styles = `
-  .league-header-mini {
-    background: #1e3a8a;
-    border-bottom: none;
+  .page-shell {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #f8fbff 0%, #f3f6fb 100%);
   }
-
-  .league-header-inner {
-    max-width: 1200px;
+  .container {
+    max-width: 1180px;
     margin: 0 auto;
-    padding: 16px;
+    padding: 0 20px;
   }
-
-  .league-title {
+  .league-bar {
+    background: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid #e2e8f0;
+    backdrop-filter: blur(12px);
+  }
+  .league-bar-inner {
+    min-height: 64px;
     display: flex;
     align-items: center;
-    gap: 12px;
-    color: #fff;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .league-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #0f172a;
     text-decoration: none;
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .league-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #f59e0b;
+    box-shadow: 0 0 0 6px #fff7ed;
+  }
+  .timezone-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #dbeafe;
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
     font-weight: 600;
   }
-
-  .league-icon {
-    font-size: 28px;
-  }
-
   .page-content {
-    min-height: calc(100vh - 200px);
-    background: #f9fafb;
-    padding: 24px 16px;
+    padding: 28px 0 56px;
   }
-
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-
-  .page-header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0;
-  }
-
-  .week-selector {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .week-nav {
-    width: 36px;
-    height: 36px;
-    border: 1px solid #e5e7eb;
-    background: #fff;
-    color: #111827;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-  }
-
-  .week-nav:hover:not(:disabled) {
-    border-color: #1e3a8a;
-    color: #1e3a8a;
-  }
-
-  .week-nav:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .week-dropdown {
-    padding: 8px 16px;
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    color: #111827;
-    font-size: 14px;
-    cursor: pointer;
-  }
-
-  .matchups-grid {
+  .layout-stack {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 16px;
+    gap: 20px;
   }
-
-  .matchup-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    overflow: hidden;
+  .hero-card,
+  .toolbar-card,
+  .matchup-card,
+  .notice-card,
+  .meta-card {
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
   }
-
-  .matchup-header {
+  .hero-card {
+    border-radius: 24px;
+    padding: 28px;
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    gap: 20px;
+    flex-wrap: wrap;
   }
-
-  .matchup-status {
+  .eyebrow, .toolbar-label {
+    margin: 0 0 8px;
+    color: #2563eb;
     font-size: 12px;
-    padding: 4px 10px;
-    border-radius: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
-
-  .status-scheduled {
-    background: #dbeafe;
-    color: #1e3a8a;
+  .hero-card h1, .toolbar-card h2 {
+    margin: 0;
+    color: #0f172a;
   }
-
-  .status-live {
-    background: rgba(74, 222, 128, 0.2);
-    color: #4ade80;
+  .hero-card h1 {
+    font-size: 32px;
+    letter-spacing: -0.02em;
   }
-
-  .status-final {
-    background: rgba(148, 163, 184, 0.2);
-    color: #94a3b8;
+  .subcopy {
+    margin: 12px 0 0;
+    max-width: 620px;
+    color: #475569;
+    line-height: 1.6;
+    font-size: 15px;
   }
-
-  .matchup-week {
-    font-size: 13px;
-    color: #6b7280;
-  }
-
-  .matchup-teams {
-    padding: 20px 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  .hero-meta-grid {
+    display: grid;
     gap: 12px;
-  }
-
-  .team {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    min-width: min(100%, 320px);
     flex: 1;
   }
-
-  .team.away {
-    flex-direction: row-reverse;
-    text-align: right;
+  .meta-card {
+    border-radius: 18px;
+    padding: 18px;
   }
-
-  .team-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+  .meta-card span,
+  .meta-card small {
+    display: block;
+  }
+  .meta-card span {
+    color: #64748b;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .meta-card strong {
+    color: #0f172a;
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .meta-card small {
+    margin-top: 8px;
+    color: #475569;
+    line-height: 1.5;
+  }
+  .toolbar-card {
+    border-radius: 20px;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .toolbar-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .week-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-btn,
+  .week-select {
+    border: 1px solid #dbe3ef;
+    background: #fff;
+    border-radius: 12px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .nav-btn {
+    width: 42px;
+    height: 42px;
+    cursor: pointer;
+  }
+  .nav-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  .week-select {
+    min-width: 148px;
+    padding: 11px 14px;
+  }
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .status-live { background: #dbeafe; color: #1d4ed8; }
+  .status-final { background: #e2e8f0; color: #475569; }
+  .status-scheduled { background: #ecfdf5; color: #047857; }
+  .status-pending { background: #fff7ed; color: #c2410c; }
+  .notice-card {
+    border-radius: 18px;
+    padding: 18px 20px;
+  }
+  .notice-card strong {
+    display: block;
+    color: #0f172a;
+    margin-bottom: 6px;
+  }
+  .notice-card p {
+    margin: 0;
+    color: #475569;
+    line-height: 1.6;
+  }
+  .notice-card.pending {
+    border-color: #fed7aa;
+    background: #fffaf5;
+  }
+  .matchups-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+  }
+  .matchup-card {
+    border-radius: 22px;
+    padding: 20px;
+    display: grid;
+    gap: 18px;
+  }
+  .card-top,
+  .card-footer,
+  .team-row,
+  .identity-block {
+    display: flex;
+    align-items: center;
+  }
+  .card-top,
+  .card-footer {
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .date-range,
+  .team-sub,
+  .footer-copy,
+  .versus-line {
+    color: #64748b;
+    font-size: 12px;
+  }
+  .team-stack {
+    display: grid;
+    gap: 14px;
+  }
+  .team-row {
+    justify-content: space-between;
+    gap: 12px;
+    border-radius: 18px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid transparent;
+  }
+  .team-row.leader {
+    border-color: #bfdbfe;
+    background: linear-gradient(180deg, #eff6ff 0%, #f8fbff 100%);
+  }
+  .identity-block {
+    gap: 12px;
+    min-width: 0;
+  }
+  .avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
     background: #1e3a8a;
     color: #fff;
-    font-size: 18px;
-    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-weight: 800;
+    font-size: 16px;
+    flex-shrink: 0;
   }
-
-  .team-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
+  .avatar.away { background: #2563eb; }
   .team-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #111827;
-  }
-
-  .team-score {
-    font-size: 28px;
+    color: #0f172a;
+    font-size: 16px;
     font-weight: 700;
-    color: #111827;
-    min-width: 40px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .score-block {
+    color: #0f172a;
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+  }
+  .versus-line {
     text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.18em;
   }
-
-  .vs {
-    font-size: 14px;
-    font-weight: 600;
-    color: #9ca3af;
-    padding: 0 8px;
-  }
-
-  .matchup-footer {
-    padding: 12px 16px;
-    border-top: 1px solid #e5e7eb;
-    text-align: center;
-  }
-
-  .view-matchup {
-    font-size: 13px;
-    color: #1e3a8a;
+  .detail-link {
+    color: #1d4ed8;
+    font-weight: 700;
     text-decoration: none;
   }
-
-  .view-matchup:hover {
-    text-decoration: underline;
-  }
-
-  .empty-state {
-    grid-column: 1 / -1;
-    text-align: center;
-    padding: 60px 20px;
+  .state-card {
+    margin: 48px auto;
+    max-width: 420px;
+    padding: 24px;
+    border-radius: 18px;
     background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
+    color: #475569;
+    text-align: center;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   }
-
-  .empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-  }
-
-  .empty-state h3 {
-    font-size: 18px;
-    color: #111827;
-    margin: 0 0 8px 0;
-  }
-
-  .empty-state p {
-    font-size: 14px;
-    color: #6b7280;
-    margin: 0;
-  }
-
-  .loading-container, .error-container {
-    min-height: 50vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #6b7280;
-  }
-
-  @media (max-width: 500px) {
-    .matchups-grid {
-      grid-template-columns: 1fr;
-    }
+  @media (max-width: 720px) {
+    .container { padding: 0 14px; }
+    .league-bar-inner { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; flex-direction: column; }
+    .hero-card { padding: 22px; }
+    .hero-card h1 { font-size: 28px; }
+    .toolbar-card { padding: 18px; }
+    .score-block { font-size: 28px; }
   }
 `;
