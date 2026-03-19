@@ -8,7 +8,6 @@
    import { supabase } from "./supabase";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
-   import { getWeekDateStrings } from "./week-utils";
    import { PLAYER_POSITIONS } from "./player-positions";
    
    // ==================== Types ====================
@@ -1199,26 +1198,6 @@
     */
    export function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
      setLineupForDate(leagueId, teamId, date, lineup);
-   }
-
-   /**
-    * Get the lineup to use when calculating scores for a given week.
-    * Checks each day of the week (latest first) for a snapshot,
-    * then falls back to the most recent past snapshot, then currentLineup.
-    */
-   export function getLineupForWeek(history: LineupHistory, currentLineup: LineupMap, week: number): LineupMap {
-     const weekDates: string[] = getWeekDateStrings(week);
-     // Latest day of the week first — prefer the most recent edit within the week
-     for (const d of [...weekDates].reverse()) {
-       if (history[d] && Object.keys(history[d]).length > 0) return history[d];
-     }
-     // Fall back to the most recent snapshot before this week
-     const weekStart = weekDates[0];
-     const pastKeys = Object.keys(history)
-       .filter(k => k < weekStart && /^\d{4}-\d{2}-\d{2}$/.test(k))
-       .sort();
-     if (pastKeys.length > 0) return history[pastKeys[pastKeys.length - 1]];
-     return currentLineup;
    }
 
    // Fetch roster from Supabase (shared across users), falls back to localStorage
