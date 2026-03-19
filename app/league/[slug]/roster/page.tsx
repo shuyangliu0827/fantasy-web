@@ -24,7 +24,7 @@ import {
   DailyLineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
-import { fetchRosterHistoryFromDB, getHistoricalRosterForDate, type RosterHistoryRecord } from "@/lib/fantasy-roster-history";
+import { fetchRosterHistoryFromDB, type RosterHistoryRecord } from "@/lib/fantasy-roster-history";
 
 // ── Types ──
 
