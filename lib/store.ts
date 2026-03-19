@@ -9,6 +9,8 @@
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
    import { PLAYER_POSITIONS } from "./player-positions";
+   import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
+   export { getCurrentRoster, getHistoricalRosterForDate };
    
    // ==================== Types ====================
    
@@ -1089,8 +1091,7 @@
      return all[teamId] || [];
    }
 
-   // Re-export the canonical, supabase-free roster-history helpers.
-   export { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
+   // getCurrentRoster and getHistoricalRosterForDate are imported + re-exported at top of file.
 
    export async function setTeamRoster(leagueId: string, teamId: string, roster: RosterPlayer[]): Promise<void> {
      if (canUseStorage()) {
