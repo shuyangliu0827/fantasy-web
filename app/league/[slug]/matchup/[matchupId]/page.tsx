@@ -26,7 +26,6 @@ import {
   BENCH_SLOTS,
   STARTER_SLOTS,
   buildDailyScoreBreakdown,
-  fillMissingWeekLineups,
   getStarterIdsForDate,
   getWeeklyMatchupScore,
   getWeeklyStarterIds,
@@ -37,7 +36,6 @@ import {
   CANONICAL_TIMEZONE,
   getOfficialLeagueStartDate,
   getScoringWeekRange,
-  getWeekStatus,
   parseDateStr,
 } from "@/lib/week-utils";
 
@@ -101,19 +99,7 @@ export default function MatchupDetailPage() {
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(week || 1, leagueStart), [leagueStart, week]);
-  const weekStatus = useMemo(() => getWeekStatus(week || 1, leagueStart), [leagueStart, week]);
   const isOwner = Boolean(user && league && league.commissioner_id === user.id);
-
-  // For past weeks, fill in any dates that have no lineup entry (e.g. old flat
-  // lineups migrated to today's date rather than the historical week dates).
-  const effectiveHomeLineups = useMemo(
-    () => weekStatus === "past" ? fillMissingWeekLineups(homeDailyLineups, weekRange?.dateStrings ?? []) : homeDailyLineups,
-    [homeDailyLineups, weekRange, weekStatus],
-  );
-  const effectiveAwayLineups = useMemo(
-    () => weekStatus === "past" ? fillMissingWeekLineups(awayDailyLineups, weekRange?.dateStrings ?? []) : awayDailyLineups,
-    [awayDailyLineups, weekRange, weekStatus],
-  );
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -331,10 +317,10 @@ export default function MatchupDetailPage() {
   const homeName = homeTeam?.fantasy?.name || (homeTeam ? getMemberName(homeTeam.member) : "");
   const awayName = awayTeam?.fantasy?.name || (awayTeam ? getMemberName(awayTeam.member) : "");
   const rangeLabel = weekRange ? `${weekRange.startDate} → ${weekRange.endDate}` : t("待官方启用", "Pending official start");
-  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, effectiveHomeLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, effectiveAwayLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const homeScore = weekRange ? getWeeklyMatchupScore(homeRoster, effectiveHomeLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
-  const awayScore = weekRange ? getWeeklyMatchupScore(awayRoster, effectiveAwayLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
+  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
+  const homeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const awayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
   function renderScoreSummary(teamName: string, ownerName: string, record: string, score: number, side: "home" | "away", leading: boolean) {
     return (
       <div className={`summary-team ${leading ? "leading" : ""}`}>
@@ -537,8 +523,8 @@ export default function MatchupDetailPage() {
           </section>
 
           <div className="tables-grid">
-            {renderLineupTable(homeName, homeRoster, effectiveHomeLineups)}
-            {renderLineupTable(awayName, awayRoster, effectiveAwayLineups)}
+            {renderLineupTable(homeName, homeRoster, homeDailyLineups)}
+            {renderLineupTable(awayName, awayRoster, awayDailyLineups)}
           </div>
         </div>
       </main>

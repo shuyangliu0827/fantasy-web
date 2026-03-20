@@ -96,36 +96,3 @@ export function buildDailyScoreBreakdown(
     dateStrings.map((dateStr) => [dateStr, getDailyStarterScore(roster, dailyLineups, dateStr, resolvePlayerStats)]),
   );
 }
-
-/**
- * For a past week, if a team's DailyLineupMap has no entries for any of the
- * requested weekDates (e.g. old flat-format lineup was migrated to today's
- * UTC date), fill each missing date with the nearest available lineup snapshot.
- *
- * Only call this for past/completed weeks — for current/future weeks a missing
- * lineup correctly scores 0.
- */
-export function fillMissingWeekLineups(
-  lineups: DailyLineupMap,
-  weekDates: string[],
-): DailyLineupMap {
-  const hasAnyWeekEntry = weekDates.some(
-    (d) => lineups[d] && Object.keys(lineups[d]).length > 0,
-  );
-  if (hasAnyWeekEntry) return lineups;
-
-  const allDates = Object.keys(lineups).sort();
-  if (allDates.length === 0) return lineups;
-
-  // Prefer the latest date <= first day of the week; else use the earliest available.
-  const weekStart = weekDates[0];
-  const fallbackDate =
-    allDates.filter((d) => d <= weekStart).pop() ?? allDates[0];
-  const fallbackLineup = lineups[fallbackDate];
-
-  const filled: DailyLineupMap = { ...lineups };
-  for (const d of weekDates) {
-    if (!filled[d]) filled[d] = fallbackLineup;
-  }
-  return filled;
-}

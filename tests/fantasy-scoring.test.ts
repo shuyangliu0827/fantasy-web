@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDailyScoreBreakdown, fillMissingWeekLineups, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
+import { buildDailyScoreBreakdown, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
 import { computeCanonicalWeeklyResult } from "../lib/canonical-weekly-result.ts";
 import { getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange, getWeekStatus } from "../lib/week-utils.ts";
 import { getCurrentRoster, getHistoricalRosterForDate } from "../lib/roster-history.ts";
@@ -332,42 +332,4 @@ test("standings from matchups: W/L/T/PF/PA computed from match rows, not accumul
   // Running the computation a second time (simulating a re-save) must give the same result.
   const t1Again = computeRecordFromMatchups("T1", matchRows);
   assert.deepEqual(t1, t1Again, "standings computation must be idempotent");
-});
-
-test("fillMissingWeekLineups: fills all week dates from migrated flat lineup", () => {
-  // Simulates the Week 1 bug: migrateFlatLineup stored the lineup under today's UTC
-  // date, which doesn't match any of the Week 1 historical dates.
-  const WEEK1_DATES = ["2026-02-23", "2026-02-24", "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28", "2026-03-01"];
-  const migratedLineup: DailyLineupMap = {
-    "2026-03-20": { PG: "p1", SG: "p2", BE1: "p3" }, // today's date after migration
-  };
-
-  const filled = fillMissingWeekLineups(migratedLineup, WEEK1_DATES);
-
-  // All 7 week dates should now have the fallback lineup
-  for (const d of WEEK1_DATES) {
-    assert.deepEqual(filled[d], { PG: "p1", SG: "p2", BE1: "p3" }, `missing lineup filled for ${d}`);
-  }
-  // Original migrated-date entry should still be present
-  assert.ok("2026-03-20" in filled, "original entry preserved");
-});
-
-test("fillMissingWeekLineups: does not overwrite existing per-date lineups", () => {
-  const WEEK2_DATES = ["2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06", "2026-03-07", "2026-03-08"];
-  const properLineups: DailyLineupMap = {
-    "2026-03-02": { PG: "p1", SG: "p2" },
-    "2026-03-03": { PG: "p1", SF: "p3" },
-    "2026-03-20": { PG: "p1", SG: "p2", BE1: "p3" }, // migrated flat lineup also present
-  };
-
-  const result = fillMissingWeekLineups(properLineups, WEEK2_DATES);
-
-  // Because at least one week date already has data, the function should return unchanged
-  assert.strictEqual(result, properLineups, "returns original reference when week data exists");
-});
-
-test("fillMissingWeekLineups: returns unchanged if lineups are empty", () => {
-  const WEEK1_DATES = ["2026-02-23", "2026-02-24", "2026-02-25"];
-  const result = fillMissingWeekLineups({}, WEEK1_DATES);
-  assert.deepEqual(result, {}, "no-op for empty lineup map");
 });
