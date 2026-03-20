@@ -47,6 +47,7 @@ export default function ScoreboardPage() {
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [loading, setLoading] = useState(true);
   const [scoresLoading, setScoresLoading] = useState(false);
+  const [statsReady, setStatsReady] = useState(false);
   const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
   const [teamLineups, setTeamLineups] = useState<Record<string, DailyLineupMap>>({});
   const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
@@ -126,9 +127,11 @@ export default function ScoreboardPage() {
     async function loadWeekStats() {
       if (!weekRange) {
         setWeekDayStats({});
+        setStatsReady(false);
         return;
       }
       setScoresLoading(true);
+      setStatsReady(false);
       try {
         const results = await Promise.all(
           weekRange.dateStrings.map(async (date) => {
@@ -139,11 +142,13 @@ export default function ScoreboardPage() {
         );
         if (!cancelled) {
           setWeekDayStats(Object.fromEntries(results));
+          setStatsReady(true);
         }
       } catch (error) {
         if (!cancelled) {
           console.error("Failed to fetch scoreboard stats", error);
           setWeekDayStats({});
+          setStatsReady(true); // mark ready even on error so persist can run with whatever we have
         }
       } finally {
         if (!cancelled) setScoresLoading(false);
@@ -194,7 +199,7 @@ export default function ScoreboardPage() {
 
   // ── Persist weekly results to DB when a past week's scores are fully loaded ──
   useEffect(() => {
-    if (weekStatus !== "past" || !league || !weekRange || scoresLoading || matchupCards.length === 0) return;
+    if (weekStatus !== "past" || !league || !weekRange || scoresLoading || !statsReady || matchupCards.length === 0) return;
 
     // Fire-and-forget: persist each matchup's result idempotently
     for (const card of matchupCards) {
@@ -212,7 +217,7 @@ export default function ScoreboardPage() {
         endDate: weekRange.endDate,
       }).catch(console.error);
     }
-  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, selectedWeek, teamIdByUserId]);
+  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, statsReady, selectedWeek, teamIdByUserId]);
 
   function getStatusMeta() {
     if (weekStatus === "past") return { label: t("已结束", "Final"), className: "status-final" };

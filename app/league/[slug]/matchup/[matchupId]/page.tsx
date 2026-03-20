@@ -508,12 +508,12 @@ export default function MatchupDetailPage() {
                   <tbody>
                     <tr>
                       <td className="row-team">{homeName}</td>
-                      {weekRange?.dateStrings.map((date) => <td key={date}>{homeDailyScores[date]?.toFixed(1) || "0.0"}</td>)}
+                      {weekRange?.dateStrings.map((date) => <td key={date}>{homeDailyScores[date] != null ? homeDailyScores[date].toFixed(1) : "—"}</td>)}
                       <td className="row-total">{homeScore.toFixed(1)}</td>
                     </tr>
                     <tr>
                       <td className="row-team">{awayName}</td>
-                      {weekRange?.dateStrings.map((date) => <td key={date}>{awayDailyScores[date]?.toFixed(1) || "0.0"}</td>)}
+                      {weekRange?.dateStrings.map((date) => <td key={date}>{awayDailyScores[date] != null ? awayDailyScores[date].toFixed(1) : "—"}</td>)}
                       <td className="row-total">{awayScore.toFixed(1)}</td>
                     </tr>
                   </tbody>

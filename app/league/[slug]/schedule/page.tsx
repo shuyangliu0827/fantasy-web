@@ -280,9 +280,14 @@ export default function SchedulePage() {
                       // Look up real scores from DB (populated by scoreboard page when viewed)
                       // The matchup row key uses home_team_id / away_team_id from fantasy_teams.
                       // For schedule display we look up by week and check both team orderings.
-                      const realMatchup = Object.entries(completedMatchups).find(
+                      const dbMatchup = Object.entries(completedMatchups).find(
                         ([key]) => key.startsWith(`${entry.week}-`)
                       )?.[1] ?? null;
+                      // Treat 0-0 DB records as unresolved — they may have been saved prematurely
+                      const realMatchup =
+                        dbMatchup && (dbMatchup.home_score > 0 || dbMatchup.away_score > 0)
+                          ? dbMatchup
+                          : null;
                       const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
                       const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
                       const isWin = myScore !== null && oppScore !== null && myScore > oppScore;

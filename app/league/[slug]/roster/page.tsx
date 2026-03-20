@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
@@ -24,6 +24,7 @@ import {
   DailyLineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { addUtcDays, formatDateStr, normalizeUtcDate } from "@/lib/week-utils";
 
 // ── Types ──
 
@@ -93,27 +94,12 @@ const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 
 // ── Helpers ──
 
-function formatDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function getWeekDates(start: Date): Date[] {
-  const dates: Date[] = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    dates.push(d);
-  }
-  return dates;
+  return Array.from({ length: 7 }, (_, i) => addUtcDays(start, i));
 }
 
 function getTodayStart(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return normalizeUtcDate(new Date());
 }
 
 // ── Component ──
@@ -134,6 +120,10 @@ export default function RosterPage() {
   const [swapSource, setSwapSource] = useState<string | null>(null);
   const [viewTeamId, setViewTeamId] = useState<string | null>(null);
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; user_id: string }[]>([]);
+
+  // Refs for cancellation
+  const gameDayAbortRef = useRef<AbortController | null>(null);
+  const switchRequestRef = useRef(0);
 
   // New state for schedule & stats
   const [weekStart, setWeekStart] = useState<Date>(getTodayStart());
@@ -247,15 +237,21 @@ export default function RosterPage() {
   }
 
   async function fetchGameDayStats(date: string) {
+    gameDayAbortRef.current?.abort();
+    const controller = new AbortController();
+    gameDayAbortRef.current = controller;
     try {
-      const res = await fetch(`/api/nba-game-stats?date=${date}`);
+      const res = await fetch(`/api/nba-game-stats?date=${date}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       const data = await res.json();
+      if (controller.signal.aborted) return;
       if (data.status === "success" && data.stats) {
         setGameDayStats(data.stats);
       } else {
         setGameDayStats({});
       }
-    } catch {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setGameDayStats({});
     }
   }
@@ -264,10 +260,14 @@ export default function RosterPage() {
 
   async function switchViewTeam(teamId: string) {
     if (!league) return;
+    const requestId = ++switchRequestRef.current;
     setViewTeamId(teamId);
-    const rosterData = await fetchTeamRosterFromDB(league.id, teamId);
+    const [rosterData, dailyData] = await Promise.all([
+      fetchTeamRosterFromDB(league.id, teamId),
+      fetchTeamLineupFromDB(league.id, teamId),
+    ]);
+    if (requestId !== switchRequestRef.current) return; // stale response
     setRoster(rosterData);
-    const dailyData = await fetchTeamLineupFromDB(league.id, teamId);
     setDailyLineups(dailyData);
     setLineup(dailyData[selectedDate] || {});
     setSwapSource(null);
@@ -440,12 +440,10 @@ export default function RosterPage() {
   const todayStr = formatDateStr(new Date());
 
   function shiftWeek(direction: number) {
-    const next = new Date(weekStart);
-    next.setDate(weekStart.getDate() + direction * 7);
+    const next = addUtcDays(weekStart, direction * 7);
     // Don't navigate before the league's start date
     if (leagueMinDate && direction < 0) {
-      const minWeekStart = new Date(leagueMinDate);
-      minWeekStart.setHours(0, 0, 0, 0);
+      const minWeekStart = normalizeUtcDate(leagueMinDate);
       if (next < minWeekStart) return;
     }
     setWeekStart(next);

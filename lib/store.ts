@@ -1572,14 +1572,19 @@
      // Check if already saved (idempotent guard)
      const { data: existing } = await supabase
        .from("matchups")
-       .select("id, status")
+       .select("id, status, home_score, away_score")
        .eq("league_id", leagueId)
        .eq("week", week)
        .eq("home_team_id", homeTeamId)
        .eq("away_team_id", awayTeamId)
        .single();
 
-     if (existing?.status === "completed") return; // already persisted
+     // Skip re-save only if completed with real (non-zero) scores.
+     // If scores are 0-0, allow re-computation to overwrite the stale record.
+     const isAlreadyFinalWithRealScores =
+       existing?.status === "completed" &&
+       (Number(existing.home_score) > 0 || Number(existing.away_score) > 0);
+     if (isAlreadyFinalWithRealScores) return;
 
      const winnerId =
        homeScore > awayScore ? homeTeamId :
