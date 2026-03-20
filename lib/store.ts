@@ -1569,29 +1569,14 @@
    }): Promise<void> {
      const { leagueId, week, homeTeamId, awayTeamId, homeScore, awayScore, startDate, endDate } = params;
 
-     // Check if already saved (idempotent guard)
-     const { data: existing } = await supabase
-       .from("matchups")
-       .select("id, status, home_score, away_score")
-       .eq("league_id", leagueId)
-       .eq("week", week)
-       .eq("home_team_id", homeTeamId)
-       .eq("away_team_id", awayTeamId)
-       .single();
-
-     // Skip re-save only if completed with real (non-zero) scores.
-     // If scores are 0-0, allow re-computation to overwrite the stale record.
-     const isAlreadyFinalWithRealScores =
-       existing?.status === "completed" &&
-       (Number(existing.home_score) > 0 || Number(existing.away_score) > 0);
-     if (isAlreadyFinalWithRealScores) return;
-
      const winnerId =
        homeScore > awayScore ? homeTeamId :
        awayScore > homeScore ? awayTeamId :
        null; // tie
 
-     // Upsert the matchup row using the unique constraint added in migration 011
+     // Always upsert the matchup row with the latest computed scores.
+     // No idempotency guard on non-zero scores — lineup changes must propagate.
+     // The upsert is safe: same inputs produce the same DB row (truly idempotent).
      await supabase.from("matchups").upsert({
        league_id: leagueId,
        week,
@@ -1605,64 +1590,39 @@
        end_date: endDate,
      }, { onConflict: "league_id,week,home_team_id,away_team_id" });
 
-     // Update fantasy_teams records
-     const homeWin = homeScore > awayScore;
-     const awayWin = awayScore > homeScore;
-     const isTie = homeScore === awayScore;
+     // Rebuild team records from scratch using all completed matchups.
+     // This replaces additive increments — it is fully idempotent regardless of
+     // how many times saveWeeklyMatchupResult is called for the same week.
+     const { data: allMatchups } = await supabase
+       .from("matchups")
+       .select("home_team_id, away_team_id, home_score, away_score")
+       .eq("league_id", leagueId)
+       .eq("status", "completed");
 
-     await Promise.all([
-       supabase.rpc("increment_team_record", {
-         p_team_id: homeTeamId,
-         p_wins: homeWin ? 1 : 0,
-         p_losses: awayWin ? 1 : 0,
-         p_ties: isTie ? 1 : 0,
-         p_points_for: homeScore,
-         p_points_against: awayScore,
-       }).then(({ error }) => {
-         if (error) {
-           // Fallback: manual update if RPC not available
-           return supabase.from("fantasy_teams")
-             .select("wins, losses, ties, points_for, points_against")
-             .eq("id", homeTeamId)
-             .single()
-             .then(({ data }) => {
-               if (!data) return;
-               return supabase.from("fantasy_teams").update({
-                 wins: (data.wins ?? 0) + (homeWin ? 1 : 0),
-                 losses: (data.losses ?? 0) + (awayWin ? 1 : 0),
-                 ties: (data.ties ?? 0) + (isTie ? 1 : 0),
-                 points_for: Number(data.points_for ?? 0) + homeScore,
-                 points_against: Number(data.points_against ?? 0) + awayScore,
-               }).eq("id", homeTeamId);
-             });
-         }
-       }),
-       supabase.rpc("increment_team_record", {
-         p_team_id: awayTeamId,
-         p_wins: awayWin ? 1 : 0,
-         p_losses: homeWin ? 1 : 0,
-         p_ties: isTie ? 1 : 0,
-         p_points_for: awayScore,
-         p_points_against: homeScore,
-       }).then(({ error }) => {
-         if (error) {
-           return supabase.from("fantasy_teams")
-             .select("wins, losses, ties, points_for, points_against")
-             .eq("id", awayTeamId)
-             .single()
-             .then(({ data }) => {
-               if (!data) return;
-               return supabase.from("fantasy_teams").update({
-                 wins: (data.wins ?? 0) + (awayWin ? 1 : 0),
-                 losses: (data.losses ?? 0) + (homeWin ? 1 : 0),
-                 ties: (data.ties ?? 0) + (isTie ? 1 : 0),
-                 points_for: Number(data.points_for ?? 0) + awayScore,
-                 points_against: Number(data.points_against ?? 0) + homeScore,
-               }).eq("id", awayTeamId);
-             });
-         }
-       }),
-     ]);
+     async function rebuildTeamRecord(teamId: string) {
+       if (!allMatchups) return;
+       let wins = 0, losses = 0, ties = 0, pointsFor = 0, pointsAgainst = 0;
+       for (const m of allMatchups) {
+         const isHome = m.home_team_id === teamId;
+         const isAway = m.away_team_id === teamId;
+         if (!isHome && !isAway) continue;
+         const myScore = Number(isHome ? m.home_score : m.away_score);
+         const oppScore = Number(isHome ? m.away_score : m.home_score);
+         pointsFor += myScore;
+         pointsAgainst += oppScore;
+         if (myScore > oppScore) wins++;
+         else if (oppScore > myScore) losses++;
+         else ties++;
+       }
+       const { error } = await supabase.from("fantasy_teams").update({
+         wins, losses, ties,
+         points_for: pointsFor,
+         points_against: pointsAgainst,
+       }).eq("id", teamId);
+       if (error) console.error("rebuildTeamRecord failed:", teamId, error);
+     }
+
+     await Promise.all([rebuildTeamRecord(homeTeamId), rebuildTeamRecord(awayTeamId)]);
    }
 
    export async function cancelTrade(leagueId: string, tradeId: string): Promise<{ ok: boolean; error?: string }> {

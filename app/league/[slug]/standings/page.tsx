@@ -19,6 +19,21 @@ type FantasyTeamRecord = {
   id: string;
   user_id: string;
   name: string;
+};
+
+// Matchup rows include scores so standings can be computed directly from the
+// matchups table — not from the materialized fantasy_teams columns, which can
+// drift when records are re-saved.
+type MatchupRow = {
+  week: number;
+  home_team_id: string;
+  away_team_id: string;
+  home_score: number;
+  away_score: number;
+  winner_id: string | null;
+};
+
+type ComputedTeamRecord = FantasyTeamRecord & {
   wins: number;
   losses: number;
   ties: number;
@@ -26,17 +41,10 @@ type FantasyTeamRecord = {
   points_against: number;
 };
 
-type MatchupRow = {
-  week: number;
-  home_team_id: string;
-  away_team_id: string;
-  winner_id: string | null;
-};
-
 type StandingRow = {
   rank: number;
   member: LeagueMember;
-  teamRecord: FantasyTeamRecord;
+  teamRecord: ComputedTeamRecord;
   wins: number;
   losses: number;
   ties: number;
@@ -91,13 +99,15 @@ export default function StandingsPage() {
       setLeague(leagueData);
       const [membersData, teamsResult, matchupsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
+        // Only fetch id/user_id/name — W/L/T/PF/PA are derived from matchups below.
         supabase
           .from("fantasy_teams")
-          .select("id, user_id, name, wins, losses, ties, points_for, points_against")
+          .select("id, user_id, name")
           .eq("league_id", leagueData.id),
+        // Fetch scores so standings are always in sync with what scoreboard saved.
         supabase
           .from("matchups")
-          .select("week, home_team_id, away_team_id, winner_id")
+          .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
           .eq("league_id", leagueData.id)
           .eq("status", "completed")
           .order("week", { ascending: false }),
@@ -115,24 +125,47 @@ export default function StandingsPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // Build standings from real DB data
+  // Build standings by aggregating directly from matchupHistory (the matchups table).
+  // This ensures standings always reflect the same data source as the scoreboard —
+  // no reliance on the materialized fantasy_teams W/L/T/PF/PA columns, which can
+  // drift when scores are re-saved via the scoreboard.
   const standingsData: StandingRow[] = (() => {
+    // Compute W/L/T/PF/PA per team from completed matchup rows.
+    const recordByTeamId = new Map<string, {
+      wins: number; losses: number; ties: number;
+      pointsFor: number; pointsAgainst: number;
+    }>();
+    for (const m of matchupHistory) {
+      for (const [teamId, myScore, oppScore] of [
+        [m.home_team_id, Number(m.home_score), Number(m.away_score)],
+        [m.away_team_id, Number(m.away_score), Number(m.home_score)],
+      ] as [string, number, number][]) {
+        const r = recordByTeamId.get(teamId) ?? { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
+        r.pointsFor += myScore;
+        r.pointsAgainst += oppScore;
+        if (myScore > oppScore) r.wins++;
+        else if (oppScore > myScore) r.losses++;
+        else r.ties++;
+        recordByTeamId.set(teamId, r);
+      }
+    }
+
     const rows: StandingRow[] = members.map((member) => {
       const rec = teamRecords.find((t) => t.user_id === member.user_id) || {
-        id: "", user_id: member.user_id, name: "", wins: 0, losses: 0, ties: 0,
-        points_for: 0, points_against: 0,
+        id: "", user_id: member.user_id, name: "",
       };
+      const computed = recordByTeamId.get(rec.id) ?? { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
       return {
         rank: 0,
         member,
-        teamRecord: rec,
-        wins: rec.wins,
-        losses: rec.losses,
-        ties: rec.ties,
+        teamRecord: { ...rec, wins: computed.wins, losses: computed.losses, ties: computed.ties, points_for: computed.pointsFor, points_against: computed.pointsAgainst },
+        wins: computed.wins,
+        losses: computed.losses,
+        ties: computed.ties,
         pct: ".000",
         gb: "-",
-        pf: Number(rec.points_for).toFixed(1),
-        pa: Number(rec.points_against).toFixed(1),
+        pf: computed.pointsFor.toFixed(1),
+        pa: computed.pointsAgainst.toFixed(1),
         streak: "-",
       };
     });

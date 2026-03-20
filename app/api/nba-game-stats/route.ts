@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_TODAY_MS = 5 * 60 * 1000;        // 5 minutes for today's games (in-progress)
+const CACHE_TTL_HISTORICAL_MS = 24 * 60 * 60 * 1000; // 24 hours for completed past dates
 
 type PlayerGameStats = {
   min: number;
@@ -54,8 +55,12 @@ async function fetchAPI(endpoint: string, params?: Record<string, string>) {
 
 async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
   const cached = cache.get(date);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
+  if (cached) {
+    // Historical dates (strictly before today UTC) are immutable — cache for 24h.
+    // Today's date uses a short TTL because games may still be in progress.
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const ttl = date < todayUtc ? CACHE_TTL_HISTORICAL_MS : CACHE_TTL_TODAY_MS;
+    if (Date.now() - cached.timestamp < ttl) return cached.data;
   }
 
   const map: DateStatsMap = {};

@@ -148,7 +148,8 @@ export default function ScoreboardPage() {
         if (!cancelled) {
           console.error("Failed to fetch scoreboard stats", error);
           setWeekDayStats({});
-          setStatsReady(true); // mark ready even on error so persist can run with whatever we have
+          // Do NOT set statsReady=true on error — a failed fetch must never trigger
+          // a score persist, which would write 0-0 scores into the DB.
         }
       } finally {
         if (!cancelled) setScoresLoading(false);
