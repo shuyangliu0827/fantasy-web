@@ -20,7 +20,7 @@ import {
   supabase,
 } from "@/lib/store";
 import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
-import { getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
+import { fillMissingWeekLineups, getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
@@ -185,8 +185,16 @@ export default function ScoreboardPage() {
     return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
       const homeRoster = teamRosters[matchup.home.user_id] || [];
       const awayRoster = teamRosters[matchup.away.user_id] || [];
-      const homeLineups = teamLineups[matchup.home.user_id] || {};
-      const awayLineups = teamLineups[matchup.away.user_id] || {};
+      // For past weeks, fill in missing date entries from old flat-format lineups
+      // that were migrated to today's date instead of the historical week dates.
+      const rawHomeLineups = teamLineups[matchup.home.user_id] || {};
+      const rawAwayLineups = teamLineups[matchup.away.user_id] || {};
+      const homeLineups = weekStatus === "past"
+        ? fillMissingWeekLineups(rawHomeLineups, weekRange.dateStrings)
+        : rawHomeLineups;
+      const awayLineups = weekStatus === "past"
+        ? fillMissingWeekLineups(rawAwayLineups, weekRange.dateStrings)
+        : rawAwayLineups;
 
       return {
         ...matchup,

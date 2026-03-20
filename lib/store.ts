@@ -1096,7 +1096,7 @@
 
    function migrateFlatLineup(flat: LineupMap): DailyLineupMap {
      const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
      return { [todayStr]: flat };
    }
 
@@ -1134,7 +1134,7 @@
    export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
      // Legacy compat: saves as today's lineup
      const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
      setLineupForDate(leagueId, teamId, todayStr, lineup);
    }
 
@@ -1299,7 +1299,7 @@
        // Remove dropped player from all daily lineups (today and future)
        const daily = getDailyLineups(leagueId, teamId);
        const today = new Date();
-       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
        for (const [date, lineup] of Object.entries(daily)) {
          if (date >= todayStr) {
            for (const [slot, pid] of Object.entries(lineup)) {
@@ -1350,7 +1350,7 @@
      // Remove from all daily lineups (today and future only, preserve past)
      const daily = getDailyLineups(leagueId, teamId);
      const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
      let changed = false;
      for (const [date, lineup] of Object.entries(daily)) {
        if (date >= todayStr) {
@@ -1511,7 +1511,7 @@
 
        // Clean up lineups for traded players (today and future only)
        const today = new Date();
-       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
        for (const tId of [trade.fromTeamId, trade.toTeamId]) {
          const daily = await fetchTeamLineupFromDB(leagueId, tId);
          const roster = tId === trade.fromTeamId ? newFromRoster : newToRoster;
