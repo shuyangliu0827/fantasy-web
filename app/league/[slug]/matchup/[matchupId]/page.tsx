@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
@@ -25,13 +25,12 @@ import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
 import {
   BENCH_SLOTS,
   STARTER_SLOTS,
-  buildDailyScoreBreakdown,
   getStarterIdsForDate,
-  getWeeklyMatchupScore,
   getWeeklyStarterIds,
   type DateStatsMap,
   type PlayerGameStats,
 } from "@/lib/fantasy-scoring";
+import { computeCanonicalWeeklyResult } from "@/lib/canonical-weekly-result";
 import {
   CANONICAL_TIMEZONE,
   getOfficialLeagueStartDate,
@@ -205,7 +204,7 @@ export default function MatchupDetailPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   }
 
-  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+  const getPlayerDayStats = useCallback((player: RosterPlayer, dateStr: string): PlayerGameStats | null => {
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
     if (dayMap[player.id]) return dayMap[player.id];
@@ -217,7 +216,7 @@ export default function MatchupDetailPage() {
     }
 
     return null;
-  }
+  }, [weekDayStats, playerStatsCache]);
 
   function getRowsForView(roster: RosterPlayer[], dailyLineups: DailyLineupMap): SlottedPlayerRow[] {
     // Build playerMap from the FULL roster array (includes historical entries with releasedAt).
@@ -239,8 +238,6 @@ export default function MatchupDetailPage() {
     const historicalRoster = filterDate
       ? getHistoricalRosterForDate(roster, filterDate)
       : roster;
-    const historicalRosterIds = new Set(historicalRoster.map(p => p.id));
-
     if (viewMode === "total") {
       const assignmentByPlayer = new Map<string, { slot: string; isStarter: boolean; weight: number }>();
 
@@ -317,10 +314,24 @@ export default function MatchupDetailPage() {
   const homeName = homeTeam?.fantasy?.name || (homeTeam ? getMemberName(homeTeam.member) : "");
   const awayName = awayTeam?.fantasy?.name || (awayTeam ? getMemberName(awayTeam.member) : "");
   const rangeLabel = weekRange ? `${weekRange.startDate} → ${weekRange.endDate}` : t("待官方启用", "Pending official start");
-  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const homeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
-  const awayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const canonicalResult = useMemo(() => {
+    if (!weekRange || !homeTeam?.fantasy?.id || !awayTeam?.fantasy?.id) return null;
+    return computeCanonicalWeeklyResult({
+      homeTeamId: homeTeam.fantasy.id,
+      awayTeamId: awayTeam.fantasy.id,
+      homeRoster,
+      awayRoster,
+      homeDailyLineups,
+      awayDailyLineups,
+      dateStrings: weekRange.dateStrings,
+      resolvePlayerStats: getPlayerDayStats,
+      weekStatus: "current",
+    });
+  }, [weekRange, homeTeam?.fantasy?.id, awayTeam?.fantasy?.id, homeRoster, awayRoster, homeDailyLineups, awayDailyLineups, getPlayerDayStats]);
+  const homeDailyScores = canonicalResult?.homeDailyScores || {};
+  const awayDailyScores = canonicalResult?.awayDailyScores || {};
+  const homeScore = canonicalResult?.homeScore || 0;
+  const awayScore = canonicalResult?.awayScore || 0;
   function renderScoreSummary(teamName: string, ownerName: string, record: string, score: number, side: "home" | "away", leading: boolean) {
     return (
       <div className={`summary-team ${leading ? "leading" : ""}`}>

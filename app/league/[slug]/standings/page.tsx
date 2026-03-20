@@ -14,37 +14,16 @@ import {
   LeagueMember,
   supabase,
 } from "@/lib/store";
+import { buildCanonicalStandings } from "@/lib/canonical-weekly-result";
+import { loadCanonicalSeasonSnapshots } from "@/lib/canonical-weekly-results-service";
+import { getOfficialLeagueStartDate } from "@/lib/week-utils";
 
-type FantasyTeamRecord = {
-  id: string;
-  user_id: string;
-  name: string;
-};
-
-// Matchup rows include scores so standings can be computed directly from the
-// matchups table — not from the materialized fantasy_teams columns, which can
-// drift when records are re-saved.
-type MatchupRow = {
-  week: number;
-  home_team_id: string;
-  away_team_id: string;
-  home_score: number;
-  away_score: number;
-  winner_id: string | null;
-};
-
-type ComputedTeamRecord = FantasyTeamRecord & {
-  wins: number;
-  losses: number;
-  ties: number;
-  points_for: number;
-  points_against: number;
-};
+type FantasyTeamRecord = { id: string; user_id: string; name: string };
 
 type StandingRow = {
   rank: number;
   member: LeagueMember;
-  teamRecord: ComputedTeamRecord;
+  teamRecord: FantasyTeamRecord;
   wins: number;
   losses: number;
   ties: number;
@@ -55,150 +34,73 @@ type StandingRow = {
   streak: string;
 };
 
-/** Compute current streak from ordered matchup history (most-recent first). */
-function computeStreak(teamId: string, matchups: MatchupRow[]): string {
-  if (matchups.length === 0) return "-";
-  let count = 0;
-  let streakType = "";
-  for (const m of matchups) {
-    const isInvolved = m.home_team_id === teamId || m.away_team_id === teamId;
-    if (!isInvolved) continue;
-    const result = m.winner_id === null ? "T" : m.winner_id === teamId ? "W" : "L";
-    if (streakType === "") {
-      streakType = result;
-      count = 1;
-    } else if (result === streakType) {
-      count++;
-    } else {
-      break;
-    }
-  }
-  return streakType ? `${streakType}${count}` : "-";
-}
-
 export default function StandingsPage() {
   const { t } = useLang();
   const params = useParams();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState<ReturnType<typeof getSessionUser>>(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
-  const [teamRecords, setTeamRecords] = useState<FantasyTeamRecord[]>([]);
-  const [matchupHistory, setMatchupHistory] = useState<MatchupRow[]>([]);
+  const [standingsData, setStandingsData] = useState<StandingRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setUser(getSessionUser());
+    async function loadData() {
+      const leagueData = await getLeagueBySlug(slug);
+      if (leagueData) {
+        setLeague(leagueData);
+        const [membersData, teamsResult] = await Promise.all([
+          getLeagueMembers(leagueData.id),
+          supabase
+            .from("fantasy_teams")
+            .select("id, user_id, name")
+            .eq("league_id", leagueData.id),
+        ]);
+        setMembers(membersData);
+
+        const leagueStart = getOfficialLeagueStartDate(leagueData.draft_completed_at ?? null);
+        const totalWeeks = leagueStart
+          ? Math.max(1, Math.floor((Date.parse("2026-06-22T00:00:00.000Z") - leagueStart.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+          : 20;
+        const snapshots = await loadCanonicalSeasonSnapshots(
+          leagueData,
+          membersData,
+          Array.from({ length: totalWeeks }, (_, index) => index + 1),
+        );
+        const canonicalStandings = buildCanonicalStandings(
+          (teamsResult.data || []).map((team) => ({ teamId: team.id, name: team.name })),
+          snapshots.flatMap((snapshot) => snapshot.results),
+        );
+        const rows: StandingRow[] = canonicalStandings.map((row, index) => {
+          const teamRecord = (teamsResult.data || []).find((team) => team.id === row.teamId) as FantasyTeamRecord | undefined;
+          const member = membersData.find((m) => m.user_id === teamRecord?.user_id);
+          return {
+            rank: index + 1,
+            member: member || membersData[index],
+            teamRecord: teamRecord || { id: row.teamId, user_id: "", name: row.name || "" },
+            wins: row.wins,
+            losses: row.losses,
+            ties: row.ties,
+            pct: row.pct.toFixed(3).replace(/^0/, ""),
+            gb: row.gb === 0 ? "-" : (row.gb % 1 === 0 ? String(row.gb) : row.gb.toFixed(1)),
+            pf: row.pointsFor.toFixed(1),
+            pa: row.pointsAgainst.toFixed(1),
+            streak: row.streak,
+          };
+        }).filter((row) => row.member);
+        setStandingsData(rows);
+      }
+      setLoading(false);
+    }
     loadData();
   }, [slug]);
-
-  async function loadData() {
-    const leagueData = await getLeagueBySlug(slug);
-    if (leagueData) {
-      setLeague(leagueData);
-      const [membersData, teamsResult, matchupsResult] = await Promise.all([
-        getLeagueMembers(leagueData.id),
-        // Only fetch id/user_id/name — W/L/T/PF/PA are derived from matchups below.
-        supabase
-          .from("fantasy_teams")
-          .select("id, user_id, name")
-          .eq("league_id", leagueData.id),
-        // Fetch scores so standings are always in sync with what scoreboard saved.
-        supabase
-          .from("matchups")
-          .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
-          .eq("league_id", leagueData.id)
-          .eq("status", "completed")
-          .order("week", { ascending: false }),
-      ]);
-      setMembers(membersData);
-      setTeamRecords((teamsResult.data || []) as FantasyTeamRecord[]);
-      setMatchupHistory((matchupsResult.data || []) as MatchupRow[]);
-    }
-    setLoading(false);
-  }
 
   const isOwner = user && league && league.commissioner_id === user.id;
 
   const getMemberName = (member: LeagueMember) => {
     return member.user?.username || member.user?.name || "Anonymous";
   };
-
-  // Build standings by aggregating directly from matchupHistory (the matchups table).
-  // This ensures standings always reflect the same data source as the scoreboard —
-  // no reliance on the materialized fantasy_teams W/L/T/PF/PA columns, which can
-  // drift when scores are re-saved via the scoreboard.
-  const standingsData: StandingRow[] = (() => {
-    // Compute W/L/T/PF/PA per team from completed matchup rows.
-    const recordByTeamId = new Map<string, {
-      wins: number; losses: number; ties: number;
-      pointsFor: number; pointsAgainst: number;
-    }>();
-    for (const m of matchupHistory) {
-      for (const [teamId, myScore, oppScore] of [
-        [m.home_team_id, Number(m.home_score), Number(m.away_score)],
-        [m.away_team_id, Number(m.away_score), Number(m.home_score)],
-      ] as [string, number, number][]) {
-        const r = recordByTeamId.get(teamId) ?? { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
-        r.pointsFor += myScore;
-        r.pointsAgainst += oppScore;
-        if (myScore > oppScore) r.wins++;
-        else if (oppScore > myScore) r.losses++;
-        else r.ties++;
-        recordByTeamId.set(teamId, r);
-      }
-    }
-
-    const rows: StandingRow[] = members.map((member) => {
-      const rec = teamRecords.find((t) => t.user_id === member.user_id) || {
-        id: "", user_id: member.user_id, name: "",
-      };
-      const computed = recordByTeamId.get(rec.id) ?? { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
-      return {
-        rank: 0,
-        member,
-        teamRecord: { ...rec, wins: computed.wins, losses: computed.losses, ties: computed.ties, points_for: computed.pointsFor, points_against: computed.pointsAgainst },
-        wins: computed.wins,
-        losses: computed.losses,
-        ties: computed.ties,
-        pct: ".000",
-        gb: "-",
-        pf: computed.pointsFor.toFixed(1),
-        pa: computed.pointsAgainst.toFixed(1),
-        streak: "-",
-      };
-    });
-
-    // Sort: wins DESC, then points_for DESC
-    rows.sort((a, b) => {
-      if (b.wins !== a.wins) return b.wins - a.wins;
-      return Number(b.pf) - Number(a.pf);
-    });
-
-    // Assign ranks and compute derived stats
-    const leaderWins = rows[0]?.wins ?? 0;
-    const leaderLosses = rows[0]?.losses ?? 0;
-
-    rows.forEach((row, idx) => {
-      row.rank = idx + 1;
-      const total = row.wins + row.losses + row.ties;
-      const pctNum = total > 0 ? (row.wins + 0.5 * row.ties) / total : 0;
-      row.pct = pctNum.toFixed(3).replace(/^0/, "");
-      if (idx === 0) {
-        row.gb = "-";
-      } else {
-        const gb = ((leaderWins - row.wins) + (row.losses - leaderLosses)) / 2;
-        row.gb = gb % 1 === 0 ? String(gb) : gb.toFixed(1);
-      }
-      // Streak: walk matchup history most-recent first
-      if (row.teamRecord.id) {
-        row.streak = computeStreak(row.teamRecord.id, matchupHistory);
-      }
-    });
-
-    return rows;
-  })();
 
   if (loading) {
     return (

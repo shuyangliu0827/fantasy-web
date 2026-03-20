@@ -7,20 +7,14 @@ import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import {
-  DailyLineupMap,
   League,
   LeagueMember,
-  RosterPlayer,
-  fetchTeamLineupFromDB,
   getLeagueBySlug,
   getLeagueMembers,
   getSessionUser,
-  getTeamRoster,
   saveWeeklyMatchupResult,
-  supabase,
 } from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
-import { getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
+import { loadCanonicalWeekSnapshot } from "@/lib/canonical-weekly-results-service";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
@@ -29,11 +23,6 @@ import {
   getScoringWeekRange,
   getWeekStatus,
 } from "@/lib/week-utils";
-
-type CachedPlayerStats = {
-  id: number;
-  name: string;
-};
 
 const MAX_WEEKS = 20;
 
@@ -47,14 +36,16 @@ export default function ScoreboardPage() {
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [loading, setLoading] = useState(true);
   const [scoresLoading, setScoresLoading] = useState(false);
-  const [statsReady, setStatsReady] = useState(false);
-  const [teamRosters, setTeamRosters] = useState<Record<string, RosterPlayer[]>>({});
-  const [teamLineups, setTeamLineups] = useState<Record<string, DailyLineupMap>>({});
-  const [playerStatsCache, setPlayerStatsCache] = useState<Map<string, CachedPlayerStats>>(new Map());
-  const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
-  // Maps user_id → fantasy_team.id (needed for saveWeeklyMatchupResult)
-  const [teamIdByUserId, setTeamIdByUserId] = useState<Record<string, string>>({});
-
+  const [matchupCards, setMatchupCards] = useState<Array<{
+    id: number;
+    home: LeagueMember;
+    away: LeagueMember;
+    homeName: string;
+    awayName: string;
+    homeScore: number;
+    awayScore: number;
+    status: "pending" | "live" | "final";
+  }>>([]);
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
   const weekStatus = useMemo(() => getWeekStatus(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
@@ -80,37 +71,10 @@ export default function ScoreboardPage() {
       const officialStart = getOfficialLeagueStartDate(leagueData.draft_completed_at);
       setSelectedWeek(getCurrentWeek(officialStart));
 
-      const [membersData, teamsResult, statsResult] = await Promise.all([
-        getLeagueMembers(leagueData.id),
-        supabase.from("fantasy_teams").select("id, user_id, roster_data").eq("league_id", leagueData.id),
-        fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
-      ]);
+      const membersData = await getLeagueMembers(leagueData.id);
 
       if (cancelled) return;
       setMembers(membersData);
-
-      const rosters: Record<string, RosterPlayer[]> = {};
-      const lineups: Record<string, DailyLineupMap> = {};
-      const idMap: Record<string, string> = {};
-      for (const team of teamsResult.data || []) {
-        rosters[team.user_id] = Array.isArray(team.roster_data)
-          ? (team.roster_data as RosterPlayer[])
-          : getTeamRoster(leagueData.id, team.id);
-        lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        idMap[team.user_id] = team.id; // user_id → fantasy_team.id
-      }
-      if (cancelled) return;
-      setTeamRosters(rosters);
-      setTeamLineups(lineups);
-      setTeamIdByUserId(idMap);
-
-      if (statsResult.status === "success" && Array.isArray(statsResult.players)) {
-        const statsMap = new Map<string, CachedPlayerStats>();
-        for (const player of statsResult.players) {
-          statsMap.set(String(player.id), { id: player.id, name: player.name });
-        }
-        setPlayerStatsCache(statsMap);
-      }
 
       setLoading(false);
     }
@@ -124,101 +88,60 @@ export default function ScoreboardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadWeekStats() {
-      if (!weekRange) {
-        setWeekDayStats({});
-        setStatsReady(false);
+    async function loadCanonicalScores() {
+      if (!league || !weekRange) {
+        setMatchupCards([]);
         return;
       }
+
       setScoresLoading(true);
-      setStatsReady(false);
       try {
-        const results = await Promise.all(
-          weekRange.dateStrings.map(async (date) => {
-            const response = await fetch(`/api/nba-game-stats?date=${date}`);
-            const payload = await response.json();
-            return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
-          }),
+        const snapshot = await loadCanonicalWeekSnapshot(league, members, selectedWeek);
+        if (cancelled) return;
+        setMatchupCards(
+          snapshot.results.map((result) => ({
+              id: result.matchupIndex,
+              home: result.homeMember,
+              away: result.awayMember,
+              homeName: result.homeMember.user?.username || result.homeMember.user?.name || "Anonymous",
+              awayName: result.awayMember.user?.username || result.awayMember.user?.name || "Anonymous",
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              status: result.status,
+            })),
         );
-        if (!cancelled) {
-          setWeekDayStats(Object.fromEntries(results));
-          setStatsReady(true);
+
+        if (snapshot.weekStatus === "past" && snapshot.weekRange) {
+          await Promise.all(
+            snapshot.results.map((result) =>
+              saveWeeklyMatchupResult({
+                leagueId: league.id,
+                week: selectedWeek,
+                homeTeamId: result.homeTeamId,
+                awayTeamId: result.awayTeamId,
+                homeScore: result.homeScore,
+                awayScore: result.awayScore,
+                startDate: snapshot.weekRange!.startDate,
+                endDate: snapshot.weekRange!.endDate,
+              }),
+            ),
+          );
         }
       } catch (error) {
         if (!cancelled) {
-          console.error("Failed to fetch scoreboard stats", error);
-          setWeekDayStats({});
-          // Do NOT set statsReady=true on error — a failed fetch must never trigger
-          // a score persist, which would write 0-0 scores into the DB.
+          console.error("Failed to load canonical weekly scoreboard", error);
+          setMatchupCards([]);
         }
       } finally {
         if (!cancelled) setScoresLoading(false);
       }
     }
 
-    loadWeekStats();
+    loadCanonicalScores();
     return () => {
       cancelled = true;
     };
-  }, [weekRange]);
-
-  function getMemberName(member: LeagueMember) {
-    return member.user?.username || member.user?.name || "Anonymous";
-  }
-
-  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
-    const dayMap = weekDayStats[dateStr];
-    if (!dayMap) return null;
-    if (dayMap[player.id]) return dayMap[player.id];
-
-    for (const cached of playerStatsCache.values()) {
-      if (cached.name === player.name && dayMap[String(cached.id)]) {
-        return dayMap[String(cached.id)];
-      }
-    }
-
-    return null;
-  }
-
-  const matchupCards = useMemo(() => {
-    if (!league || !weekRange) return [];
-    return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
-      const homeRoster = teamRosters[matchup.home.user_id] || [];
-      const awayRoster = teamRosters[matchup.away.user_id] || [];
-      const homeLineups = teamLineups[matchup.home.user_id] || {};
-      const awayLineups = teamLineups[matchup.away.user_id] || {};
-
-      return {
-        ...matchup,
-        homeName: getMemberName(matchup.home),
-        awayName: getMemberName(matchup.away),
-        homeScore: getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats),
-        awayScore: getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats),
-      };
-    });
-  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache]);
-
-  // ── Persist weekly results to DB when a past week's scores are fully loaded ──
-  useEffect(() => {
-    if (weekStatus !== "past" || !league || !weekRange || scoresLoading || !statsReady || matchupCards.length === 0) return;
-
-    // Fire-and-forget: persist each matchup's result idempotently
-    for (const card of matchupCards) {
-      const homeTeamId = teamIdByUserId[card.home.user_id];
-      const awayTeamId = teamIdByUserId[card.away.user_id];
-      if (!homeTeamId || !awayTeamId) continue;
-      saveWeeklyMatchupResult({
-        leagueId: league.id,
-        week: selectedWeek,
-        homeTeamId,
-        awayTeamId,
-        homeScore: card.homeScore,
-        awayScore: card.awayScore,
-        startDate: weekRange.startDate,
-        endDate: weekRange.endDate,
-      }).catch(console.error);
-    }
-  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, statsReady, selectedWeek, teamIdByUserId]);
+  }, [league, members, selectedWeek, weekRange]);
 
   function getStatusMeta() {
     if (weekStatus === "past") return { label: t("已结束", "Final"), className: "status-final" };

@@ -12,8 +12,8 @@ import {
   getLeagueMembers,
   League,
   LeagueMember,
-  supabase,
 } from "@/lib/store";
+import { loadCanonicalSeasonSnapshots } from "@/lib/canonical-weekly-results-service";
 import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
 import {
   getOfficialLeagueStartDate,
@@ -28,7 +28,7 @@ const NBA_FINALS_END_UTC = new Date("2026-06-22T00:00:00.000Z");
 /** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
 function formatScheduleDateRange(startStr: string, endStr: string): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [, sm, sd] = startStr.split("-").map(Number);
   const [, em, ed] = endStr.split("-").map(Number);
   const startLabel = `${MONTHS[sm - 1]} ${sd}`;
   if (sm === em) return `${startLabel} - ${ed}`;
@@ -37,6 +37,7 @@ function formatScheduleDateRange(startStr: string, endStr: string): string {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type MatchupEntry = {
+  matchupIndex: number;
   week: number;
   label: string;
   dateRange: string;
@@ -51,46 +52,46 @@ export default function SchedulePage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState<ReturnType<typeof getSessionUser>>(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
-  // Real completed-matchup scores fetched from DB
-  const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
+  const [selectedUserId, setSelectedUserId] = useState<string>(() => getSessionUser()?.id || "");
+  const [canonicalScores, setCanonicalScores] = useState<Record<string, { homeScore: number; awayScore: number; winnerId: string | null; status: string }>>({});
 
   useEffect(() => {
-    const u = getSessionUser();
-    setUser(u);
-    if (u) setSelectedUserId(u.id);
-    loadData();
-  }, [slug]);
-
-  async function loadData() {
-    const leagueData = await getLeagueBySlug(slug);
-    if (leagueData) {
-      setLeague(leagueData);
-      const [membersData, matchupsResult] = await Promise.all([
-        getLeagueMembers(leagueData.id),
-        supabase
-          .from("matchups")
-          .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
-          .eq("league_id", leagueData.id)
-          .eq("status", "completed"),
-      ]);
-      setMembers(membersData);
-      // Build lookup: "{week}-{home_team_id}-{away_team_id}" → scores
-      if (matchupsResult.data) {
-        const lookup: Record<string, { home_score: number; away_score: number; winner_id: string | null }> = {};
-        for (const row of matchupsResult.data) {
-          const key = `${row.week}-${row.home_team_id}-${row.away_team_id}`;
-          lookup[key] = { home_score: row.home_score, away_score: row.away_score, winner_id: row.winner_id };
+    async function loadData() {
+      const leagueData = await getLeagueBySlug(slug);
+      if (leagueData) {
+        setLeague(leagueData);
+        const membersData = await getLeagueMembers(leagueData.id);
+        setMembers(membersData);
+        const leagueStart = getOfficialLeagueStartDate(leagueData.draft_completed_at ?? null);
+        const totalWeeks = leagueStart
+          ? Math.max(1, Math.floor((NBA_FINALS_END_UTC.getTime() - leagueStart.getTime()) / (7 * 24 * 60 * 60 * 1000)))
+          : 20;
+        const snapshots = await loadCanonicalSeasonSnapshots(
+          leagueData,
+          membersData,
+          Array.from({ length: totalWeeks }, (_, index) => index + 1),
+        );
+        const lookup: Record<string, { homeScore: number; awayScore: number; winnerId: string | null; status: string }> = {};
+        for (const snapshot of snapshots) {
+          for (const result of snapshot.results) {
+            lookup[`${result.week}-${result.matchupIndex}`] = {
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              winnerId: result.winnerId,
+              status: result.status,
+            };
+          }
         }
-        setCompletedMatchups(lookup);
+        setCanonicalScores(lookup);
       }
+      setLoading(false);
     }
-    setLoading(false);
-  }
+    loadData();
+  }, [slug, user]);
 
   const isOwner = user && league && league.commissioner_id === user.id;
 
@@ -135,6 +136,7 @@ export default function SchedulePage() {
       const weekMatchups = generateMatchupsForWeek(members, league.id, week);
       for (const matchup of weekMatchups) {
         const homeEntry: MatchupEntry = {
+          matchupIndex: matchup.id,
           week,
           label,
           dateRange: `(${dateRange})`,
@@ -144,6 +146,7 @@ export default function SchedulePage() {
           playoffRound,
         };
         const awayEntry: MatchupEntry = {
+          matchupIndex: matchup.id,
           week,
           label,
           dateRange: `(${dateRange})`,
@@ -280,16 +283,9 @@ export default function SchedulePage() {
                       // Look up real scores from DB (populated by scoreboard page when viewed)
                       // The matchup row key uses home_team_id / away_team_id from fantasy_teams.
                       // For schedule display we look up by week and check both team orderings.
-                      const dbMatchup = Object.entries(completedMatchups).find(
-                        ([key]) => key.startsWith(`${entry.week}-`)
-                      )?.[1] ?? null;
-                      // Treat 0-0 DB records as unresolved — they may have been saved prematurely
-                      const realMatchup =
-                        dbMatchup && (dbMatchup.home_score > 0 || dbMatchup.away_score > 0)
-                          ? dbMatchup
-                          : null;
-                      const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
-                      const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
+                      const resolvedMatchup = canonicalScores[`${entry.week}-${entry.matchupIndex}`] ?? null;
+                      const myScore = resolvedMatchup ? (entry.isHome ? resolvedMatchup.homeScore : resolvedMatchup.awayScore) : null;
+                      const oppScore = resolvedMatchup ? (entry.isHome ? resolvedMatchup.awayScore : resolvedMatchup.homeScore) : null;
                       const isWin = myScore !== null && oppScore !== null && myScore > oppScore;
                       const isLoss = myScore !== null && oppScore !== null && myScore < oppScore;
 
@@ -317,7 +313,7 @@ export default function SchedulePage() {
                             </div>
                           </td>
                           <td className="col-score">
-                            {status === "past" && realMatchup ? (
+                            {status === "past" && resolvedMatchup ? (
                               <div className="score-display">
                                 <span
                                   className={`win-loss-badge ${
@@ -327,7 +323,7 @@ export default function SchedulePage() {
                                   {isWin ? "W" : isLoss ? "L" : "T"}
                                 </span>
                                 <Link
-                                  href={`/league/${slug}/matchup/${entry.week}-0`}
+                                  href={`/league/${slug}/matchup/${entry.week}-${entry.matchupIndex}`}
                                   className="score-link"
                                 >
                                   {myScore?.toFixed(1)}-{oppScore?.toFixed(1)}
@@ -335,7 +331,7 @@ export default function SchedulePage() {
                               </div>
                             ) : status === "past" ? (
                               <Link
-                                href={`/league/${slug}/matchup/${entry.week}-0`}
+                                href={`/league/${slug}/matchup/${entry.week}-${entry.matchupIndex}`}
                                 className="score-link-muted"
                               >
                                 {t("查看", "View")}

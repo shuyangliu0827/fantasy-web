@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { buildDailyScoreBreakdown, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
-import { computeCanonicalWeeklyResult } from "../lib/canonical-weekly-result.ts";
+import { buildCanonicalStandings, computeCanonicalWeeklyResult } from "../lib/canonical-weekly-result.ts";
 import { getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange, getWeekStatus } from "../lib/week-utils.ts";
 import { getCurrentRoster, getHistoricalRosterForDate } from "../lib/roster-history.ts";
 import type { DailyLineupMap, RosterPlayer } from "../lib/store";
@@ -220,6 +220,7 @@ const weekStats: Record<string, Record<string, PlayerGameStats>> = {
   },
 };
 const resolveWeekStats = (p: RosterPlayer, d: string) => weekStats[d]?.[p.id] || null;
+const EMPTY_STATS: PlayerGameStats = { min: 0, fgm: 0, fga: 0, fg3m: 0, ftm: 0, fta: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0 };
 
 test("canonical result: sums all 7 official dates — missing lineup/stats days contribute 0", () => {
   const result = computeCanonicalWeeklyResult({
@@ -272,6 +273,58 @@ test("canonical result: adding a lineup for a new date in the week changes weekl
   });
   assert.ok(after.homeScore > before.homeScore, "adding a scored date must increase the weekly total");
   assert.equal(after.homeScore, before.homeScore + 49); // 21 (p1) + 28 (p2)
+});
+
+test("canonical result: historical roster filtering prevents current-roster leakage into past dates", () => {
+  const acquiredLate = new Date("2026-03-26T12:00:00.000Z").getTime();
+  const rosterWithPickup: RosterPlayer[] = [
+    ...roster,
+    { id: "p4", name: "Late Pickup", team: "DAL", position: "PF", ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fg: 0, ft: 0, tov: 0, round: 0, acquiredAt: acquiredLate },
+  ];
+  const lateLineups: DailyLineupMap = {
+    ...weeklyLineups,
+    "2026-03-24": { PF: "p4" },
+    "2026-03-27": { PF: "p4" },
+  };
+  const lateStats: Record<string, Record<string, PlayerGameStats>> = {
+    ...weekStats,
+    "2026-03-24": { p4: { ...EMPTY_STATS, fpts: 99 } },
+    "2026-03-27": { p4: { ...EMPTY_STATS, fpts: 15 } },
+  };
+  const resolveLate = (p: RosterPlayer, d: string) => lateStats[d]?.[p.id] || null;
+  const result = computeCanonicalWeeklyResult({
+    homeTeamId: "A", awayTeamId: "B",
+    homeRoster: rosterWithPickup, awayRoster: [],
+    homeDailyLineups: lateLineups, awayDailyLineups: {},
+    dateStrings: FULL_WEEK,
+    resolvePlayerStats: resolveLate,
+    weekStatus: "past",
+  });
+  assert.equal(result.homeDailyScores["2026-03-24"], 0, "late pickup must not leak into earlier dates");
+  assert.equal(result.homeDailyScores["2026-03-27"], 15, "late pickup scores once it is historically owned");
+});
+
+test("standings aggregate canonical weekly results only", () => {
+  const standings = buildCanonicalStandings(
+    [
+      { teamId: "A", name: "Alpha" },
+      { teamId: "B", name: "Beta" },
+      { teamId: "C", name: "Gamma" },
+    ],
+    [
+      { matchupKey: "1-0", week: 1, homeTeamId: "A", awayTeamId: "B", homeScore: 100, awayScore: 90, homeDailyScores: {}, awayDailyScores: {}, status: "final", winnerId: "A" },
+      { matchupKey: "2-0", week: 2, homeTeamId: "A", awayTeamId: "C", homeScore: 88, awayScore: 88, homeDailyScores: {}, awayDailyScores: {}, status: "final", winnerId: null },
+      { matchupKey: "3-0", week: 3, homeTeamId: "B", awayTeamId: "C", homeScore: 70, awayScore: 120, homeDailyScores: {}, awayDailyScores: {}, status: "live", winnerId: null },
+    ],
+  );
+  assert.deepEqual(
+    standings.map((row) => ({ teamId: row.teamId, wins: row.wins, losses: row.losses, ties: row.ties, pf: row.pointsFor, pa: row.pointsAgainst })),
+    [
+      { teamId: "A", wins: 1, losses: 0, ties: 1, pf: 188, pa: 178 },
+      { teamId: "B", wins: 0, losses: 1, ties: 0, pf: 90, pa: 100 },
+      { teamId: "C", wins: 0, losses: 0, ties: 1, pf: 88, pa: 88 },
+    ],
+  );
 });
 
 test("canonical result: status is final for past weeks, live for current, pending for future", () => {
