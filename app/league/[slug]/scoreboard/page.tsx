@@ -20,12 +20,13 @@ import {
   supabase,
 } from "@/lib/store";
 import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
-import { getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
+import { fillMissingWeekLineups, getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
   getCurrentWeek,
   getOfficialLeagueStartDate,
+  getSeasonTotalWeeks,
   getScoringWeekRange,
   getWeekStatus,
 } from "@/lib/week-utils";
@@ -34,8 +35,6 @@ type CachedPlayerStats = {
   id: number;
   name: string;
 };
-
-const MAX_WEEKS = 20;
 
 export default function ScoreboardPage() {
   const { t } = useLang();
@@ -53,10 +52,13 @@ export default function ScoreboardPage() {
   const [weekDayStats, setWeekDayStats] = useState<Record<string, DateStatsMap>>({});
   // Maps user_id → fantasy_team.id (needed for saveWeeklyMatchupResult)
   const [teamIdByUserId, setTeamIdByUserId] = useState<Record<string, string>>({});
+  // Pinned scores from matchups table for finalized past weeks (homeTeamId:awayTeamId → scores)
+  const [pinnedScores, setPinnedScores] = useState<Map<string, { homeScore: number; awayScore: number }>>(new Map());
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
   const weekStatus = useMemo(() => getWeekStatus(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
+  const totalWeeks = useMemo(() => getSeasonTotalWeeks(leagueStart), [leagueStart]);
   const isOwner = Boolean(user && league && league.commissioner_id === user.id);
 
   useEffect(() => {
@@ -132,18 +134,17 @@ export default function ScoreboardPage() {
       try {
         const results = await Promise.all(
           weekRange.dateStrings.map(async (date) => {
-            const response = await fetch(`/api/nba-game-stats?date=${date}`);
-            const payload = await response.json();
-            return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+            try {
+              const response = await fetch(`/api/nba-game-stats?date=${date}`);
+              const payload = await response.json();
+              return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+            } catch {
+              return [date, {}] as const;
+            }
           }),
         );
         if (!cancelled) {
           setWeekDayStats(Object.fromEntries(results));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to fetch scoreboard stats", error);
-          setWeekDayStats({});
         }
       } finally {
         if (!cancelled) setScoresLoading(false);
@@ -155,6 +156,30 @@ export default function ScoreboardPage() {
       cancelled = true;
     };
   }, [weekRange]);
+
+  // ── Load pinned scores from matchups table for finalized past weeks ──
+  useEffect(() => {
+    if (!league || weekStatus !== "past") {
+      setPinnedScores(new Map());
+      return;
+    }
+    supabase
+      .from("matchups")
+      .select("home_team_id, away_team_id, home_score, away_score")
+      .eq("league_id", league.id)
+      .eq("week", selectedWeek)
+      .eq("status", "completed")
+      .then(({ data }) => {
+        const map = new Map<string, { homeScore: number; awayScore: number }>();
+        for (const row of data ?? []) {
+          map.set(`${row.home_team_id}:${row.away_team_id}`, {
+            homeScore: row.home_score,
+            awayScore: row.away_score,
+          });
+        }
+        setPinnedScores(map);
+      });
+  }, [league, selectedWeek, weekStatus]);
 
   function getMemberName(member: LeagueMember) {
     return member.user?.username || member.user?.name || "Anonymous";
@@ -177,24 +202,49 @@ export default function ScoreboardPage() {
   const matchupCards = useMemo(() => {
     if (!league || !weekRange) return [];
     return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
+      const homeTeamId = teamIdByUserId[matchup.home.user_id];
+      const awayTeamId = teamIdByUserId[matchup.away.user_id];
+
+      // Always compute live from game stats
       const homeRoster = teamRosters[matchup.home.user_id] || [];
       const awayRoster = teamRosters[matchup.away.user_id] || [];
-      const homeLineups = teamLineups[matchup.home.user_id] || {};
-      const awayLineups = teamLineups[matchup.away.user_id] || {};
+      const rawHomeLineups = teamLineups[matchup.home.user_id] || {};
+      const rawAwayLineups = teamLineups[matchup.away.user_id] || {};
+      const homeLineups = weekStatus === "past"
+        ? fillMissingWeekLineups(rawHomeLineups, weekRange.dateStrings)
+        : rawHomeLineups;
+      const awayLineups = weekStatus === "past"
+        ? fillMissingWeekLineups(rawAwayLineups, weekRange.dateStrings)
+        : rawAwayLineups;
+
+      const liveHome = getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats);
+      const liveAway = getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats);
+
+      // While stats are still loading, show the DB-pinned score as a stable placeholder.
+      // Once loading finishes, always show the live computed value — this keeps the
+      // displayed total consistent with the daily breakdown regardless of what the DB has.
+      const pinned = weekStatus === "past" && homeTeamId && awayTeamId
+        ? pinnedScores.get(`${homeTeamId}:${awayTeamId}`)
+        : undefined;
+      const homeScore = scoresLoading ? (pinned?.homeScore ?? liveHome) : liveHome;
+      const awayScore = scoresLoading ? (pinned?.awayScore ?? liveAway) : liveAway;
 
       return {
         ...matchup,
         homeName: getMemberName(matchup.home),
         awayName: getMemberName(matchup.away),
-        homeScore: getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats),
-        awayScore: getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats),
+        homeScore,
+        awayScore,
       };
     });
-  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache]);
+  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache, weekStatus, pinnedScores, teamIdByUserId, scoresLoading]);
 
   // ── Persist weekly results to DB when a past week's scores are fully loaded ──
   useEffect(() => {
     if (weekStatus !== "past" || !league || !weekRange || scoresLoading || matchupCards.length === 0) return;
+    // Don't persist zeros — game stats haven't finished loading
+    const hasNonZeroScore = matchupCards.some((c) => c.homeScore > 0 || c.awayScore > 0);
+    if (!hasNonZeroScore) return;
 
     // Fire-and-forget: persist each matchup's result idempotently
     for (const card of matchupCards) {
@@ -212,7 +262,7 @@ export default function ScoreboardPage() {
         endDate: weekRange.endDate,
       }).catch(console.error);
     }
-  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, selectedWeek, teamIdByUserId]);
+  }, [weekStatus, matchupCards, league, weekRange, scoresLoading, selectedWeek, teamIdByUserId, pinnedScores]);
 
   function getStatusMeta() {
     if (weekStatus === "past") return { label: t("已结束", "Final"), className: "status-final" };
@@ -222,7 +272,7 @@ export default function ScoreboardPage() {
   }
 
   const statusMeta = getStatusMeta();
-  const weekOptions = Array.from({ length: MAX_WEEKS }, (_, index) => index + 1);
+  const weekOptions = Array.from({ length: totalWeeks }, (_, index) => index + 1);
   const rangeLabel = weekRange
     ? `${weekRange.startDate} → ${weekRange.endDate}`
     : t("选秀完成后的首个周一开始", "Starts on the first Monday after the draft completes");
@@ -309,7 +359,7 @@ export default function ScoreboardPage() {
                   <option key={week} value={week}>{t(`第 ${week} 周`, `Week ${week}`)}</option>
                 ))}
               </select>
-              <button className="nav-btn" onClick={() => setSelectedWeek((prev) => Math.min(MAX_WEEKS, prev + 1))} disabled={selectedWeek === MAX_WEEKS}>→</button>
+              <button className="nav-btn" onClick={() => setSelectedWeek((prev) => Math.min(totalWeeks, prev + 1))} disabled={selectedWeek === totalWeeks}>→</button>
             </div>
           </section>
 

@@ -14,6 +14,7 @@ import {
   LeagueMember,
   supabase,
 } from "@/lib/store";
+import { computeStandingsFromMatchups } from "@/lib/canonical-pipeline";
 
 type FantasyTeamRecord = {
   id: string;
@@ -31,6 +32,8 @@ type MatchupRow = {
   home_team_id: string;
   away_team_id: string;
   winner_id: string | null;
+  home_score: number;
+  away_score: number;
 };
 
 type StandingRow = {
@@ -97,7 +100,7 @@ export default function StandingsPage() {
           .eq("league_id", leagueData.id),
         supabase
           .from("matchups")
-          .select("week, home_team_id, away_team_id, winner_id")
+          .select("week, home_team_id, away_team_id, winner_id, home_score, away_score")
           .eq("league_id", leagueData.id)
           .eq("status", "completed")
           .order("week", { ascending: false }),
@@ -115,50 +118,61 @@ export default function StandingsPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   };
 
-  // Build standings from real DB data
+  // Build standings from canonical matchup data (Rule D)
   const standingsData: StandingRow[] = (() => {
-    const rows: StandingRow[] = members.map((member) => {
-      const rec = teamRecords.find((t) => t.user_id === member.user_id) || {
-        id: "", user_id: member.user_id, name: "", wins: 0, losses: 0, ties: 0,
-        points_for: 0, points_against: 0,
-      };
+    // Collect all fantasy team IDs
+    const teamIdToMember: Record<string, LeagueMember> = {};
+    const teamIdToName: Record<string, string> = {};
+    const teamIdToUserId: Record<string, string> = {};
+    for (const rec of teamRecords) {
+      teamIdToMember[rec.id] = members.find(m => m.user_id === rec.user_id)!;
+      teamIdToName[rec.id] = rec.name;
+      teamIdToUserId[rec.id] = rec.user_id;
+    }
+
+    const teamIds = teamRecords.map(r => r.id);
+
+    // Rule D: compute W/L/T/PF/PA from canonical matchup rows, not from fantasy_teams counters
+    const computed = computeStandingsFromMatchups(teamIds, matchupHistory);
+
+    const rows: StandingRow[] = teamRecords.map((rec) => {
+      const member = members.find(m => m.user_id === rec.user_id);
+      if (!member) return null;
+      const stats = computed[rec.id] ?? { wins: 0, losses: 0, ties: 0, pointsFor: 0, pointsAgainst: 0 };
       return {
         rank: 0,
         member,
         teamRecord: rec,
-        wins: rec.wins,
-        losses: rec.losses,
-        ties: rec.ties,
+        wins: stats.wins,
+        losses: stats.losses,
+        ties: stats.ties,
         pct: ".000",
         gb: "-",
-        pf: Number(rec.points_for).toFixed(1),
-        pa: Number(rec.points_against).toFixed(1),
+        pf: stats.pointsFor.toFixed(1),
+        pa: stats.pointsAgainst.toFixed(1),
         streak: "-",
-      };
-    });
+      } as StandingRow;
+    }).filter(Boolean) as StandingRow[];
 
-    // Sort: wins DESC, then points_for DESC
+    // Sort: wins DESC, then pointsFor DESC
     rows.sort((a, b) => {
       if (b.wins !== a.wins) return b.wins - a.wins;
       return Number(b.pf) - Number(a.pf);
     });
 
-    // Assign ranks and compute derived stats
-    const leaderWins = rows[0]?.wins ?? 0;
+    // Assign ranks, compute pct/gb/streak
+    const leaderWins   = rows[0]?.wins   ?? 0;
     const leaderLosses = rows[0]?.losses ?? 0;
 
     rows.forEach((row, idx) => {
       row.rank = idx + 1;
-      const total = row.wins + row.losses + row.ties;
+      const total  = row.wins + row.losses + row.ties;
       const pctNum = total > 0 ? (row.wins + 0.5 * row.ties) / total : 0;
       row.pct = pctNum.toFixed(3).replace(/^0/, "");
-      if (idx === 0) {
-        row.gb = "-";
-      } else {
+      row.gb  = idx === 0 ? "-" : (() => {
         const gb = ((leaderWins - row.wins) + (row.losses - leaderLosses)) / 2;
-        row.gb = gb % 1 === 0 ? String(gb) : gb.toFixed(1);
-      }
-      // Streak: walk matchup history most-recent first
+        return gb % 1 === 0 ? String(gb) : gb.toFixed(1);
+      })();
       if (row.teamRecord.id) {
         row.streak = computeStreak(row.teamRecord.id, matchupHistory);
       }

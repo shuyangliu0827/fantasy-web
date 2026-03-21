@@ -86,6 +86,63 @@ export function getWeeklyMatchupScore(
   );
 }
 
+/**
+ * For a past week, recover lineups lost to flat-format migration.
+ *
+ * Old flat lineups (e.g. { PG: id, SG: id, ... }) were migrated to a single key for
+ * today's date, so the stored map has no entries matching any historical week date.
+ * When that happens, fill every week date with the nearest available snapshot so
+ * scores are not silently zeroed out.
+ *
+ * IMPORTANT: only fills when the map has NO entries at all for the requested week.
+ * If even one week date already has an entry, the team managed their lineup normally
+ * and missing days are legitimate zeros — do not touch them.
+ */
+export function fillMissingWeekLineups(
+  dailyLineups: DailyLineupMap,
+  weekDates: string[],
+): DailyLineupMap {
+  if (weekDates.length === 0) return dailyLineups;
+
+  // If the team has any entry for this week, their partial scores are intentional
+  const hasAnyWeekEntry = weekDates.some((date) => {
+    const l = dailyLineups[date];
+    return l && Object.keys(l).length > 0;
+  });
+  if (hasAnyWeekEntry) return dailyLineups;
+
+  // No entries for this week at all — find the closest available snapshot.
+  // Only consider snapshots from on or before the week's last date: a snapshot
+  // saved strictly after the week ended means the user joined/set lineups late,
+  // so they should score 0 for this week (not get retroactive points).
+  const weekEndDate = weekDates[weekDates.length - 1];
+  const availableDates = Object.keys(dailyLineups)
+    .filter((d) => {
+      const l = dailyLineups[d];
+      return l && Object.keys(l).length > 0 && d <= weekEndDate;
+    })
+    .sort();
+  if (availableDates.length === 0) return dailyLineups;
+
+  // Use the week's midpoint as the anchor for finding the nearest snapshot
+  const anchor = weekDates[Math.floor(weekDates.length / 2)];
+  let closest = availableDates[0];
+  let minDist = Math.abs(new Date(closest).getTime() - new Date(anchor).getTime());
+  for (const d of availableDates) {
+    const dist = Math.abs(new Date(d).getTime() - new Date(anchor).getTime());
+    if (dist < minDist) {
+      minDist = dist;
+      closest = d;
+    }
+  }
+
+  const result: DailyLineupMap = { ...dailyLineups };
+  for (const date of weekDates) {
+    result[date] = dailyLineups[closest];
+  }
+  return result;
+}
+
 export function buildDailyScoreBreakdown(
   roster: RosterPlayer[],
   dailyLineups: DailyLineupMap | undefined,

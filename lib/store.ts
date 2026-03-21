@@ -1095,8 +1095,8 @@
    }
 
    function migrateFlatLineup(flat: LineupMap): DailyLineupMap {
-     const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     const now = new Date();
+     const todayStr = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
      return { [todayStr]: flat };
    }
 
@@ -1572,14 +1572,30 @@
      // Check if already saved (idempotent guard)
      const { data: existing } = await supabase
        .from("matchups")
-       .select("id, status")
+       .select("id, status, home_score, away_score")
        .eq("league_id", leagueId)
        .eq("week", week)
        .eq("home_team_id", homeTeamId)
        .eq("away_team_id", awayTeamId)
        .single();
 
-     if (existing?.status === "completed") return; // already persisted
+     if (existing?.status === "completed") {
+       // Row already finalised — only update scores if the live values changed.
+       // We do NOT re-call increment_team_record to avoid double-counting records.
+       const sameScores =
+         Number(existing.home_score) === homeScore &&
+         Number(existing.away_score) === awayScore;
+       if (sameScores) return;
+       const correctedWinnerId =
+         homeScore > awayScore ? homeTeamId :
+         awayScore > homeScore ? awayTeamId :
+         null;
+       await supabase
+         .from("matchups")
+         .update({ home_score: homeScore, away_score: awayScore, winner_id: correctedWinnerId })
+         .eq("id", existing.id);
+       return;
+     }
 
      const winnerId =
        homeScore > awayScore ? homeTeamId :
