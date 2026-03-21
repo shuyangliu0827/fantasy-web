@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { filterValidStats } from "@/lib/canonical-pipeline";
+import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY  = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
@@ -26,7 +27,8 @@ type DateStatsMap = Record<string, PlayerGameStats>;
 // In-memory cache for live / same-day data only
 const cache = new Map<string, { data: DateStatsMap; timestamp: number }>();
 
-const FANTASY_WEIGHTS = { pts: 1, reb: 1, ast: 1, stl: 2, blk: 2, fg3m: 1, tov: -1 };
+// Use centralized ESPN default weights from scoring-config
+const FANTASY_WEIGHTS = ESPN_DEFAULT_WEIGHTS;
 
 function getSupabase() {
   return createClient(

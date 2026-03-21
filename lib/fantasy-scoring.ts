@@ -1,4 +1,5 @@
 import type { DailyLineupMap, LineupMap, RosterPlayer } from "./store";
+import { calcFantasyPoints, PointsWeights } from "./scoring-config";
 
 export const CANONICAL_TIMEZONE = "UTC";
 export const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"] as const;
@@ -64,13 +65,16 @@ export function getDailyStarterScore(
   dailyLineups: DailyLineupMap | undefined,
   dateStr: string,
   resolvePlayerStats: PlayerStatsResolver,
+  weights?: PointsWeights,
 ): number {
   const starterIds = getStarterIdsForDate(dailyLineups, dateStr);
   if (starterIds.size === 0) return 0;
 
   return roster.reduce((total, player) => {
     if (!starterIds.has(player.id)) return total;
-    return total + (resolvePlayerStats(player, dateStr)?.fpts ?? 0);
+    const stats = resolvePlayerStats(player, dateStr);
+    if (!stats) return total;
+    return total + (weights ? calcFantasyPoints(stats, weights) : stats.fpts);
   }, 0);
 }
 
@@ -79,9 +83,10 @@ export function getWeeklyMatchupScore(
   dailyLineups: DailyLineupMap | undefined,
   dateStrings: string[],
   resolvePlayerStats: PlayerStatsResolver,
+  weights?: PointsWeights,
 ): number {
   return dateStrings.reduce(
-    (total, dateStr) => total + getDailyStarterScore(roster, dailyLineups, dateStr, resolvePlayerStats),
+    (total, dateStr) => total + getDailyStarterScore(roster, dailyLineups, dateStr, resolvePlayerStats, weights),
     0,
   );
 }
@@ -148,8 +153,9 @@ export function buildDailyScoreBreakdown(
   dailyLineups: DailyLineupMap | undefined,
   dateStrings: string[],
   resolvePlayerStats: PlayerStatsResolver,
+  weights?: PointsWeights,
 ): Record<string, number> {
   return Object.fromEntries(
-    dateStrings.map((dateStr) => [dateStr, getDailyStarterScore(roster, dailyLineups, dateStr, resolvePlayerStats)]),
+    dateStrings.map((dateStr) => [dateStr, getDailyStarterScore(roster, dailyLineups, dateStr, resolvePlayerStats, weights)]),
   );
 }

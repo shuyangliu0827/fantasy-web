@@ -41,6 +41,7 @@ import {
   getTodayStr,
   parseDateStr,
 } from "@/lib/week-utils";
+import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 
 type CachedPlayerStats = {
   id: number;
@@ -104,6 +105,7 @@ export default function MatchupDetailPage() {
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(week || 1, leagueStart), [leagueStart, week]);
+  const leagueWeights = useMemo(() => getLeaguePointsWeights(league ?? {}), [league]);
   const isOwner = Boolean(user && league && league.commissioner_id === user.id);
 
   useEffect(() => {
@@ -338,7 +340,7 @@ export default function MatchupDetailPage() {
         blk: totals.blk + stats.blk,
         tov: totals.tov + stats.tov,
         pts: totals.pts + stats.pts,
-        fpts: totals.fpts + stats.fpts,
+        fpts: totals.fpts + calcFantasyPoints(stats, leagueWeights),
       };
     }, { ...EMPTY_STATS });
   }
@@ -351,10 +353,10 @@ export default function MatchupDetailPage() {
   const homeName = homeTeam?.fantasy?.name || (homeTeam ? getMemberName(homeTeam.member) : "");
   const awayName = awayTeam?.fantasy?.name || (awayTeam ? getMemberName(awayTeam.member) : "");
   const rangeLabel = weekRange ? `${weekRange.startDate} → ${weekRange.endDate}` : t("待官方启用", "Pending official start");
-  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const liveHomeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
-  const liveAwayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights) : {};
+  const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights) : {};
+  const liveHomeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights) : 0;
+  const liveAwayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights) : 0;
   // While stats are loading, show the DB-pinned value as a stable placeholder.
   // Once loading completes, always use the live computed value so the header total
   // is always the exact sum of the daily breakdown rows below it.
@@ -435,7 +437,7 @@ export default function MatchupDetailPage() {
                       <td>{stats.blk}</td>
                       <td>{stats.tov}</td>
                       <td>{stats.pts}</td>
-                      <td className="fpts-cell">{stats.fpts.toFixed(1)}</td>
+                      <td className="fpts-cell">{calcFantasyPoints(stats, leagueWeights).toFixed(1)}</td>
                     </tr>
                   );
                 })
