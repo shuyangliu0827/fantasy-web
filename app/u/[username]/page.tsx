@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listLeagues, listInsights, League, Insight } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, League, Insight, supabase } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -64,11 +64,13 @@ export default function UserProfilePage() {
       )
     );
 
-    const allLeagues = await listLeagues();
-    let userOwnedLeagues: League[] = [];
-    if (user && isOwn) {
-      userOwnedLeagues = allLeagues.filter((l: any) => l.commissioner_id === user.id);
-      setUserLeagues(userOwnedLeagues);
+    // 查询 profile 用户已加入的所有联赛（包括创建和加入的）
+    let joinedLeagues: (League & { memberCount: number; role: string })[] = [];
+    const { data: profileUserData } = await supabase
+      .from("users").select("id").ilike("username", username).single();
+    if (profileUserData) {
+      joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
+      setUserLeagues(joinedLeagues as any);
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
@@ -85,7 +87,7 @@ export default function UserProfilePage() {
       totalPosts: filtered.length,
       totalLikes,
       totalComments: userComments.length,
-      leaguesJoined: userOwnedLeagues.length,
+      leaguesJoined: joinedLeagues.length,
       leaguesWon: championships.length,
       draftsCompleted: savedDrafts.length,
     });
@@ -320,29 +322,48 @@ export default function UserProfilePage() {
                 <div>
                   {userLeagues.length === 0 ? (
                     <div className="empty-state">
-                      <p>{isOwnProfile ? t("你还没有创建任何联赛", "No leagues created yet") : t("该用户还没有联赛", "No leagues")}</p>
-                      {isOwnProfile && <Link href="/league/new" className="btn-primary-sm" style={{ textDecoration: "none", display: "inline-block", marginTop: 12 }}>{t("创建联赛", "Create League")}</Link>}
+                      <p>{isOwnProfile ? t("你还没有加入任何联赛", "No leagues joined yet") : t("该用户还没有加入任何联赛", "No leagues joined")}</p>
+                      {isOwnProfile && (
+                        <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                          <Link href="/league/new" className="btn-primary-sm" style={{ textDecoration: "none", display: "inline-block" }}>{t("创建联赛", "Create League")}</Link>
+                          <Link href="/league" className="btn-primary-sm" style={{ textDecoration: "none", display: "inline-block", background: "#eff6ff", color: "#1e3a8a" }}>{t("浏览公开联赛", "Browse Leagues")}</Link>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="leagues-list">
-                      {userLeagues.map(league => (
-                        <div key={league.id} className="league-list-card">
-                          <Link href={`/league/${league.slug}`} className="league-list-info">
-                            <div className="league-list-icon"></div>
-                            <div>
-                              <div className="league-list-name">{league.name}</div>
-                              <div className="league-list-meta">
-                                <span>{league.visibility === "public" ? t("公开联赛", "Public") : t("私人联赛", "Private")}</span>
-                                <span> · </span>
-                                <span>{formatDate((league as any).created_at || (league as any).createdAt)}</span>
+                      {userLeagues.map(league => {
+                        const STATUS_LABEL_MAP: Record<string, string> = { draft_pending: "即将开始", drafting: "选秀中", active: "进行中", completed: "已结束" };
+                        const STATUS_COLOR_MAP: Record<string, { color: string; bg: string }> = {
+                          draft_pending: { color: "#92400e", bg: "#fef3c7" },
+                          drafting: { color: "#065f46", bg: "#d1fae5" },
+                          active: { color: "#1e40af", bg: "#dbeafe" },
+                          completed: { color: "#6b7280", bg: "#f3f4f6" },
+                        };
+                        const sc = STATUS_COLOR_MAP[league.status] ?? { color: "#374151", bg: "#f3f4f6" };
+                        const sl = STATUS_LABEL_MAP[league.status] ?? league.status;
+                        const memberCount = (league as any).memberCount ?? 0;
+                        return (
+                          <div key={league.id} className="league-list-card">
+                            <Link href={`/league/${league.slug}`} className="league-list-info">
+                              <div className="league-list-icon"></div>
+                              <div style={{ flex: 1 }}>
+                                <div className="league-list-name">{league.name}</div>
+                                <div className="league-list-meta">
+                                  <span style={{ padding: "2px 8px", background: sc.bg, color: sc.color, borderRadius: 12, fontSize: 11, fontWeight: 700 }}>{sl}</span>
+                                  <span> · </span>
+                                  <span>{league.visibility === "public" ? t("公开", "Public") : t("私人", "Private")}</span>
+                                  <span> · </span>
+                                  <span>{memberCount}/{league.max_teams} {t("人", "members")}</span>
+                                </div>
                               </div>
-                            </div>
-                          </Link>
-                          {isOwnProfile && (
-                            <button className="delete-btn" onClick={() => setShowDeleteModal(league.id)}>✕</button>
-                          )}
-                        </div>
-                      ))}
+                            </Link>
+                            {isOwnProfile && (
+                              <button className="delete-btn" onClick={() => setShowDeleteModal(league.id)}>✕</button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -399,7 +420,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* ── Bottom: Leagues + Season Stats ── */}
-        {isOwnProfile && userLeagues.length > 0 && (
+        {userLeagues.length > 0 && (
           <div className="bottom-two-col">
             {/* Recent leagues */}
             <div className="card bottom-card">
