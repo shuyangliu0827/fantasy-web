@@ -24,6 +24,7 @@ import {
   DailyLineupMap,
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 
 // ── Types ──
 
@@ -465,6 +466,9 @@ export default function RosterPage() {
   const benchSlots = SLOT_ORDER.filter(s => SLOT_LABELS[s].type === "bench");
   const unassigned = getUnassignedPlayers();
 
+  // Resolve this league's effective scoring weights (ESPN default or custom)
+  const leagueWeights = useMemo(() => getLeaguePointsWeights(league ?? {}), [league]);
+
   // Earliest valid lineup date: draft completion date, then league creation date, then null
   const leagueMinDate = league?.draft_completed_at
     ? formatDateStr(new Date(league.draft_completed_at))
@@ -493,7 +497,7 @@ export default function RosterPage() {
           blk: acc.blk + dayStats.blk,
           tov: acc.tov + dayStats.tov,
           pts: acc.pts + dayStats.pts,
-          fpts: acc.fpts + dayStats.fpts,
+          fpts: acc.fpts + calcFantasyPoints(dayStats, leagueWeights),
         };
       }
       // Past or today: don't add season averages for players without game-day data
@@ -514,7 +518,7 @@ export default function RosterPage() {
         blk: acc.blk + a.blk,
         tov: acc.tov + a.tov,
         pts: acc.pts + a.pts,
-        fpts: acc.fpts + stats.fptsAvg,
+        fpts: acc.fpts + calcFantasyPoints(a, leagueWeights),
       };
     },
     { min: 0, fgm: 0, fga: 0, ftm: 0, fta: 0, fg3m: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0 }
@@ -682,13 +686,13 @@ export default function RosterPage() {
 
     if (isPastDate) {
       if (played && dayStats) {
-        return <div className="col-fpts">{dayStats.fpts.toFixed(1)}</div>;
+        return <div className="col-fpts">{calcFantasyPoints(dayStats, leagueWeights).toFixed(1)}</div>;
       }
       return <div className="col-fpts">--</div>;
     }
 
     if (played && dayStats) {
-      return <div className="col-fpts live">{dayStats.fpts.toFixed(1)}</div>;
+      return <div className="col-fpts live">{calcFantasyPoints(dayStats, leagueWeights).toFixed(1)}</div>;
     }
 
     // Today with no game stats → "--"
@@ -696,7 +700,7 @@ export default function RosterPage() {
 
     const stats = player ? getStatsForPlayer(player) : null;
     if (!stats) return <div className="col-fpts">--</div>;
-    return <div className="col-fpts">{stats.fptsAvg.toFixed(1)}</div>;
+    return <div className="col-fpts">{calcFantasyPoints(stats.averages, leagueWeights).toFixed(1)}</div>;
   }
 
   function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {

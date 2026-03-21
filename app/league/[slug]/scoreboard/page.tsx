@@ -21,6 +21,7 @@ import {
 } from "@/lib/store";
 import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
 import { fillMissingWeekLineups, getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
+import { getLeaguePointsWeights } from "@/lib/scoring-config";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
@@ -59,6 +60,7 @@ export default function ScoreboardPage() {
   const weekRange = useMemo(() => getScoringWeekRange(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
   const weekStatus = useMemo(() => getWeekStatus(selectedWeek, leagueStart), [selectedWeek, leagueStart]);
   const totalWeeks = useMemo(() => getSeasonTotalWeeks(leagueStart), [leagueStart]);
+  const leagueWeights = useMemo(() => getLeaguePointsWeights(league ?? {}), [league]);
   const isOwner = Boolean(user && league && league.commissioner_id === user.id);
 
   useEffect(() => {
@@ -217,8 +219,8 @@ export default function ScoreboardPage() {
         ? fillMissingWeekLineups(rawAwayLineups, weekRange.dateStrings)
         : rawAwayLineups;
 
-      const liveHome = getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats);
-      const liveAway = getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats);
+      const liveHome = getWeeklyMatchupScore(homeRoster, homeLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights);
+      const liveAway = getWeeklyMatchupScore(awayRoster, awayLineups, weekRange.dateStrings, getPlayerDayStats, leagueWeights);
 
       // While stats are still loading, show the DB-pinned score as a stable placeholder.
       // Once loading finishes, always show the live computed value — this keeps the

@@ -27,10 +27,19 @@
      id: string;
      slug: string;
      name: string;
+     description?: string;
+     logo_url?: string;
      commissioner_id: string;
      visibility: "public" | "private";
+     status: string;
+     max_teams: number;
+     draft_type: string;
+     scoring_type: string;           // 'h2h_points' | 'h2h_categories' | 'rotisserie'
+     points_system?: string | null;  // 'espn_default' | 'custom' | null
+     points_weights?: Record<string, number> | null;
+     rules_locked: boolean;
      created_at: string;
-     draft_completed_at?: string; // Set when draft finishes; earliest valid lineup date
+     draft_completed_at?: string | null; // Set when draft finishes; earliest valid lineup date
    };
    
    export type Insight = {
@@ -696,6 +705,86 @@
      });
 
      return { ok: true as const, league: data };
+   }
+
+   /**
+    * Updates branding fields only (name, description, logo_url).
+    * These remain editable by the league owner at any time, even after draft completion.
+    */
+   export async function updateLeagueBranding(
+     leagueId: string,
+     data: { name?: string; description?: string; logo_url?: string }
+   ): Promise<{ ok: true } | { ok: false; error: string }> {
+     const user = getSessionUser();
+     if (!user) return { ok: false, error: "Login required" };
+
+     const { error } = await supabase
+       .from("leagues")
+       .update(data)
+       .eq("id", leagueId)
+       .eq("commissioner_id", user.id);
+
+     if (error) return { ok: false, error: error.message };
+     return { ok: true };
+   }
+
+   /**
+    * Updates competition rule fields (scoring, draft, teams, visibility).
+    * Rejects if the league's draft has already started (status !== 'draft_pending').
+    * Only 'h2h_points' may be saved as scoring_type for now.
+    */
+   export async function updateLeagueRules(
+     leagueId: string,
+     data: {
+       scoring_type?: string;
+       points_system?: string | null;
+       points_weights?: Record<string, number> | null;
+       draft_type?: string;
+       max_teams?: number;
+       visibility?: "public" | "private";
+     }
+   ): Promise<{ ok: true } | { ok: false; error: string }> {
+     const user = getSessionUser();
+     if (!user) return { ok: false, error: "Login required" };
+
+     // Fetch latest league state to check lock
+     const { data: leagueRow, error: fetchError } = await supabase
+       .from("leagues")
+       .select("status, commissioner_id")
+       .eq("id", leagueId)
+       .single();
+
+     if (fetchError || !leagueRow) return { ok: false, error: "League not found" };
+     if (leagueRow.commissioner_id !== user.id) return { ok: false, error: "Not authorized" };
+     if (leagueRow.status !== "draft_pending") {
+       return { ok: false, error: "Competition rules are locked once the draft has started" };
+     }
+
+     // Only h2h_points is supported for now
+     if (data.scoring_type && data.scoring_type !== "h2h_points") {
+       return { ok: false, error: "Only H2H Points scoring is supported" };
+     }
+
+     // Enforce null constraints for non-h2h_points (future-proofing)
+     const scoringType = data.scoring_type ?? "h2h_points";
+     const updateData = {
+       ...data,
+       scoring_type: scoringType,
+       points_system: scoringType === "h2h_points" ? (data.points_system ?? null) : null,
+       points_weights:
+         scoringType === "h2h_points" && data.points_system === "custom"
+           ? (data.points_weights ?? null)
+           : null,
+     };
+
+     const { error } = await supabase
+       .from("leagues")
+       .update(updateData)
+       .eq("id", leagueId)
+       .eq("commissioner_id", user.id);
+
+     if (error) return { ok: false, error: error.message };
+     return { ok: true };
    }
 
    // 联赛成员类型

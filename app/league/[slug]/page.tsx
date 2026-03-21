@@ -519,136 +519,286 @@ export default function LeaguePage() {
     );
   }
 
-  // ─── PRE-DRAFT / DRAFTING STATE: keep original layout ────────────────────
+  // ─── PRE-DRAFT STATE: same hero layout as active, pre-draft content ─────────
+  const PRE_DRAFT_TABS = [
+    { key: "standings", label: "参赛队伍" },
+    { key: "news",      label: "联赛公告" },
+  ];
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
+    <div style={{ minHeight: "100vh", background: "#f0f4f8", fontFamily: FONT }}>
       <LightHeader activeHref="/league" />
 
-      {/* League header */}
-      <div style={{ background: "#1e3a8a", padding: isMobile ? "24px 12px" : "32px 32px" }}>
-        <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", alignItems: "center", flexDirection: isMobile ? "column" : "row", gap: 24 }}>
-          <div style={{ width: 64, height: 64, background: "rgba(255,255,255,0.15)", borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: isMobile ? 26 : 32, flexShrink: 0 }}>
-            🏀
-          </div>
+      {/* ── Hero (same gradient as active) ── */}
+      <div style={{
+        background: "linear-gradient(135deg, #1e3a8a 0%, #1e40af 60%, #2563eb 100%)",
+        padding: isMobile ? "24px 12px 20px" : "40px 32px 36px",
+        position: "relative", overflow: "hidden",
+      }}>
+        <div style={{ position: "absolute", right: -60, top: -60, width: 300, height: 300, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", right: 80, bottom: -80, width: 220, height: 220, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 20 : 32, alignItems: "flex-start" }}>
+          {/* left */}
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: "0 0 10px 0", fontSize: 26, fontWeight: 800, color: "#fff", wordBreak: "break-word" }}>
-              {league.name}
-            </h1>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-                {league.season} 赛季
-              </span>
-              <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-                {league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}
-              </span>
+            {/* breadcrumb */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18 }}>
+              <Link href="/league" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", textDecoration: "none" }}>← 返回公开联赛</Link>
+              <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>公开联赛</span>
+              <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
+              <span style={{ fontSize: 13, color: "#fff" }}>{league.name}</span>
+            </div>
+
+            {/* tags */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
               <span style={{ padding: "4px 12px", background: statusColor.bg, color: statusColor.color, borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
                 {statusLabel}
               </span>
+              <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+                {league.season} NBA赛季
+              </span>
+            </div>
+
+            {/* title */}
+            <h1 style={{ margin: "0 0 12px", fontSize: isMobile ? 26 : 32, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
+              {league.name}
+            </h1>
+            <p style={{ margin: "0 0 28px", fontSize: 14, color: "rgba(255,255,255,0.75)", lineHeight: 1.7, maxWidth: 600 }}>
+              {league.description || `${teams.length}支队伍已加入，${league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}，选秀尚未开始。`}
+            </p>
+
+            {/* stat badges */}
+            <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 32 }}>
+              {[
+                { value: `${teams.length} / ${league.max_teams}`, label: "参赛队伍" },
+                { value: league.draft_type === "snake" ? "蛇形" : "线性", label: "选秀方式" },
+                { value: league.max_teams, label: "最大队伍" },
+                { value: league.scoring_categories || "标准", label: "统计类别" },
+              ].map(s => (
+                <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{s.value}</span>
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.65)" }}>{s.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* action buttons */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {!myTeam ? (
+                <button
+                  onClick={() => setShowJoinModal(true)}
+                  style={{ padding: "11px 22px", background: "#fff", color: "#1e3a8a", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
+                >
+                  + 加入联赛
+                </button>
+              ) : (
+                <Link href={`/league/${leagueId}/roster`} style={{
+                  padding: "11px 22px", background: "#fff", color: "#1e3a8a",
+                  border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
+                  cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6,
+                }}>
+                  🏀 管理我的球队
+                </Link>
+              )}
+              <button
+                onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert("邀请链接已复制！")); }}
+                style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
+              >
+                邀请好友
+              </button>
               {isCommissioner && (
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>👑 联盟管理员</span>
+                <Link href={`/league/${leagueId}/settings`} style={{
+                  padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "#fff",
+                  border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14,
+                  fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center",
+                }}>
+                  联赛设置
+                </Link>
               )}
             </div>
           </div>
-          {!myTeam ? (
-            <button
-              onClick={() => setShowJoinModal(true)}
-              style={{ padding: "11px 24px", background: "#fff", color: "#1e3a8a", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, fontFamily: FONT }}
-            >
-              + 加入联赛
-            </button>
-          ) : (
-            <div style={{ padding: "11px 24px", background: "rgba(255,255,255,0.15)", borderRadius: 10, fontSize: 14, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-              ✓ 已加入
+
+          {/* right: pre-draft status card */}
+          <div style={{
+            background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)",
+            border: "1px solid rgba(255,255,255,0.2)", borderRadius: 16,
+            padding: "24px 28px", minWidth: 200, flexShrink: 0, textAlign: "center",
+          }}>
+            {myTeam ? (
+              <>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>你的选秀位</div>
+                <div style={{ fontSize: 56, fontWeight: 900, color: "#fbbf24", lineHeight: 1, marginBottom: 8 }}>
+                  #{myTeam.draft_position}
+                </div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 20 }}>
+                  等待选秀开始
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>剩余名额</div>
+                <div style={{ fontSize: 56, fontWeight: 900, color: "#fbbf24", lineHeight: 1, marginBottom: 8 }}>
+                  {league.max_teams - teams.length}
+                </div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 20 }}>
+                  等待加入
+                </div>
+              </>
+            )}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 16 }}>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>选秀状态</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>
+                {canStartDraft ? "✅ 可以开始" : `${teams.length} / ${league.max_teams} 队伍`}
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 32px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-        {/* Announcement */}
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 12, padding: "20px 24px" }}>
-          <h3 style={{ margin: "0 0 10px 0", fontSize: 16, fontWeight: 700, color: "#111827" }}>📢 联赛公告</h3>
-          <p style={{ margin: 0, color: "#374151", lineHeight: 1.7, fontSize: 14 }}>
-            欢迎来到联赛！准备好开始你的Fantasy 篮球之旅了吗？
-          </p>
-          {canStartDraft && (
-            <div style={{ marginTop: 12, padding: "10px 14px", background: "#fef3c7", borderRadius: 8, color: "#92400e", fontSize: 13, fontWeight: 500 }}>
-              ✅ 提示：已有{teams.length}支队伍加入（偶数），可以开始选秀了！
-            </div>
-          )}
-        </div>
-
-        {/* Quick actions */}
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-          {[
-            { href: `/league/${leagueId}/roster`, icon: "📋", title: "查看阵容", desc: "管理首发和板凳" },
-            { href: `/league/${leagueId}/free-agents`, icon: "🔍", title: "自由市场", desc: "签约和放弃球员" },
-            { href: `/league/${leagueId}/trade`, icon: "🔄", title: "球员交易", desc: "与其他队伍交易" },
-            { href: `/league/${leagueId}/standings`, icon: "🏆", title: "排行榜", desc: "查看联赛排名" },
-          ].map(item => (
-            <a key={item.href} href={item.href} style={{ background: "#fff", border: "1.5px solid #e5e7eb", padding: "18px 20px", borderRadius: 12, textDecoration: "none", display: "flex", alignItems: "center", gap: 14, transition: "border-color 0.15s" }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = "#1e3a8a")}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = "#e5e7eb")}>
-              <span style={{ fontSize: 28 }}>{item.icon}</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{item.title}</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>{item.desc}</div>
-              </div>
-            </a>
+      {/* ── Tab bar ── */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
+          {PRE_DRAFT_TABS.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              style={{
+                padding: "16px 20px", background: "none", border: "none", cursor: "pointer",
+                fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                color: activeTab === tab.key ? "#1e3a8a" : "#6b7280",
+                borderBottom: activeTab === tab.key ? "2.5px solid #1e3a8a" : "2.5px solid transparent",
+                transition: "all 0.15s",
+              }}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
+      </div>
 
-        {/* Teams */}
-        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "24px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>
-              🏀 参赛队伍 ({teams.length}/{league.max_teams})
-            </h3>
+      {/* ── Main content + sidebar ── */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "18px 12px" : "28px 32px", display: "flex", flexDirection: isMobile ? "column" : "row", gap: 24, alignItems: "flex-start" }}>
+
+        {/* ── Teams tab ── */}
+        {activeTab === "standings" && (
+          <div style={{ flex: 1 }}>
+            {/* draft-ready notice */}
             {canStartDraft && (
-              <button
-                onClick={handleStartDraft}
-                disabled={starting}
-                style={{ padding: "10px 20px", background: "#15803d", border: "none", borderRadius: 10, color: "#fff", fontWeight: 700, fontSize: 14, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT }}
-              >
-                {starting ? "⏳ 开始中..." : "🎯 开始选秀"}
-              </button>
+              <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ fontSize: 14, color: "#15803d", fontWeight: 600 }}>
+                  ✅ 已有 {teams.length} 支队伍加入（偶数），可以开始选秀了！
+                </div>
+                <button
+                  onClick={handleStartDraft}
+                  disabled={starting}
+                  style={{ padding: "9px 20px", background: "#15803d", border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, fontSize: 13, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT, whiteSpace: "nowrap", flexShrink: 0 }}
+                >
+                  {starting ? "⏳ 开始中..." : "🎯 开始选秀"}
+                </button>
+              </div>
             )}
+
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ padding: "18px 24px", borderBottom: "1px solid #f3f4f6" }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>
+                  参赛队伍 ({teams.length}/{league.max_teams})
+                </h2>
+              </div>
+
+              <div style={{ padding: "16px", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+                {teams.map(team => (
+                  <div key={team.id} style={{
+                    background: myTeam?.id === team.id ? "#eff6ff" : "#f9fafb",
+                    padding: "16px", borderRadius: 12, display: "flex", alignItems: "center", gap: 14,
+                    border: myTeam?.id === team.id ? "2px solid #1e3a8a" : "2px solid transparent",
+                  }}>
+                    <div style={{ width: 44, height: 44, background: "#1e3a8a", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
+                      #{team.draft_position}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, color: "#111827" }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
+                        {myTeam?.id === team.id && <span style={{ padding: "1px 6px", background: "#1e3a8a", color: "#fff", borderRadius: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>你</span>}
+                        {team.user_id === league.commissioner_id && <span style={{ fontSize: 13 }}>👑</span>}
+                      </div>
+                      <div style={{ color: "#9ca3af", fontSize: 12 }}>等待选秀开始</div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* empty slots */}
+                {Array.from({ length: league.max_teams - teams.length }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    onClick={() => !myTeam && setShowJoinModal(true)}
+                    style={{ background: "#f9fafb", border: "2px dashed #d1d5db", padding: "16px", borderRadius: 12, display: "flex", justifyContent: "center", alignItems: "center", cursor: myTeam ? "default" : "pointer", flexDirection: "column", gap: 6, color: "#9ca3af", minHeight: 76 }}
+                  >
+                    <span style={{ fontSize: 22 }}>+</span>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>等待加入</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Announcement tab ── */}
+        {activeTab === "news" && (
+          <div style={{ flex: 1 }}>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: "24px" }}>
+              <h2 style={{ margin: "0 0 12px", fontSize: 17, fontWeight: 700, color: "#111827" }}>📢 联赛公告</h2>
+              <p style={{ margin: 0, color: "#374151", lineHeight: 1.8, fontSize: 14 }}>
+                {league.description || "欢迎来到联赛！准备好开始你的 Fantasy 篮球之旅了吗？"}
+              </p>
+              <div style={{ marginTop: 16, padding: "14px 16px", background: "#f9fafb", borderRadius: 10, fontSize: 13, color: "#6b7280", lineHeight: 1.7 }}>
+                <div style={{ fontWeight: 600, color: "#374151", marginBottom: 6 }}>选秀规则</div>
+                <div>· 赛制：{league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}</div>
+                <div>· 最大队伍数：{league.max_teams}</div>
+                <div>· 当前状态：{statusLabel}，选秀尚未开始</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Right sidebar ── */}
+        <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Draft readiness */}
+          <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "20px" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>选秀准备状态</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b7280" }}>
+                <span>已加入队伍</span>
+                <span style={{ fontWeight: 700, color: "#111827" }}>{teams.length} / {league.max_teams}</span>
+              </div>
+              <div style={{ height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "linear-gradient(90deg, #1e3a8a, #3b82f6)", borderRadius: 3, width: `${Math.min(100, (teams.length / league.max_teams) * 100)}%`, transition: "width 0.3s" }} />
+              </div>
+              <div style={{ fontSize: 12, color: canStartDraft ? "#15803d" : "#6b7280", fontWeight: canStartDraft ? 700 : 400 }}>
+                {canStartDraft ? "✅ 人数充足，可以开始选秀" : `还需 ${Math.max(0, 2 - teams.length % 2 === 0 && teams.length >= 2 ? 0 : 2 - (teams.length % 2 || 2))} 队伍加入（需偶数）`}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-            {teams.map(team => (
-              <div key={team.id} style={{ background: myTeam?.id === team.id ? "#eff6ff" : "#f9fafb", padding: "18px", borderRadius: 12, display: "flex", alignItems: "center", gap: 14, border: myTeam?.id === team.id ? "2px solid #1e3a8a" : "2px solid transparent" }}>
-                <div style={{ width: 44, height: 44, background: "#1e3a8a", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
-                  #{team.draft_position}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4, display: "flex", alignItems: "center", gap: 8, color: "#111827" }}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
-                    {myTeam?.id === team.id && (
-                      <span style={{ padding: "2px 7px", background: "#1e3a8a", color: "#fff", borderRadius: 6, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>你</span>
-                    )}
-                    {team.user_id === league.commissioner_id && <span style={{ fontSize: 13 }}>👑</span>}
-                  </div>
-                  <div style={{ color: "#6b7280", fontSize: 13 }}>
-                    {league.status === "draft_pending" ? "等待选秀" : `${team.wins}-${team.losses}`}
-                  </div>
-                </div>
-              </div>
-            ))}
+          {/* Commissioner: start draft shortcut */}
+          {canStartDraft && (
+            <button
+              onClick={handleStartDraft}
+              disabled={starting}
+              style={{ width: "100%", padding: "13px", background: "#15803d", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 700, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT }}
+            >
+              {starting ? "⏳ 开始中..." : "🎯 开始选秀"}
+            </button>
+          )}
 
-            {/* Empty slots — only shown in pre-draft state */}
-            {Array.from({ length: league.max_teams - teams.length }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                onClick={() => !myTeam && setShowJoinModal(true)}
-                style={{ background: "#f9fafb", border: "2px dashed #d1d5db", padding: "18px", borderRadius: 12, display: "flex", justifyContent: "center", alignItems: "center", cursor: myTeam ? "default" : "pointer", flexDirection: "column", gap: 6, color: "#9ca3af" }}
-              >
-                <span style={{ fontSize: 28 }}>+</span>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>等待加入</span>
-              </div>
-            ))}
-          </div>
+          {/* Invite */}
+          <button
+            onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert("邀请链接已复制！")); }}
+            style={{ width: "100%", padding: "13px", background: "#fff", border: "2px dashed #1e3a8a", borderRadius: 12, color: "#1e3a8a", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
+          >
+            + 邀请好友加入联赛
+          </button>
         </div>
       </div>
 
