@@ -26,6 +26,7 @@ import {
   BENCH_SLOTS,
   STARTER_SLOTS,
   buildDailyScoreBreakdown,
+  fillMissingWeekLineups,
   getStarterIdsForDate,
   getWeeklyMatchupScore,
   getWeeklyStarterIds,
@@ -36,6 +37,8 @@ import {
   CANONICAL_TIMEZONE,
   getOfficialLeagueStartDate,
   getScoringWeekRange,
+  getWeekDateStrings,
+  getTodayStr,
   parseDateStr,
 } from "@/lib/week-utils";
 
@@ -96,6 +99,8 @@ export default function MatchupDetailPage() {
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<string>("total");
+  // Pinned scores from matchups table — stable source of truth for finalized weeks
+  const [pinnedScores, setPinnedScores] = useState<{ homeScore: number; awayScore: number } | null>(null);
 
   const leagueStart = useMemo(() => getOfficialLeagueStartDate(league?.draft_completed_at ?? null), [league?.draft_completed_at]);
   const weekRange = useMemo(() => getScoringWeekRange(week || 1, leagueStart), [leagueStart, week]);
@@ -147,8 +152,38 @@ export default function MatchupDetailPage() {
       if (cancelled) return;
       setHomeRoster(resolvedHomeRoster);
       setAwayRoster(resolvedAwayRoster);
-      setHomeDailyLineups(resolvedHomeLineups);
-      setAwayDailyLineups(resolvedAwayLineups);
+
+      // For past weeks, fill missing week dates from the nearest available lineup snapshot.
+      // This mirrors what the scoreboard does in its matchupCards useMemo.
+      const officialStart = getOfficialLeagueStartDate(leagueData.draft_completed_at);
+      const weekDates = getWeekDateStrings(week || 1, officialStart);
+      const weekEndStr = weekDates[weekDates.length - 1] ?? "";
+      const isWeekPast = weekEndStr < getTodayStr();
+      const filledHomeLineups = isWeekPast
+        ? fillMissingWeekLineups(resolvedHomeLineups, weekDates)
+        : resolvedHomeLineups;
+      const filledAwayLineups = isWeekPast
+        ? fillMissingWeekLineups(resolvedAwayLineups, weekDates)
+        : resolvedAwayLineups;
+      setHomeDailyLineups(filledHomeLineups);
+      setAwayDailyLineups(filledAwayLineups);
+
+      // For past weeks, fetch the pinned score from matchups table so the total
+      // is stable even if the live game-stats API returns partial data on re-load.
+      if (homeFantasy && awayFantasy) {
+        const { data: matchupRow } = await supabase
+          .from("matchups")
+          .select("home_score, away_score")
+          .eq("league_id", leagueData.id)
+          .eq("week", week || 1)
+          .eq("home_team_id", homeFantasy.id)
+          .eq("away_team_id", awayFantasy.id)
+          .eq("status", "completed")
+          .maybeSingle();
+        if (!cancelled && matchupRow) {
+          setPinnedScores({ homeScore: matchupRow.home_score, awayScore: matchupRow.away_score });
+        }
+      }
 
       if (statsIndex.status === "success" && Array.isArray(statsIndex.players)) {
         const map = new Map<string, CachedPlayerStats>();
@@ -179,17 +214,16 @@ export default function MatchupDetailPage() {
       try {
         const results = await Promise.all(
           weekRange.dateStrings.map(async (date) => {
-            const response = await fetch(`/api/nba-game-stats?date=${date}`);
-            const payload = await response.json();
-            return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+            try {
+              const response = await fetch(`/api/nba-game-stats?date=${date}`);
+              const payload = await response.json();
+              return [date, payload.status === "success" ? (payload.stats as DateStatsMap) : {}] as const;
+            } catch {
+              return [date, {}] as const;
+            }
           }),
         );
         if (!cancelled) setWeekDayStats(Object.fromEntries(results));
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to fetch matchup week stats", error);
-          setWeekDayStats({});
-        }
       } finally {
         if (!cancelled) setStatsLoading(false);
       }
@@ -319,8 +353,13 @@ export default function MatchupDetailPage() {
   const rangeLabel = weekRange ? `${weekRange.startDate} → ${weekRange.endDate}` : t("待官方启用", "Pending official start");
   const homeDailyScores = weekRange ? buildDailyScoreBreakdown(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
   const awayDailyScores = weekRange ? buildDailyScoreBreakdown(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : {};
-  const homeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
-  const awayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const liveHomeScore = weekRange ? getWeeklyMatchupScore(homeRoster, homeDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  const liveAwayScore = weekRange ? getWeeklyMatchupScore(awayRoster, awayDailyLineups, weekRange.dateStrings, getPlayerDayStats) : 0;
+  // While stats are loading, show the DB-pinned value as a stable placeholder.
+  // Once loading completes, always use the live computed value so the header total
+  // is always the exact sum of the daily breakdown rows below it.
+  const homeScore = statsLoading ? (pinnedScores?.homeScore ?? liveHomeScore) : liveHomeScore;
+  const awayScore = statsLoading ? (pinnedScores?.awayScore ?? liveAwayScore) : liveAwayScore;
   function renderScoreSummary(teamName: string, ownerName: string, record: string, score: number, side: "home" | "away", leading: boolean) {
     return (
       <div className={`summary-team ${leading ? "leading" : ""}`}>

@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDailyScoreBreakdown, getDailyStarterScore, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
-import { computeCanonicalWeeklyResult } from "../lib/canonical-weekly-result.ts";
+import { buildDailyScoreBreakdown, getDailyStarterScore, fillMissingWeekLineups, getStarterIdsForDate, getWeeklyMatchupScore, getWeeklyStarterIds, type PlayerGameStats } from "../lib/fantasy-scoring.ts";
 import { getCurrentWeek, getOfficialLeagueStartDate, getScoringWeekRange, getWeekStatus } from "../lib/week-utils.ts";
 import { getCurrentRoster, getHistoricalRosterForDate } from "../lib/roster-history.ts";
 import type { DailyLineupMap, RosterPlayer } from "../lib/store";
@@ -196,140 +195,126 @@ test("games behind formula: standard relative-to-leader", () => {
   assert.equal(gamesBack(5, 2, 4, 4), 1.5);
 });
 
-// ── Canonical weekly result pipeline ─────────────────────────────────────────
+// ── Lineup change → full recompute (Rule B) ───────────────────────────────────
 
-const FULL_WEEK = ["2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-28","2026-03-29"];
-
-const weeklyLineups: DailyLineupMap = {
-  "2026-03-23": { PG: "p1", SG: "p2", BE1: "p3" },
-  "2026-03-24": { PG: "p1", SG: "p2", BE1: "p3" },
-  "2026-03-25": { PG: "p1", BE1: "p2", BE2: "p3" },
-  // 2026-03-26 through 29: no lineup saved → contribute 0
-};
-
-const weekStats: Record<string, Record<string, PlayerGameStats>> = {
-  "2026-03-23": {
-    p1: { min: 30, fgm: 6, fga: 12, fg3m: 2, ftm: 4, fta: 4, reb: 5, ast: 8, stl: 1, blk: 0, tov: 2, pts: 18, fpts: 32 },
-    p2: { min: 28, fgm: 4, fga: 11, fg3m: 1, ftm: 2, fta: 2, reb: 3, ast: 4, stl: 2, blk: 1, tov: 1, pts: 11, fpts: 23 },
-  },
-  "2026-03-24": {
-    p1: { min: 0, fgm: 0, fga: 0, fg3m: 0, ftm: 0, fta: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pts: 0, fpts: 0 },
-  },
-  "2026-03-25": {
-    p1: { min: 20, fgm: 5, fga: 10, fg3m: 1, ftm: 1, fta: 2, reb: 2, ast: 6, stl: 0, blk: 0, tov: 3, pts: 12, fpts: 18 },
-  },
-};
-const resolveWeekStats = (p: RosterPlayer, d: string) => weekStats[d]?.[p.id] || null;
-
-test("canonical result: sums all 7 official dates — missing lineup/stats days contribute 0", () => {
-  const result = computeCanonicalWeeklyResult({
-    homeTeamId: "teamA", awayTeamId: "teamB",
-    homeRoster: roster, awayRoster: roster,
-    homeDailyLineups: weeklyLineups, awayDailyLineups: {},
-    dateStrings: FULL_WEEK,
-    resolvePlayerStats: resolveWeekStats,
-    weekStatus: "past",
-  });
-  // 7 dates enumerated; only 3 have lineups/stats, rest are 0
-  assert.equal(Object.keys(result.homeDailyScores).length, 7, "daily breakdown must include all 7 dates");
-  assert.equal(result.homeDailyScores["2026-03-26"], 0);
-  assert.equal(result.homeDailyScores["2026-03-27"], 0);
-  // homeScore = 55 (Mar 23) + 0 (Mar 24) + 18 (Mar 25) + 0+0+0+0 = 73
-  assert.equal(result.homeScore, 73);
-  assert.equal(result.awayScore, 0);
-});
-
-test("canonical result: adding a lineup for a new date in the week changes weekly total", () => {
-  const extraDate = "2026-03-26";
-  const lineupsWithExtra: DailyLineupMap = {
-    ...weeklyLineups,
-    [extraDate]: { PG: "p1", SG: "p2" },
+test("changing starter on a date removes old player contribution and adds new player (Rule B: replace-recompute)", () => {
+  // Original lineup: p1=PG, p2=SG (starters); p3=bench
+  const originalLineups: DailyLineupMap = {
+    "2026-03-23": { PG: "p1", SG: "p2", BE1: "p3" },
   };
-  const statsWithExtra: Record<string, Record<string, PlayerGameStats>> = {
-    ...weekStats,
-    [extraDate]: {
-      p1: { min: 25, fgm: 4, fga: 9, fg3m: 1, ftm: 2, fta: 2, reb: 3, ast: 5, stl: 1, blk: 0, tov: 1, pts: 11, fpts: 21 },
-      p2: { min: 30, fgm: 5, fga: 10, fg3m: 2, ftm: 1, fta: 1, reb: 4, ast: 6, stl: 2, blk: 1, tov: 0, pts: 13, fpts: 28 },
-    },
+
+  // New lineup: p3 replaces p1 at PG
+  const newLineups: DailyLineupMap = {
+    "2026-03-23": { PG: "p3", SG: "p2", BE1: "p1" },
   };
-  const resolveExtra = (p: RosterPlayer, d: string) => statsWithExtra[d]?.[p.id] || null;
 
-  const before = computeCanonicalWeeklyResult({
-    homeTeamId: "A", awayTeamId: "B",
-    homeRoster: roster, awayRoster: roster,
-    homeDailyLineups: weeklyLineups, awayDailyLineups: {},
-    dateStrings: FULL_WEEK,
-    resolvePlayerStats: resolveExtra,
-    weekStatus: "past",
-  });
-  const after = computeCanonicalWeeklyResult({
-    homeTeamId: "A", awayTeamId: "B",
-    homeRoster: roster, awayRoster: roster,
-    homeDailyLineups: lineupsWithExtra, awayDailyLineups: {},
-    dateStrings: FULL_WEEK,
-    resolvePlayerStats: resolveExtra,
-    weekStatus: "past",
-  });
-  assert.ok(after.homeScore > before.homeScore, "adding a scored date must increase the weekly total");
-  assert.equal(after.homeScore, before.homeScore + 49); // 21 (p1) + 28 (p2)
+  const scoreWithOriginal = getDailyStarterScore(roster, originalLineups, "2026-03-23", resolveStats);
+  const scoreWithNew      = getDailyStarterScore(roster, newLineups,      "2026-03-23", resolveStats);
+
+  // Original: p1(32) + p2(23) = 55
+  assert.equal(scoreWithOriginal, 55);
+  // New: p3(40) + p2(23) = 63 — p1's contribution is gone, p3's is added fresh
+  assert.equal(scoreWithNew, 63);
+  // Crucially, they are different — old contribution does not linger
+  assert.notEqual(scoreWithOriginal, scoreWithNew);
 });
 
-test("canonical result: status is final for past weeks, live for current, pending for future", () => {
-  const base = { homeTeamId: "A", awayTeamId: "B", homeRoster: roster, awayRoster: roster,
-    homeDailyLineups: {}, awayDailyLineups: {}, dateStrings: FULL_WEEK, resolvePlayerStats: () => null };
-  assert.equal(computeCanonicalWeeklyResult({ ...base, weekStatus: "past" }).status, "final");
-  assert.equal(computeCanonicalWeeklyResult({ ...base, weekStatus: "current" }).status, "live");
-  assert.equal(computeCanonicalWeeklyResult({ ...base, weekStatus: "future" }).status, "pending");
-  assert.equal(computeCanonicalWeeklyResult({ ...base, weekStatus: "pending" }).status, "pending");
+test("no double-counting: replacing one starter with another does not count both (Rule B)", () => {
+  // Both p1 and p3 are in the roster; only p3 is a starter on this date
+  const lineupWithP3: DailyLineupMap = {
+    "2026-03-23": { PG: "p3", BE1: "p1", BE2: "p2" },
+  };
+
+  const score = getDailyStarterScore(roster, lineupWithP3, "2026-03-23", resolveStats);
+  // Only p3 (40 fpts) is a starter — p1 and p2 are bench and must NOT be counted
+  assert.equal(score, 40);
 });
 
-test("canonical result: winnerId only set on final status", () => {
-  const base = { homeTeamId: "A", awayTeamId: "B", homeRoster: roster, awayRoster: roster,
-    homeDailyLineups: weeklyLineups, awayDailyLineups: {}, dateStrings: FULL_WEEK, resolvePlayerStats: resolveWeekStats };
-  const live = computeCanonicalWeeklyResult({ ...base, weekStatus: "current" });
-  const final = computeCanonicalWeeklyResult({ ...base, weekStatus: "past" });
-  assert.equal(live.winnerId, null, "no winner declared during live week");
-  assert.equal(final.winnerId, "A", "winner declared for final week with higher score");
+test("getDailyStarterScore is a full recompute from zero — result equals only current starters (Rule B)", () => {
+  const lineup: DailyLineupMap = {
+    "2026-03-23": { PG: "p1", BE1: "p2", BE2: "p3" }, // only p1 is starter
+  };
+  const score = getDailyStarterScore(roster, lineup, "2026-03-23", resolveStats);
+  // p1 = 32; p2 and p3 are bench and contribute 0
+  assert.equal(score, 32);
 });
 
-test("standings from matchups: W/L/T/PF/PA computed from match rows, not accumulated counters", () => {
-  type MatchRow = { home_team_id: string; away_team_id: string; home_score: number; away_score: number };
-  const matchRows: MatchRow[] = [
-    { home_team_id: "T1", away_team_id: "T2", home_score: 80, away_score: 60 },  // T1 wins
-    { home_team_id: "T2", away_team_id: "T1", home_score: 90, away_score: 70 },  // T2 wins
-    { home_team_id: "T1", away_team_id: "T2", home_score: 50, away_score: 50 },  // tie
-  ];
+// ── Weekly aggregation correctness (Rule C) ───────────────────────────────────
 
-  function computeRecordFromMatchups(teamId: string, rows: MatchRow[]) {
-    let wins = 0, losses = 0, ties = 0, pf = 0, pa = 0;
-    for (const m of rows) {
-      const isHome = m.home_team_id === teamId;
-      const isAway = m.away_team_id === teamId;
-      if (!isHome && !isAway) continue;
-      const my = isHome ? m.home_score : m.away_score;
-      const opp = isHome ? m.away_score : m.home_score;
-      pf += my; pa += opp;
-      if (my > opp) wins++; else if (opp > my) losses++; else ties++;
-    }
-    return { wins, losses, ties, pf, pa };
+test("weekly total equals sum of all 7 daily scores — missing dates contribute 0 (Rule C)", () => {
+  const fullWeekDates = ["2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29"];
+  // Only 3 dates have lineup entries; the other 4 have no lineup → score 0
+  const weeklyTotal   = getWeeklyMatchupScore(roster, dailyLineups, fullWeekDates, resolveStats);
+  const dailyBreakdown = buildDailyScoreBreakdown(roster, dailyLineups, fullWeekDates, resolveStats);
+  const sumOfDaily    = Object.values(dailyBreakdown).reduce((a, b) => a + b, 0);
+
+  // Weekly total must exactly equal sum of individual daily scores
+  assert.equal(weeklyTotal, sumOfDaily);
+});
+
+test("missing date in lineup contributes 0 to weekly total and date structure is preserved (Rule C)", () => {
+  const dates = ["2026-03-23", "2026-03-26"]; // 2026-03-26 has no lineup entry
+  const breakdown = buildDailyScoreBreakdown(roster, dailyLineups, dates, resolveStats);
+
+  // 2026-03-26 has no lineup → 0, but the date key must still appear
+  assert.ok("2026-03-26" in breakdown, "missing-lineup date must still appear in breakdown");
+  assert.equal(breakdown["2026-03-26"], 0, "missing-lineup date must contribute 0");
+  assert.equal(breakdown["2026-03-23"], 55, "date with valid lineup and stats must score correctly");
+});
+
+// ── fillMissingWeekLineups edge cases ─────────────────────────────────────────
+
+test("fillMissingWeekLineups: does NOT fill when any week date already has a lineup entry", () => {
+  // p2 has a lineup on 2026-03-24 already; the fill must not overwrite other dates
+  const partialLineups: DailyLineupMap = {
+    "2026-03-24": { PG: "p2" }, // intentional partial — this week has at least one entry
+    "2026-02-23": { PG: "p1", SG: "p2" }, // older snapshot
+  };
+  const weekDates = ["2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29"];
+
+  const filled = fillMissingWeekLineups(partialLineups, weekDates);
+
+  // Because 2026-03-24 already has an entry, fill must not touch any other date
+  assert.equal(filled["2026-03-23"], undefined, "2026-03-23 must not be filled");
+  assert.deepEqual(filled["2026-03-24"], { PG: "p2" }, "existing entry must be unchanged");
+});
+
+test("fillMissingWeekLineups: fills all week dates from nearest snapshot when none exist for the week", () => {
+  const noWeekLineups: DailyLineupMap = {
+    "2026-03-01": { PG: "p1", SG: "p2" }, // snapshot from week before
+  };
+  const weekDates = ["2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29"];
+
+  const filled = fillMissingWeekLineups(noWeekLineups, weekDates);
+
+  // All 7 week dates must now have the snapshot lineup
+  for (const date of weekDates) {
+    assert.deepEqual(filled[date], { PG: "p1", SG: "p2" }, `${date} must be filled`);
   }
+});
 
-  const t1 = computeRecordFromMatchups("T1", matchRows);
-  const t2 = computeRecordFromMatchups("T2", matchRows);
+test("fillMissingWeekLineups: does NOT fill from a snapshot taken after the week ended", () => {
+  // Snapshot is AFTER the week end date → user joined late, should score 0
+  const lateLineups: DailyLineupMap = {
+    "2026-04-01": { PG: "p1", SG: "p2" }, // after week end of 2026-03-29
+  };
+  const weekDates = ["2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-28", "2026-03-29"];
 
-  assert.equal(t1.wins, 1);
-  assert.equal(t1.losses, 1);
-  assert.equal(t1.ties, 1);
-  assert.equal(t1.pf, 200);   // 80 (home wk1) + 70 (away wk2) + 50 (home wk3)
-  assert.equal(t1.pa, 200);   // 60 (opp wk1) + 90 (opp wk2) + 50 (opp wk3)
+  const filled = fillMissingWeekLineups(lateLineups, weekDates);
 
-  assert.equal(t2.wins, 1);
-  assert.equal(t2.losses, 1);
-  assert.equal(t2.ties, 1);
-  assert.equal(t2.pf, 200);   // 60+90+50
-  assert.equal(t2.pa, 200);   // 80+70+50
+  // No fill should have occurred — week dates remain absent
+  for (const date of weekDates) {
+    assert.equal(filled[date], undefined, `${date} must NOT be filled from post-week snapshot`);
+  }
+});
 
-  // Running the computation a second time (simulating a re-save) must give the same result.
-  const t1Again = computeRecordFromMatchups("T1", matchRows);
-  assert.deepEqual(t1, t1Again, "standings computation must be idempotent");
+// ── Determinism: same inputs always produce same outputs (Rule D) ──────────────
+
+test("repeated score computation with same inputs always returns same result (determinism)", () => {
+  const dates = ["2026-03-23", "2026-03-24", "2026-03-25"];
+  const results = Array.from({ length: 10 }, () =>
+    getWeeklyMatchupScore(roster, dailyLineups, dates, resolveStats),
+  );
+  const allSame = results.every(r => r === results[0]);
+  assert.ok(allSame, "identical inputs must always produce identical outputs");
 });

@@ -71,6 +71,21 @@ export function getWeekStatus(week: number, leagueStart: Date | null, today: Dat
   return "current";
 }
 
+// End of the NBA Finals — the last possible day of any scoring week.
+// Update this each season. When the exact date is unknown, round up.
+export const NBA_FINALS_END_UTC = new Date("2026-06-22T00:00:00.000Z");
+
+/**
+ * Total number of scoring weeks from leagueStart through the end of the NBA Finals.
+ * Drives all week selectors so they expand naturally as the season progresses instead
+ * of being capped at a hardcoded number.
+ */
+export function getSeasonTotalWeeks(leagueStart: Date | null): number {
+  if (!leagueStart) return 30; // generous fallback before draft completes
+  const diffMs = NBA_FINALS_END_UTC.getTime() - leagueStart.getTime();
+  return Math.max(1, Math.ceil(diffMs / (7 * DAY_MS)));
+}
+
 export function getScoringWeekRange(week: number, leagueStart: Date | null): {
   week: number;
   startDate: string;

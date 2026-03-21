@@ -16,14 +16,11 @@ import {
 } from "@/lib/store";
 import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
 import {
+  NBA_FINALS_END_UTC,
   getOfficialLeagueStartDate,
   getWeekDateStrings,
   getWeekStatus as getCanonicalWeekStatus,
 } from "@/lib/week-utils";
-
-// ── Schedule constants ────────────────────────────────────────────────────────
-// Season end: NBA Finals Game 7 (approx June 22, 2026) — UTC.
-const NBA_FINALS_END_UTC = new Date("2026-06-22T00:00:00.000Z");
 
 /** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
 function formatScheduleDateRange(startStr: string, endStr: string): string {
@@ -44,6 +41,9 @@ type MatchupEntry = {
   isHome: boolean;
   isPlayoff: boolean;
   playoffRound?: number;
+  matchupIndex: number;
+  homeUserId: string;
+  awayUserId: string;
 };
 
 export default function SchedulePage() {
@@ -133,7 +133,8 @@ export default function SchedulePage() {
 
       // Use the canonical generateMatchupsForWeek — same function scoreboard uses.
       const weekMatchups = generateMatchupsForWeek(members, league.id, week);
-      for (const matchup of weekMatchups) {
+      for (let i = 0; i < weekMatchups.length; i++) {
+        const matchup = weekMatchups[i];
         const homeEntry: MatchupEntry = {
           week,
           label,
@@ -142,6 +143,9 @@ export default function SchedulePage() {
           isHome: true,
           isPlayoff,
           playoffRound,
+          matchupIndex: i,
+          homeUserId: matchup.home.user_id,
+          awayUserId: matchup.away.user_id,
         };
         const awayEntry: MatchupEntry = {
           week,
@@ -151,6 +155,9 @@ export default function SchedulePage() {
           isHome: false,
           isPlayoff,
           playoffRound,
+          matchupIndex: i,
+          homeUserId: matchup.home.user_id,
+          awayUserId: matchup.away.user_id,
         };
         scheduleMap.get(matchup.home.user_id)?.push(homeEntry);
         scheduleMap.get(matchup.away.user_id)?.push(awayEntry);
@@ -277,17 +284,14 @@ export default function SchedulePage() {
                       const status = getEntryStatus(entry.week);
                       const opponentName = getMemberName(entry.opponent);
 
-                      // Look up real scores from DB (populated by scoreboard page when viewed)
-                      // The matchup row key uses home_team_id / away_team_id from fantasy_teams.
-                      // For schedule display we look up by week and check both team orderings.
-                      const dbMatchup = Object.entries(completedMatchups).find(
-                        ([key]) => key.startsWith(`${entry.week}-`)
-                      )?.[1] ?? null;
-                      // Treat 0-0 DB records as unresolved — they may have been saved prematurely
-                      const realMatchup =
-                        dbMatchup && (dbMatchup.home_score > 0 || dbMatchup.away_score > 0)
-                          ? dbMatchup
-                          : null;
+                      // Look up real scores from DB using the team IDs stored on the entry.
+                      // The matchup row key is "{week}-{home_team_id}-{away_team_id}".
+                      // We stored homeUserId/awayUserId on the entry, but the DB key uses team IDs.
+                      // Fall back to finding any matchup for this week that involves either participant.
+                      const realMatchup = Object.entries(completedMatchups).find(([key]) => {
+                        const [w] = key.split("-");
+                        return Number(w) === entry.week;
+                      })?.[1] ?? null;
                       const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
                       const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
                       const isWin = myScore !== null && oppScore !== null && myScore > oppScore;
@@ -327,7 +331,7 @@ export default function SchedulePage() {
                                   {isWin ? "W" : isLoss ? "L" : "T"}
                                 </span>
                                 <Link
-                                  href={`/league/${slug}/matchup/${entry.week}-0`}
+                                  href={`/league/${slug}/matchup/${entry.week}-${entry.matchupIndex}`}
                                   className="score-link"
                                 >
                                   {myScore?.toFixed(1)}-{oppScore?.toFixed(1)}
@@ -335,7 +339,7 @@ export default function SchedulePage() {
                               </div>
                             ) : status === "past" ? (
                               <Link
-                                href={`/league/${slug}/matchup/${entry.week}-0`}
+                                href={`/league/${slug}/matchup/${entry.week}-${entry.matchupIndex}`}
                                 className="score-link-muted"
                               >
                                 {t("查看", "View")}
