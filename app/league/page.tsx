@@ -243,18 +243,24 @@ export default function PublicLeaguesPage() {
                   </div>
 
                   {/* bottom row */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 12, color: "#6b7280" }}>
-                      {league.memberCount}/{league.max_teams} 已加入
-                    </span>
-                    {isFull ? (
-                      <span style={{ padding: "7px 14px", background: "#f1f5f9", color: "#9ca3af", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>已满</span>
-                    ) : isMine ? (
-                      <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#eff6ff", color: "#1e3a8a", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>进入联赛</Link>
-                    ) : (
-                      <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#1e3a8a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>立即加入</Link>
-                    )}
-                  </div>
+                  {(() => {
+                    const isDraftCompleted = league.draft_completed_at || league.status === "active" || league.status === "completed";
+                    const canJoin = !isMine && !isFull && !isDraftCompleted;
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 12, color: "#6b7280" }}>
+                          {league.memberCount}/{league.max_teams} 已加入
+                        </span>
+                        {isMine ? (
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#eff6ff", color: "#1e3a8a", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>进入联赛</Link>
+                        ) : canJoin ? (
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#1e3a8a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>立即加入</Link>
+                        ) : (
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#f1f5f9", color: "#374151", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>进入联赛</Link>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}

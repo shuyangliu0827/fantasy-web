@@ -848,7 +848,7 @@
      return !!data && !error;
    }
 
-   // 加入联赛
+   // 加入联赛（含选秀状态和人数校验）
    export async function joinLeague(leagueId: string) {
      const user = getSessionUser();
      if (!user) return { ok: false as const, error: "Login required" };
@@ -857,6 +857,23 @@
      const isMember = await isLeagueMember(leagueId);
      if (isMember) {
        return { ok: false as const, error: "Already a member" };
+     }
+
+     // 校验联赛状态：选秀完成后不能加入
+     const { data: leagueRow } = await supabase
+       .from("leagues")
+       .select("status, max_teams, draft_completed_at")
+       .eq("id", leagueId)
+       .single();
+     if (!leagueRow) return { ok: false as const, error: "League not found" };
+     if (leagueRow.draft_completed_at || leagueRow.status === "active" || leagueRow.status === "completed") {
+       return { ok: false as const, error: "选秀已完成，无法加入该联赛" };
+     }
+
+     // 校验人数：联赛已满不能加入
+     const memberCount = await getLeagueMemberCount(leagueId);
+     if (memberCount >= leagueRow.max_teams) {
+       return { ok: false as const, error: "联赛已满，无法加入" };
      }
 
      const { data, error } = await supabase
@@ -873,6 +890,44 @@
        return { ok: false as const, error: error.message };
      }
      return { ok: true as const, member: data };
+   }
+
+   // 获取用户已加入的所有联赛（基于 league_members，含历史兼容修复）
+   export async function getUserJoinedLeagues(userId: string): Promise<(League & { memberCount: number; role: string })[]> {
+     // 历史兼容：确保创建者在 league_members 中有记录
+     const { data: ownedLeagues } = await supabase
+       .from("leagues")
+       .select("id")
+       .eq("commissioner_id", userId);
+     if (ownedLeagues && ownedLeagues.length > 0) {
+       for (const league of ownedLeagues) {
+         await supabase.from("league_members")
+           .upsert({ league_id: league.id, user_id: userId, role: "owner" }, { onConflict: "league_id,user_id" });
+       }
+     }
+
+     // 查询该用户的所有成员关系
+     const { data: memberships } = await supabase
+       .from("league_members")
+       .select("league_id, role")
+       .eq("user_id", userId);
+     if (!memberships || memberships.length === 0) return [];
+
+     const leagueIds = memberships.map(m => m.league_id);
+     const { data: leagues } = await supabase
+       .from("leagues")
+       .select("*")
+       .in("id", leagueIds)
+       .order("created_at", { ascending: false });
+     if (!leagues) return [];
+
+     // 附加成员数量
+     const result = await Promise.all(leagues.map(async (league) => {
+       const count = await getLeagueMemberCount(league.id);
+       const membership = memberships.find(m => m.league_id === league.id);
+       return { ...league, memberCount: count, role: membership?.role || "member" };
+     }));
+     return result;
    }
 
    // 退出联赛

@@ -81,6 +81,21 @@ export default function LeaguePage() {
       if (!user) throw new Error("请先登录");
       const leagueData = league;
       if (!leagueData) throw new Error("联赛不存在");
+
+      // 校验联赛状态：仅 draft_pending 状态允许加入
+      if (leagueData.status !== "draft_pending") {
+        throw new Error("选秀已开始或已完成，无法加入");
+      }
+
+      // 校验人数上限
+      const { count: memberCount } = await storeSupa
+        .from("league_members")
+        .select("*", { count: "exact", head: true })
+        .eq("league_id", leagueData.id);
+      if ((memberCount ?? 0) >= leagueData.max_teams) {
+        throw new Error("联赛已满，无法加入");
+      }
+
       const { count } = await storeSupa
         .from("fantasy_teams")
         .select("*", { count: "exact", head: true })
@@ -586,12 +601,26 @@ export default function LeaguePage() {
             {/* action buttons */}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {!myTeam ? (
-                <button
-                  onClick={() => setShowJoinModal(true)}
-                  style={{ padding: "11px 22px", background: "#fff", color: "#1e3a8a", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
-                >
-                  + 加入联赛
-                </button>
+                (() => {
+                  const isDraftCompleted = league.draft_completed_at || league.status === "active" || league.status === "completed";
+                  const isFull = teams.length >= league.max_teams;
+                  const canJoin = league.status === "draft_pending" && !isFull;
+                  if (canJoin) {
+                    return (
+                      <button
+                        onClick={() => setShowJoinModal(true)}
+                        style={{ padding: "11px 22px", background: "#fff", color: "#1e3a8a", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
+                      >
+                        + 加入联赛
+                      </button>
+                    );
+                  }
+                  return (
+                    <span style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.75)", borderRadius: 10, fontSize: 14, fontWeight: 600, fontFamily: FONT }}>
+                      {isDraftCompleted ? "选秀已完成，无法再加入" : isFull ? "联赛已满，无法加入" : "暂不可加入"}
+                    </span>
+                  );
+                })()
               ) : (
                 <Link href={`/league/${leagueId}/roster`} style={{
                   padding: "11px 22px", background: "#fff", color: "#1e3a8a",
