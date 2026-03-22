@@ -70,21 +70,34 @@ export default function SchedulePage() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
       setLeague(leagueData);
-      const [membersData, matchupsResult] = await Promise.all([
+      const [membersData, matchupsResult, teamsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
         supabase
           .from("matchups")
           .select("week, home_team_id, away_team_id, home_score, away_score, winner_id")
           .eq("league_id", leagueData.id)
           .eq("status", "completed"),
+        supabase
+          .from("fantasy_teams")
+          .select("id, user_id")
+          .eq("league_id", leagueData.id),
       ]);
       setMembers(membersData);
-      // Build lookup: "{week}-{home_team_id}-{away_team_id}" → scores
+      // Build teamId → userId map so we can key by user IDs (matching MatchupEntry)
+      const userIdByTeamId: Record<string, string> = {};
+      for (const t of (teamsResult.data ?? [])) {
+        userIdByTeamId[t.id] = t.user_id;
+      }
+      // Build lookup: "{week}-{homeUserId}-{awayUserId}" → scores
       if (matchupsResult.data) {
         const lookup: Record<string, { home_score: number; away_score: number; winner_id: string | null }> = {};
         for (const row of matchupsResult.data) {
-          const key = `${row.week}-${row.home_team_id}-${row.away_team_id}`;
-          lookup[key] = { home_score: row.home_score, away_score: row.away_score, winner_id: row.winner_id };
+          const homeUserId = userIdByTeamId[row.home_team_id];
+          const awayUserId = userIdByTeamId[row.away_team_id];
+          if (homeUserId && awayUserId) {
+            const key = `${row.week}-${homeUserId}-${awayUserId}`;
+            lookup[key] = { home_score: row.home_score, away_score: row.away_score, winner_id: row.winner_id };
+          }
         }
         setCompletedMatchups(lookup);
       }
@@ -284,14 +297,8 @@ export default function SchedulePage() {
                       const status = getEntryStatus(entry.week);
                       const opponentName = getMemberName(entry.opponent);
 
-                      // Look up real scores from DB using the team IDs stored on the entry.
-                      // The matchup row key is "{week}-{home_team_id}-{away_team_id}".
-                      // We stored homeUserId/awayUserId on the entry, but the DB key uses team IDs.
-                      // Fall back to finding any matchup for this week that involves either participant.
-                      const realMatchup = Object.entries(completedMatchups).find(([key]) => {
-                        const [w] = key.split("-");
-                        return Number(w) === entry.week;
-                      })?.[1] ?? null;
+                      // Direct lookup by week + homeUserId + awayUserId (same orientation as generateMatchupsForWeek).
+                      const realMatchup = completedMatchups[`${entry.week}-${entry.homeUserId}-${entry.awayUserId}`] ?? null;
                       const myScore = realMatchup ? (entry.isHome ? realMatchup.home_score : realMatchup.away_score) : null;
                       const oppScore = realMatchup ? (entry.isHome ? realMatchup.away_score : realMatchup.home_score) : null;
                       const isWin = myScore !== null && oppScore !== null && myScore > oppScore;
