@@ -92,13 +92,14 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
       top: 64,
       zIndex: 40,
     }}>
-      <div style={{
+      <div className="league-nav-scroll" style={{
         maxWidth: 1200,
         margin: "0 auto",
         display: "flex",
         gap: 4,
         padding: "0 16px",
         overflowX: "auto",
+        scrollbarWidth: "none",
       }}>
         {mainNav.map((item) => {
           const active = isActive(item.href);

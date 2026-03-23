@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { login } from "@/lib/store";
@@ -13,6 +13,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,12 +45,12 @@ export default function LoginPage() {
       background: "#f3f4f6",
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     }}>
-      {/* Left panel */}
+      {/* Left panel — hidden on mobile */}
       <div style={{
         flex: "0 0 42%",
         background: "linear-gradient(145deg, #f59e0b 0%, #f97316 60%, #ea580c 100%)",
         padding: "48px 44px",
-        display: "flex",
+        display: isMobile ? "none" : "flex",
         flexDirection: "column",
         justifyContent: "space-between",
         position: "relative",
@@ -152,7 +160,7 @@ export default function LoginPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "48px 56px",
+        padding: isMobile ? "32px 20px" : "48px 56px",
       }}>
         <div style={{ width: "100%", maxWidth: 400 }}>
           <h2 style={{

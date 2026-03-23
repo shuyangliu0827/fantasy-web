@@ -112,6 +112,7 @@ export default function PlayerRankingsPage() {
   const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [isMobile, setIsMobile] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // --- data fetching ---
   useEffect(() => {
@@ -362,7 +363,15 @@ export default function PlayerRankingsPage() {
 
         {/* ── Left Sidebar ── */}
         <aside style={{ width: isMobile ? "100%" : 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: isMobile ? 16 : 24 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 20 }}>{t("筛选条件", "Filters")}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: filtersOpen || !isMobile ? 20 : 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>{t("筛选条件", "Filters")}</div>
+            {isMobile && (
+              <button onClick={() => setFiltersOpen(o => !o)} style={{ padding: "5px 12px", background: filtersOpen ? "#eff6ff" : "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, fontWeight: 600, color: filtersOpen ? "#1e3a8a" : "#374151", cursor: "pointer" }}>
+                {filtersOpen ? t("收起 ▲", "Hide ▲") : t("展开 ▼", "Show ▼")}
+              </button>
+            )}
+          </div>
+          {isMobile && !filtersOpen ? null : (<>
 
           {/* 位置 */}
           <div style={sectionLabelStyle}>{t("位置", "Position")}</div>
@@ -488,6 +497,7 @@ export default function PlayerRankingsPage() {
               </div>
             )}
           </div>
+          </>)}
         </aside>
 
         {/* ── Main Content ── */}
