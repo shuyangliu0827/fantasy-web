@@ -319,11 +319,11 @@ export default function DiscoverPage() {
                             color: "#fff", fontSize: 14, fontWeight: 700,
                             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                           }}>
-                            {(u.display_name || u.name || u.username)[0]?.toUpperCase()}
+                            {(u.name || u.username)[0]?.toUpperCase()}
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {u.display_name || u.name}
+                              {u.name}
                             </div>
                             <div style={{ fontSize: 12, color: "#94a3b8" }}>@{u.username}</div>
                           </div>

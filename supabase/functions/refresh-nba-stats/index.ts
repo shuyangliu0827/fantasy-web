@@ -11,7 +11,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
-const CURRENT_SEASON = 2025; // 2025-26 NBA season
+// Dynamic: Oct–Dec → next year, Jan–Sep → this year (matches NBA season convention)
+const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
 const BATCH_SIZE = 75;       // players per run — keeps total API calls under 60/min
 const REQ_DELAY_MS = 1000;   // 1 s between season_averages calls
 

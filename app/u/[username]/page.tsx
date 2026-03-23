@@ -72,7 +72,7 @@ export default function UserProfilePage() {
     // 查询 profile 用户已加入的所有联赛（包括创建和加入的）
     let joinedLeagues: (League & { memberCount: number; role: string })[] = [];
     const { data: profileUserData } = await supabase
-      .from("users").select("id, display_name, bio").ilike("username", username).single();
+      .from("users").select("*").ilike("username", username).single();
     if (profileUserData) {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
       setUserLeagues(joinedLeagues as any);
@@ -167,14 +167,14 @@ export default function UserProfilePage() {
     loadData();
   };
 
-  // Display name: prefer display_name, then name, fall back to username
+  // Display name: prefer user.name, fall back to username
   const displayName = currentUser && isOwnProfile
-    ? (currentUser.display_name || currentUser.name || username)
+    ? (currentUser.name || username)
     : username;
 
   const handleEditProfile = () => {
     if (!currentUser) return;
-    setEditDisplayName(currentUser.display_name || currentUser.name || "");
+    setEditDisplayName(currentUser.name || "");
     setEditBio(currentUser.bio || profileBio || "");
     setEditMode(true);
   };
@@ -183,7 +183,7 @@ export default function UserProfilePage() {
     if (!currentUser) return;
     setEditSaving(true);
     const result = await updateUserProfile(currentUser.id, {
-      display_name: editDisplayName.trim() || undefined,
+      name: editDisplayName.trim() || undefined,
       bio: editBio.trim() || undefined,
     });
     setEditSaving(false);

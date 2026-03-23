@@ -18,12 +18,12 @@ const NAV = [
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
   const { t, lang, setLang } = useLang();
-  const [user, setUser] = useState<{ name: string; username: string; display_name?: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username, display_name: u.display_name });
+    if (u) setUser({ name: u.name, username: u.username });
 
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -132,7 +132,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 fontWeight: 500, padding: isMobile ? "6px 8px" : "8px 4px",
                 maxWidth: isMobile ? 76 : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
-                {user.display_name || user.name}
+                {user.name}
               </Link>
               <button onClick={handleLogout} style={{
                 padding: isMobile ? "6px 8px" : "8px 14px", fontSize: isMobile ? 12 : 14, color: "#64748b",

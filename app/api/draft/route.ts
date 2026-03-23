@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 // 选秀系统API
 
 import { NextResponse } from "next/server";
+import { getCurrentSeasonYear } from "@/lib/season";
 
 // 临时内存存储 - 生产环境应使用真实数据库
 // 这里使用简化的内存结构来演示逻辑
@@ -18,7 +19,7 @@ if (leagues.size === 0) {
     status: "draft_pending", // draft_pending, drafting, active, completed
     max_teams: 10,
     draft_type: "snake", // snake, linear
-    season: "2025",
+    season: String(getCurrentSeasonYear()),
     teams: [
       { id: "team1", user_id: "user1", team_name: "abcd", draft_position: 1, roster: [] },
       { id: "team2", user_id: "user2", team_name: "h75yin", draft_position: 2, roster: [] },

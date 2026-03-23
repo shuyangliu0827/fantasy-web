@@ -22,7 +22,6 @@
      email: string;
      username: string;
      avatar_url?: string;
-     display_name?: string;
      bio?: string;
    };
    
@@ -362,7 +361,7 @@
    
    export async function updateUserProfile(
      userId: string,
-     fields: { display_name?: string; bio?: string }
+     fields: { name?: string; bio?: string }
    ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
      const { data, error } = await supabase
        .from("users")
@@ -382,10 +381,11 @@
    // ==================== Search ====================
 
    export async function searchInsights(query: string): Promise<Insight[]> {
+     const q = query.replace(/[%_]/g, c => "\\" + c);
      const { data, error } = await supabase
        .from("insights")
-       .select(`*, author:users(id, name, username, avatar_url, display_name)`)
-       .or(`title.ilike.%${query}%,body.ilike.%${query}%`)
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .or(`title.ilike.%${q}%,body.ilike.%${q}%`)
        .order("created_at", { ascending: false })
        .limit(30);
      if (error) { console.error("searchInsights error:", error); return []; }
@@ -393,10 +393,11 @@
    }
 
    export async function searchUsers(query: string): Promise<User[]> {
+     const q = query.replace(/[%_]/g, c => "\\" + c);
      const { data, error } = await supabase
        .from("users")
        .select("*")
-       .or(`username.ilike.%${query}%,name.ilike.%${query}%,display_name.ilike.%${query}%`)
+       .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
        .limit(20);
      if (error) { console.error("searchUsers error:", error); return []; }
      return data || [];
