@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { listInsights, getSessionUser, type Insight } from "@/lib/store";
+import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
@@ -28,6 +28,32 @@ export default function DiscoverPage() {
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResultPosts, setSearchResultPosts] = useState<Insight[]>([]);
+  const [searchResultUsers, setSearchResultUsers] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isSearchActive = searchTerm.trim().length > 0;
+
+  const runSearch = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setSearchResultPosts([]);
+      setSearchResultUsers([]);
+      return;
+    }
+    setSearching(true);
+    const [posts, users] = await Promise.all([searchInsights(query.trim()), searchUsers(query.trim())]);
+    setSearchResultPosts(posts);
+    setSearchResultUsers(users);
+    setSearching(false);
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => runSearch(value), 300);
+  };
 
   async function loadInsights() {
     setLoading(true);
@@ -186,6 +212,49 @@ export default function DiscoverPage() {
         </div>
       </div>
 
+      {/* Search bar */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "14px 12px" : "16px 24px" }}>
+          <div style={{ position: "relative", maxWidth: 560 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{
+              position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+              width: 18, height: 18, pointerEvents: "none",
+            }}>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => handleSearchChange(e.target.value)}
+              placeholder={t("搜索帖子或用户…", "Search posts or users…")}
+              style={{
+                width: "100%", padding: "11px 14px 11px 42px",
+                border: "1.5px solid #e2e8f0", borderRadius: 12,
+                fontSize: 15, outline: "none", background: "#f8fafc",
+                transition: "border-color 0.15s, background 0.15s",
+                boxSizing: "border-box",
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = "#1e3a8a"; e.currentTarget.style.background = "#fff"; }}
+              onBlur={e => { e.currentTarget.style.borderColor = "#e2e8f0"; e.currentTarget.style.background = "#f8fafc"; }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => { setSearchTerm(""); setSearchResultPosts([]); setSearchResultUsers([]); }}
+                style={{
+                  position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                  background: "#e2e8f0", border: "none", borderRadius: "50%",
+                  width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", fontSize: 13, color: "#64748b", lineHeight: 1,
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Tag filter */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "12px" : "12px 24px", display: "flex", gap: 8, overflowX: "auto" }}>
@@ -221,7 +290,78 @@ export default function DiscoverPage() {
 
       {/* Content */}
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "20px 12px 36px" : "32px 24px 64px" }}>
-        {loading ? (
+        {isSearchActive ? (
+          /* Search results */
+          <div>
+            {searching ? (
+              <div style={{ textAlign: "center", padding: "60px 24px", color: "#64748b", fontSize: 15 }}>
+                {t("搜索中…", "Searching…")}
+              </div>
+            ) : (
+              <>
+                {/* User results */}
+                {searchResultUsers.length > 0 && (
+                  <div style={{ marginBottom: 32 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>
+                      {t("用户", "Users")} <span style={{ fontWeight: 500, color: "#94a3b8", fontSize: 14 }}>({searchResultUsers.length})</span>
+                    </h3>
+                    <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+                      {searchResultUsers.map(u => (
+                        <Link key={u.id} href={`/u/${u.username}`} style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "10px 16px",
+                          background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12,
+                          textDecoration: "none", minWidth: 180, flexShrink: 0,
+                          transition: "border-color 0.15s, box-shadow 0.15s",
+                        }}>
+                          <div style={{
+                            width: 36, height: 36, borderRadius: "50%",
+                            background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
+                            color: "#fff", fontSize: 14, fontWeight: 700,
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                          }}>
+                            {(u.display_name || u.name || u.username)[0]?.toUpperCase()}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {u.display_name || u.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>@{u.username}</div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Post results */}
+                {searchResultPosts.length > 0 && (
+                  <div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", margin: "0 0 14px" }}>
+                      {t("帖子", "Posts")} <span style={{ fontWeight: 500, color: "#94a3b8", fontSize: 14 }}>({searchResultPosts.length})</span>
+                    </h3>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 12 : 20 }}>
+                      {searchResultPosts.map(insight => (
+                        <InsightCard key={insight.id} insight={insight} formatDate={formatDate} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {searchResultPosts.length === 0 && searchResultUsers.length === 0 && (
+                  <div style={{ textAlign: "center", padding: "60px 24px" }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+                    <h3 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
+                      {t("没有找到结果", "No results found")}
+                    </h3>
+                    <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>
+                      {t("试试其他关键词", "Try a different keyword")}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : loading ? (
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
             {Array.from({ length: 9 }).map((_, i) => (
               <div key={i} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1px solid #e2e8f0" }}>

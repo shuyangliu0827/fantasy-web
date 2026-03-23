@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, League, Insight, supabase } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, updateUserProfile, League, Insight, supabase } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -39,6 +39,11 @@ export default function UserProfilePage() {
     leaguesWon: 0,
     draftsCompleted: 0,
   });
+  const [editMode, setEditMode] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [profileBio, setProfileBio] = useState<string | null>(null);
 
   const loadData = async () => {
     const user = getSessionUser();
@@ -67,10 +72,11 @@ export default function UserProfilePage() {
     // 查询 profile 用户已加入的所有联赛（包括创建和加入的）
     let joinedLeagues: (League & { memberCount: number; role: string })[] = [];
     const { data: profileUserData } = await supabase
-      .from("users").select("id").ilike("username", username).single();
+      .from("users").select("id, display_name, bio").ilike("username", username).single();
     if (profileUserData) {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
       setUserLeagues(joinedLeagues as any);
+      setProfileBio(profileUserData.bio || null);
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
@@ -161,8 +167,34 @@ export default function UserProfilePage() {
     loadData();
   };
 
-  // Display name: prefer user.name (the human-readable name from signup), fall back to username
-  const displayName = currentUser && isOwnProfile ? (currentUser.name || username) : username;
+  // Display name: prefer display_name, then name, fall back to username
+  const displayName = currentUser && isOwnProfile
+    ? (currentUser.display_name || currentUser.name || username)
+    : username;
+
+  const handleEditProfile = () => {
+    if (!currentUser) return;
+    setEditDisplayName(currentUser.display_name || currentUser.name || "");
+    setEditBio(currentUser.bio || profileBio || "");
+    setEditMode(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+    setEditSaving(true);
+    const result = await updateUserProfile(currentUser.id, {
+      display_name: editDisplayName.trim() || undefined,
+      bio: editBio.trim() || undefined,
+    });
+    setEditSaving(false);
+    if (result.ok) {
+      setCurrentUser(getSessionUser());
+      setProfileBio(editBio.trim() || null);
+      setEditMode(false);
+    } else {
+      alert(result.error);
+    }
+  };
 
   return (
     <div style={{ background: "#f9fafb", minHeight: "100vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
@@ -180,7 +212,7 @@ export default function UserProfilePage() {
             <div className="profile-action-btns">
               {isOwnProfile ? (
                 <>
-                  <button className="btn-primary-sm">{t("编辑资料", "Edit Profile")}</button>
+                  <button className="btn-primary-sm" onClick={handleEditProfile}>{t("编辑资料", "Edit Profile")}</button>
                   <button className="btn-ghost-sm">{t("分享主页", "Share")}</button>
                 </>
               ) : (
@@ -202,12 +234,16 @@ export default function UserProfilePage() {
             </div>
 
             <div className="profile-info">
-              <h1 className="display-name">@{displayName}</h1>
+              <h1 className="display-name">{displayName}</h1>
+              <p className="bio" style={{ color: "#64748b" }}>
+                @{username}
+              </p>
               <p className="bio">
-                {isOwnProfile
-                  ? t("专注于 Fantasy 篮球、数据分析与选秀策略。用更清晰的数据视角，赢下每一场选秀与赛季对局。",
-                      "Focused on Fantasy basketball, data analysis and draft strategy.")
-                  : t("Fantasy 篮球玩家", "Fantasy Basketball Player")}
+                {profileBio
+                  || (isOwnProfile
+                    ? t("专注于 Fantasy 篮球、数据分析与选秀策略。用更清晰的数据视角，赢下每一场选秀与赛季对局。",
+                        "Focused on Fantasy basketball, data analysis and draft strategy.")
+                    : t("Fantasy 篮球玩家", "Fantasy Basketball Player"))}
               </p>
               <div className="profile-stats-row">
                 <span><strong>{stats.totalPosts}</strong> {t("帖子", "Posts")}</span>
@@ -486,6 +522,77 @@ export default function UserProfilePage() {
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button className="btn-ghost-sm" onClick={() => setShowDeleteModal(null)}>{t("取消", "Cancel")}</button>
               <button className="btn-danger-sm" onClick={() => handleDeleteLeague(showDeleteModal)}>{t("删除", "Delete")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {editMode && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => setEditMode(false)}>
+          <div style={{
+            background: "#fff", borderRadius: 16, padding: 32, width: "90%", maxWidth: 480,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+          }} onClick={e => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 20px", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
+              {t("编辑资料", "Edit Profile")}
+            </h2>
+
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              {t("显示名称", "Display Name")}
+            </label>
+            <input
+              type="text"
+              value={editDisplayName}
+              onChange={e => setEditDisplayName(e.target.value)}
+              maxLength={50}
+              placeholder={t("你的显示名称", "Your display name")}
+              style={{
+                width: "100%", padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10,
+                fontSize: 15, marginBottom: 18, outline: "none", boxSizing: "border-box",
+              }}
+            />
+
+            <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+              {t("个人简介", "Bio")}
+            </label>
+            <textarea
+              value={editBio}
+              onChange={e => setEditBio(e.target.value)}
+              maxLength={200}
+              rows={3}
+              placeholder={t("介绍一下你自己…", "Tell us about yourself…")}
+              style={{
+                width: "100%", padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10,
+                fontSize: 15, marginBottom: 24, outline: "none", resize: "vertical", boxSizing: "border-box",
+                fontFamily: "inherit",
+              }}
+            />
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setEditMode(false)}
+                style={{
+                  padding: "9px 22px", borderRadius: 10, border: "1px solid #e2e8f0",
+                  background: "#fff", fontSize: 14, fontWeight: 600, color: "#64748b", cursor: "pointer",
+                }}
+              >
+                {t("取消", "Cancel")}
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={editSaving}
+                style={{
+                  padding: "9px 22px", borderRadius: 10, border: "none",
+                  background: "#1e3a8a", fontSize: 14, fontWeight: 600, color: "#fff", cursor: "pointer",
+                  opacity: editSaving ? 0.6 : 1,
+                }}
+              >
+                {editSaving ? t("保存中…", "Saving…") : t("保存", "Save")}
+              </button>
             </div>
           </div>
         </div>

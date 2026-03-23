@@ -9,11 +9,11 @@ import { getSessionUser } from "@/lib/store";
 export default function Header() {
   const { lang, setLang, t } = useLang();
   const pathname = usePathname();
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; username: string; display_name?: string } | null>(null);
 
   useEffect(() => {
     const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username });
+    if (u) setUser({ name: u.name, username: u.username, display_name: u.display_name });
   }, []);
 
   const navItems = [
@@ -77,7 +77,7 @@ export default function Header() {
               </>
             ) : (
               <>
-                <Link className="btn btn-ghost" href={`/u/${user.username}`}>@{user.username}</Link>
+                <Link className="btn btn-ghost" href={`/u/${user.username}`}>{user.display_name || user.name}</Link>
                 <button className="btn btn-ghost" onClick={handleLogout}>{t("退出", "Logout")}</button>
               </>
             )}

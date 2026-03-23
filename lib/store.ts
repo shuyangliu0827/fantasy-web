@@ -6,6 +6,7 @@
    ========================================================= */
 
    import { supabase } from "./supabase";
+   import { getCurrentSeasonLabel } from "./season";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
    import { PLAYER_POSITIONS } from "./player-positions";
@@ -21,6 +22,8 @@
      email: string;
      username: string;
      avatar_url?: string;
+     display_name?: string;
+     bio?: string;
    };
    
    export type League = {
@@ -357,6 +360,48 @@
      return data;
    }
    
+   export async function updateUserProfile(
+     userId: string,
+     fields: { display_name?: string; bio?: string }
+   ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
+     const { data, error } = await supabase
+       .from("users")
+       .update(fields)
+       .eq("id", userId)
+       .select()
+       .single();
+     if (error) return { ok: false, error: error.message };
+     // Sync localStorage session with updated user data
+     const session = getSessionUser();
+     if (session && session.id === userId) {
+       setSessionUser({ ...session, ...data });
+     }
+     return { ok: true, user: data as User };
+   }
+
+   // ==================== Search ====================
+
+   export async function searchInsights(query: string): Promise<Insight[]> {
+     const { data, error } = await supabase
+       .from("insights")
+       .select(`*, author:users(id, name, username, avatar_url, display_name)`)
+       .or(`title.ilike.%${query}%,body.ilike.%${query}%`)
+       .order("created_at", { ascending: false })
+       .limit(30);
+     if (error) { console.error("searchInsights error:", error); return []; }
+     return data || [];
+   }
+
+   export async function searchUsers(query: string): Promise<User[]> {
+     const { data, error } = await supabase
+       .from("users")
+       .select("*")
+       .or(`username.ilike.%${query}%,name.ilike.%${query}%,display_name.ilike.%${query}%`)
+       .limit(20);
+     if (error) { console.error("searchUsers error:", error); return []; }
+     return data || [];
+   }
+
    // ==================== Image Upload (Supabase Storage) ====================
    
    export async function uploadImage(
@@ -686,7 +731,7 @@
          slug,
          commissioner_id: user.id,
          visibility: input.visibility,
-         season: "2024-25",
+         season: getCurrentSeasonLabel(),
          draft_type: "snake",
          status: "draft_pending",
        })

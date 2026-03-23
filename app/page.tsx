@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
+import { getCurrentSeasonLabel } from "@/lib/season";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
@@ -249,7 +250,7 @@ export default function HomePage() {
             }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
               <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb" }}>
-                {t("2024-25 NBA赛季 · 数据实时更新", "2024-25 NBA Season · Live Data")}
+                {t(`${getCurrentSeasonLabel()} NBA赛季 · 数据实时更新`, `${getCurrentSeasonLabel()} NBA Season · Live Data`)}
               </span>
             </div>
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
+import { getCurrentSeasonLabel } from "@/lib/season";
 import LightHeader from "@/components/LightHeader";
 
 const ROUNDS = [
@@ -112,7 +113,7 @@ export default function DraftGuidePage() {
             marginBottom: 16,
             letterSpacing: "0.5px",
           }}>
-            {t("选秀指南 · 2025-26赛季", "Draft Guide · 2025-26 Season")}
+            {t(`选秀指南 · ${getCurrentSeasonLabel()}赛季`, `Draft Guide · ${getCurrentSeasonLabel()} Season`)}
           </div>
           <h1 style={{
             fontSize: 52,
