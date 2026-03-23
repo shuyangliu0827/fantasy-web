@@ -363,9 +363,24 @@
      userId: string,
      fields: { name?: string; bio?: string }
    ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
+     // Save bio to localStorage (bio column may not exist in DB yet)
+     if (fields.bio !== undefined && typeof window !== "undefined") {
+       localStorage.setItem(`bp_bio_${userId}`, fields.bio);
+     }
+     // Only send DB-safe fields to Supabase
+     const dbFields: Record<string, string> = {};
+     if (fields.name) dbFields.name = fields.name;
+     if (Object.keys(dbFields).length === 0) {
+       // Nothing to update in DB, just sync session
+       const session = getSessionUser();
+       if (session && session.id === userId) {
+         setSessionUser({ ...session, bio: fields.bio });
+       }
+       return { ok: true, user: (session || { id: userId }) as User };
+     }
      const { data, error } = await supabase
        .from("users")
-       .update(fields)
+       .update(dbFields)
        .eq("id", userId)
        .select()
        .single();
@@ -373,9 +388,14 @@
      // Sync localStorage session with updated user data
      const session = getSessionUser();
      if (session && session.id === userId) {
-       setSessionUser({ ...session, ...data });
+       setSessionUser({ ...session, ...data, bio: fields.bio });
      }
-     return { ok: true, user: data as User };
+     return { ok: true, user: { ...data, bio: fields.bio } as User };
+   }
+
+   export function getUserBio(userId: string): string | null {
+     if (typeof window === "undefined") return null;
+     return localStorage.getItem(`bp_bio_${userId}`) || null;
    }
 
    // ==================== Search ====================

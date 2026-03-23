@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, updateUserProfile, League, Insight, supabase } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, updateUserProfile, getUserBio, League, Insight, supabase } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -72,11 +72,11 @@ export default function UserProfilePage() {
     // 查询 profile 用户已加入的所有联赛（包括创建和加入的）
     let joinedLeagues: (League & { memberCount: number; role: string })[] = [];
     const { data: profileUserData } = await supabase
-      .from("users").select("*").ilike("username", username).single();
+      .from("users").select("id, name, username, avatar_url").ilike("username", username).single();
     if (profileUserData) {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
       setUserLeagues(joinedLeagues as any);
-      setProfileBio(profileUserData.bio || null);
+      setProfileBio(getUserBio(profileUserData.id));
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
@@ -175,7 +175,7 @@ export default function UserProfilePage() {
   const handleEditProfile = () => {
     if (!currentUser) return;
     setEditDisplayName(currentUser.name || "");
-    setEditBio(currentUser.bio || profileBio || "");
+    setEditBio(profileBio || getUserBio(currentUser.id) || "");
     setEditMode(true);
   };
 

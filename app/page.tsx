@@ -191,7 +191,7 @@ export default function HomePage() {
             ) : (
               <>
                 <Link href={`/u/${user.username}`} style={{ fontSize: isMobile ? 12 : 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: isMobile ? "6px 8px" : "8px 4px", maxWidth: isMobile ? 76 : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  @{user.username}
+                  {user.name}
                 </Link>
                 <button onClick={handleLogout} style={{ padding: isMobile ? "6px 8px" : "8px 14px", fontSize: isMobile ? 12 : 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
                   {isMobile ? t("退", "Out") : t("退出", "Logout")}
