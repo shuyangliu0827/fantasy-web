@@ -13,7 +13,6 @@ const NAV = [
   { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
   { href: "/cheat-sheet", zh: "备忘单",  en: "Cheat Sheet" },
   { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
-  { href: "/my-team",     zh: "我的球队", en: "My Team" },
 ];
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {

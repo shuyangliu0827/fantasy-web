@@ -24,7 +24,6 @@ export default function Header() {
     { href: "/draft-guide", label: t("选秀指南", "Draft Guide") },
     { href: "/cheat-sheet", label: t("备忘单", "Cheat Sheet") },
     { href: "/how-to-play", label: t("新手入门", "How To Play") },
-    { href: "/my-team", label: t("我的球队", "My Team") },
     { href: "/mock-draft", label: t("模拟选秀", "Mock Draft") },
   ];
 
