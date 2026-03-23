@@ -13,7 +13,6 @@ const NAV = [
   { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
   { href: "/cheat-sheet", zh: "备忘单",  en: "Cheat Sheet" },
   { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
-  { href: "/my-team",     zh: "我的球队", en: "My Team" },
 ];
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
@@ -132,7 +131,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 fontWeight: 500, padding: isMobile ? "6px 8px" : "8px 4px",
                 maxWidth: isMobile ? 76 : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
-                @{user.username}
+                {user.name}
               </Link>
               <button onClick={handleLogout} style={{
                 padding: isMobile ? "6px 8px" : "8px 14px", fontSize: isMobile ? 12 : 14, color: "#64748b",

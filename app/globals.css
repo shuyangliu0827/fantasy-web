@@ -1375,49 +1375,6 @@ button {
 .quick-link-title { font-weight: 700; margin-bottom: 4px; }
 .quick-link-desc { font-size: 12px; color: var(--text-muted); }
 
-/* ========== My Team ========== */
-.team-selector {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.team-tab {
-  padding: 10px 20px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-weight: 600;
-  transition: all 0.2s;
-}
-.team-tab:hover { color: var(--text-primary); }
-.team-tab.active { background: rgba(245, 158, 11, 0.1); border-color: var(--accent-gold); color: var(--accent-gold); }
-.team-tab.add { border-style: dashed; }
-
-.team-header-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.team-header-bar h2 { font-size: 20px; }
-.team-header-bar span { color: var(--text-muted); }
-
-.empty-team {
-  text-align: center;
-  padding: 60px 20px;
-  background: var(--bg-card);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-lg);
-}
-.empty-team p { color: var(--text-muted); margin-bottom: 16px; }
-
-.roster-table { margin-top: 16px; }
-
-.btn-sm { padding: 6px 12px; font-size: 12px; }
-
 /* ========== Modal ========== */
 .modal-overlay {
   position: fixed;
@@ -1544,41 +1501,6 @@ button {
 .draft-player-meta { font-size: 12px; color: var(--text-muted); }
 .draft-player-stats { display: flex; gap: 12px; font-size: 12px; color: var(--text-secondary); }
 
-.my-team-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  height: fit-content;
-  position: sticky;
-  top: 100px;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: var(--bg-tertiary);
-}
-.panel-header h2 { font-size: 16px; }
-.panel-header span { color: var(--text-muted); font-size: 14px; }
-
-.my-picks { padding: 16px; }
-.empty-picks { text-align: center; color: var(--text-muted); padding: 40px 0; }
-
-.my-pick-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  margin-bottom: 8px;
-}
-.pick-round { font-size: 11px; color: var(--accent-gold); font-weight: 700; min-width: 40px; }
-.pick-name { flex: 1; font-weight: 600; }
-.pick-pos { font-size: 11px; color: var(--text-muted); }
-
 /* ========== Draft Setup ========== */
 .draft-setup {
   display: grid;
@@ -1618,7 +1540,6 @@ button {
   .guide-sidebar { display: none; }
   .cheatsheet-positions { grid-template-columns: repeat(3, 1fr); }
   .draft-main { grid-template-columns: 1fr; }
-  .my-team-panel { position: static; }
   .draft-setup { grid-template-columns: 1fr; }
   .links-grid { grid-template-columns: repeat(2, 1fr); }
 }

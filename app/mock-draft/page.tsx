@@ -208,9 +208,9 @@ export default function MockDraftPage() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {isDraftComplete ? (
-              <Link href="/my-team" style={{ padding: "8px 20px", fontSize: 14, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg,#f59e0b,#f97316)", borderRadius: 8, textDecoration: "none" }}>
-                {t("查看球队", "View Team")}
-              </Link>
+              <span style={{ padding: "8px 20px", fontSize: 14, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg,#f59e0b,#f97316)", borderRadius: 8 }}>
+                {t("选秀完成", "Draft Complete")}
+              </span>
             ) : (
               <span style={{
                 padding: "7px 16px", fontSize: 13, fontWeight: 700, borderRadius: 20,
@@ -290,7 +290,7 @@ export default function MockDraftPage() {
         {/* My team panel */}
         <div style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "16px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{t("我的球队", "My Team")}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{t("已选球员", "My Picks")}</span>
             <span style={{ fontSize: 12, color: "#9ca3af" }}>{myPicks.length} / {settings.rounds}</span>
           </div>
           <div style={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto" }}>
@@ -310,10 +310,8 @@ export default function MockDraftPage() {
               ))
             )}
             {isDraftComplete && (
-              <div style={{ padding: "16px 18px", borderTop: "1px solid #f3f4f6" }}>
-                <Link href="/my-team" style={{ display: "block", textAlign: "center", padding: "10px", fontSize: 13, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg,#f59e0b,#f97316)", borderRadius: 8, textDecoration: "none" }}>
-                  {t("查看球队", "View Team")}
-                </Link>
+              <div style={{ padding: "16px 18px", borderTop: "1px solid #f3f4f6", textAlign: "center", fontSize: 13, fontWeight: 700, color: "#059669" }}>
+                {t("选秀完成！", "Draft Complete!")}
               </div>
             )}
           </div>

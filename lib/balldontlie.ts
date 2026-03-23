@@ -1,6 +1,8 @@
 // lib/balldontlie.ts
 // Ball Don't Lie API Integration for ALL-STAR tier
 
+import { getCurrentSeasonYear } from "./season";
+
 const API_BASE = "https://api.balldontlie.io/v1";
 
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
@@ -184,7 +186,7 @@ export async function getPlayerStats(options: {
 }
 
 // 获取球员赛季统计（计算平均值）
-export async function getPlayerSeasonStats(playerId: number, season: number = 2024): Promise<{
+export async function getPlayerSeasonStats(playerId: number, season: number = getCurrentSeasonYear()): Promise<{
   gp: number;
   ppg: number;
   rpg: number;
