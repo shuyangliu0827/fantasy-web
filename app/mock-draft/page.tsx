@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLang } from "@/lib/lang";
 import LightHeader from "@/components/LightHeader";
 import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
@@ -31,6 +31,8 @@ export default function MockDraftPage() {
   const [myDrafts, setMyDrafts] = useState<Draft[]>([]);
   const [settings, setSettings] = useState<{ name: string; teams: number; position: number; rounds: number; type: "snake" | "linear" }>({ name: "Mock Draft", teams: 12, position: 6, rounds: 13, type: "snake" });
   const [searchQuery, setSearchQuery] = useState("");
+  const [playerPage, setPlayerPage] = useState(1);
+  const playerPageSize = 25;
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -48,6 +50,7 @@ export default function MockDraftPage() {
     setCurrentPick(1);
     setMyPicks([]);
     setSearchQuery("");
+    setPlayerPage(1);
   };
 
   const isMyPick = () => {
@@ -96,6 +99,16 @@ export default function MockDraftPage() {
     p.team?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.position?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const totalPlayerPages = Math.ceil(filteredPlayers.length / playerPageSize);
+  const paginatedPlayers = useMemo(() => filteredPlayers.slice(
+    (playerPage - 1) * playerPageSize,
+    playerPage * playerPageSize
+  ), [filteredPlayers, playerPage]);
+
+  useEffect(() => {
+    if (playerPage > totalPlayerPages && totalPlayerPages > 0) setPlayerPage(totalPlayerPages);
+  }, [totalPlayerPages, playerPage]);
 
   // ── Setup screen ──────────────────────────────────────────────────────────
   if (!draftStarted) {
@@ -240,12 +253,12 @@ export default function MockDraftPage() {
             <input
               placeholder={t("搜索球员...", "Search players...")}
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => { setSearchQuery(e.target.value); setPlayerPage(1); }}
               style={{ padding: "7px 12px", fontSize: 13, border: "1.5px solid #e5e7eb", borderRadius: 8, outline: "none", width: 180, color: "#111827" }}
             />
           </div>
           <div style={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto" }}>
-            {filteredPlayers.slice(0, 60).map(p => (
+            {paginatedPlayers.map(p => (
               <div
                 key={p.id}
                 onClick={() => isMyPick() && !isDraftComplete && handleDraft(p)}
@@ -285,6 +298,39 @@ export default function MockDraftPage() {
               </div>
             ))}
           </div>
+
+          {/* Pagination */}
+          {totalPlayerPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, padding: "10px 16px", borderTop: "1px solid #f3f4f6", fontFamily: FONT }}>
+              <button
+                onClick={() => setPlayerPage(p => Math.max(1, p - 1))}
+                disabled={playerPage === 1}
+                style={{ padding: "6px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, cursor: playerPage === 1 ? "not-allowed" : "pointer", color: playerPage === 1 ? "#d1d5db" : "#374151", fontFamily: FONT }}
+              >
+                ← {t("上一页", "Prev")}
+              </button>
+              {(() => {
+                const start = Math.max(1, Math.min(playerPage - 2, totalPlayerPages - 4));
+                const end = Math.min(totalPlayerPages, start + 4);
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(pageNum => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPlayerPage(pageNum)}
+                    style={{ width: 32, height: 32, fontSize: 12, fontWeight: pageNum === playerPage ? 700 : 400, background: pageNum === playerPage ? "#1e3a8a" : "#fff", color: pageNum === playerPage ? "#fff" : "#374151", border: pageNum === playerPage ? "none" : "1px solid #e5e7eb", borderRadius: 8, cursor: "pointer", fontFamily: FONT }}
+                  >
+                    {pageNum}
+                  </button>
+                ));
+              })()}
+              <button
+                onClick={() => setPlayerPage(p => Math.min(totalPlayerPages, p + 1))}
+                disabled={playerPage === totalPlayerPages}
+                style={{ padding: "6px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, cursor: playerPage === totalPlayerPages ? "not-allowed" : "pointer", color: playerPage === totalPlayerPages ? "#d1d5db" : "#374151", fontFamily: FONT }}
+              >
+                {t("下一页", "Next")} →
+              </button>
+            </div>
+          )}
         </div>
 
         {/* My team panel */}

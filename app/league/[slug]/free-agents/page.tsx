@@ -38,6 +38,8 @@ export default function FreeAgentsPage() {
   const [sortBy, setSortBy] = useState<"ppg" | "rpg" | "apg" | "rank">("ppg");
   const [showAddModal, setShowAddModal] = useState<Player | null>(null);
   const [dropPlayerId, setDropPlayerId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
   useEffect(() => {
     setUser(getSessionUser());
@@ -126,6 +128,9 @@ export default function FreeAgentsPage() {
       return (b[sortBy as keyof typeof b] as number) - (a[sortBy as keyof typeof a] as number);
     });
 
+  const totalPages = Math.ceil(filteredAgents.length / pageSize);
+  const paginatedAgents = filteredAgents.slice((page - 1) * pageSize, page * pageSize);
+
   if (loading) {
     return (
       <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
@@ -194,14 +199,14 @@ export default function FreeAgentsPage() {
               type="text"
               placeholder={t("搜索球员...", "Search players...")}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             />
             <div className="filter-group">
               {["ALL", "PG", "SG", "SF", "PF", "C"].map(pos => (
                 <button
                   key={pos}
                   className={`filter-btn ${posFilter === pos ? "active" : ""}`}
-                  onClick={() => setPosFilter(pos)}
+                  onClick={() => { setPosFilter(pos); setPage(1); }}
                 >
                   {pos === "ALL" ? t("全部", "All") : pos}
                 </button>
@@ -210,7 +215,7 @@ export default function FreeAgentsPage() {
             <select
               className="sort-select"
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) => { setSortBy(e.target.value as typeof sortBy); setPage(1); }}
             >
               <option value="ppg">{t("得分", "PPG")}</option>
               <option value="rpg">{t("篮板", "RPG")}</option>
@@ -234,7 +239,7 @@ export default function FreeAgentsPage() {
             {filteredAgents.length === 0 && (
               <div className="empty-row">{t("没有符合条件的自由球员", "No free agents match your criteria")}</div>
             )}
-            {filteredAgents.slice(0, 50).map((player) => (
+            {paginatedAgents.map((player) => (
               <div key={player.id} className="fa-row">
                 <div className="col-rank">{player.rank}</div>
                 <div className="col-player">
@@ -258,8 +263,36 @@ export default function FreeAgentsPage() {
               </div>
             ))}
           </div>
-          {filteredAgents.length > 50 && (
-            <div className="more-hint">{t(`还有 ${filteredAgents.length - 50} 名球员...`, `${filteredAgents.length - 50} more players...`)}</div>
+          {totalPages > 1 && (
+            <div className="pagination">
+              <button
+                className="page-btn"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                ← {t("上一页", "Prev")}
+              </button>
+              {(() => {
+                const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+                const end = Math.min(totalPages, start + 4);
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(pageNum => (
+                  <button
+                    key={pageNum}
+                    className={`page-num ${pageNum === page ? "active" : ""}`}
+                    onClick={() => setPage(pageNum)}
+                  >
+                    {pageNum}
+                  </button>
+                ));
+              })()}
+              <button
+                className="page-btn"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                {t("下一页", "Next")} →
+              </button>
+            </div>
           )}
         </div>
       </main>
@@ -408,6 +441,11 @@ const styles = `
   .add-btn:hover { background: #d1fae5; }
   .empty-row { padding: 40px; text-align: center; color: #6b7280; font-size: 14px; }
   .more-hint { text-align: center; padding: 16px; color: #6b7280; font-size: 13px; }
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 20px; padding-bottom: 20px; }
+  .page-btn { padding: 7px 14px; font-size: 13px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer; color: #374151; }
+  .page-btn:disabled { cursor: not-allowed; color: #d1d5db; }
+  .page-num { width: 36px; height: 36px; font-size: 13px; border-radius: 8px; cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #374151; display: flex; align-items: center; justify-content: center; }
+  .page-num.active { background: #1e3a8a; color: #fff; border: none; font-weight: 700; }
 
   .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;

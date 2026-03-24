@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getPlayers, Player, getSessionUser } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 
@@ -112,6 +112,8 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   const [timer, setTimer] = useState(90);
   const [searchQuery, setSearchQuery] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
+  const [playerPage, setPlayerPage] = useState(1);
+  const playerPageSize = 25;
   const [showPickBanner, setShowPickBanner] = useState<DraftPick | null>(null);
   const [statsMap, setStatsMap] = useState<Record<string, LiveStats>>({});
 
@@ -135,6 +137,16 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     if (posFilter !== "ALL" && !p.position.includes(posFilter)) return false;
     return true;
   });
+
+  const totalPlayerPages = Math.ceil(availablePlayers.length / playerPageSize);
+  const paginatedPlayers = useMemo(() => availablePlayers.slice(
+    (playerPage - 1) * playerPageSize,
+    playerPage * playerPageSize
+  ), [availablePlayers, playerPage]);
+
+  useEffect(() => {
+    if (playerPage > totalPlayerPages && totalPlayerPages > 0) setPlayerPage(totalPlayerPages);
+  }, [totalPlayerPages, playerPage]);
 
   const picksRef = useRef(picks);
   useEffect(() => { picksRef.current = picks; }, [picks]);
@@ -371,11 +383,11 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
               type="text"
               placeholder="搜索球员..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => { setSearchQuery(e.target.value); setPlayerPage(1); }}
               style={{ flex: 1, minWidth: 120, padding: "7px 12px", background: "#f9fafb", border: "1.5px solid #e5e7eb", borderRadius: 8, color: "#111827", fontSize: 13, outline: "none", fontFamily: FONT }}
             />
             {["ALL", "PG", "SG", "SF", "PF", "C"].map(pos => (
-              <button key={pos} onClick={() => setPosFilter(pos)} style={{ padding: "5px 10px", background: posFilter === pos ? "#1e3a8a" : "#f3f4f6", color: posFilter === pos ? "#fff" : "#6b7280", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
+              <button key={pos} onClick={() => { setPosFilter(pos); setPlayerPage(1); }} style={{ padding: "5px 10px", background: posFilter === pos ? "#1e3a8a" : "#f3f4f6", color: posFilter === pos ? "#fff" : "#6b7280", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
                 {pos}
               </button>
             ))}
@@ -394,7 +406,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
 
           {/* Player list */}
           <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", background: "#fff" }}>
-            {availablePlayers.slice(0, 150).map((player, idx) => {
+            {paginatedPlayers.map((player, idx) => {
               const s = statsMap[player.name];
               const fmt = (v?: number) => v != null ? v.toFixed(1) : "—";
               return (
@@ -450,6 +462,39 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
               );
             })}
           </div>
+
+          {/* Pagination */}
+          {totalPlayerPages > 1 && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, padding: "8px 12px", borderTop: "1px solid #e5e7eb", background: "#f9fafb", fontFamily: FONT }}>
+              <button
+                onClick={() => setPlayerPage(p => Math.max(1, p - 1))}
+                disabled={playerPage === 1}
+                style={{ padding: "5px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, cursor: playerPage === 1 ? "not-allowed" : "pointer", color: playerPage === 1 ? "#d1d5db" : "#374151", fontFamily: FONT }}
+              >
+                ← 上一页
+              </button>
+              {(() => {
+                const start = Math.max(1, Math.min(playerPage - 2, totalPlayerPages - 4));
+                const end = Math.min(totalPlayerPages, start + 4);
+                return Array.from({ length: end - start + 1 }, (_, i) => start + i).map(pageNum => (
+                  <button
+                    key={pageNum}
+                    onClick={() => setPlayerPage(pageNum)}
+                    style={{ width: 30, height: 30, fontSize: 12, fontWeight: pageNum === playerPage ? 700 : 400, background: pageNum === playerPage ? "#1e3a8a" : "#fff", color: pageNum === playerPage ? "#fff" : "#374151", border: pageNum === playerPage ? "none" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontFamily: FONT }}
+                  >
+                    {pageNum}
+                  </button>
+                ));
+              })()}
+              <button
+                onClick={() => setPlayerPage(p => Math.min(totalPlayerPages, p + 1))}
+                disabled={playerPage === totalPlayerPages}
+                style={{ padding: "5px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, cursor: playerPage === totalPlayerPages ? "not-allowed" : "pointer", color: playerPage === totalPlayerPages ? "#d1d5db" : "#374151", fontFamily: FONT }}
+              >
+                下一页 →
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right panel */}
