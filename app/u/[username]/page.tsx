@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, updateUserProfile, getUserBio, League, Insight, supabase } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserBio, League, Insight, supabase } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -31,6 +31,8 @@ export default function UserProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [draftHistory, setDraftHistory] = useState<DraftHistory[]>([]);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [stats, setStats] = useState({
     totalPosts: 0,
     totalLikes: 0,
@@ -160,6 +162,40 @@ export default function UserProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarError(t("请选择图片文件", "Please select an image file"));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAvatarError(t("图片不能超过 5MB", "Image must be under 5MB"));
+      return;
+    }
+
+    setAvatarError("");
+    setAvatarUploading(true);
+
+    const uploadResult = await uploadImage(file, "avatars");
+    if (!uploadResult.ok) {
+      setAvatarError(uploadResult.error);
+      setAvatarUploading(false);
+      return;
+    }
+
+    const saveResult = await updateUserProfile(currentUser!.id, { avatar_url: uploadResult.url });
+    if (!saveResult.ok) {
+      setAvatarError(saveResult.error);
+      setAvatarUploading(false);
+      return;
+    }
+
+    setCurrentUser(getSessionUser());
+    setAvatarUploading(false);
+  };
+
   const handleDeleteLeague = (leagueId: string) => {
     const allLeagues = JSON.parse(localStorage.getItem("bp_leagues") || "[]");
     localStorage.setItem("bp_leagues", JSON.stringify(allLeagues.filter((l: League) => l.id !== leagueId)));
@@ -229,7 +265,11 @@ export default function UserProfilePage() {
           {/* Body: avatar + info */}
           <div className="profile-body">
             <div className="avatar-wrap">
-              <div className="avatar-sq">{username[0]?.toUpperCase()}</div>
+              {currentUser?.avatar_url && isOwnProfile ? (
+                <img src={currentUser.avatar_url} alt="avatar" className="avatar-sq" style={{ objectFit: "cover" }} />
+              ) : (
+                <div className="avatar-sq">{username[0]?.toUpperCase()}</div>
+              )}
               <span className="online-dot" />
             </div>
 
@@ -540,6 +580,47 @@ export default function UserProfilePage() {
             <h2 style={{ margin: "0 0 20px", fontSize: 20, fontWeight: 700, color: "#0f172a" }}>
               {t("编辑资料", "Edit Profile")}
             </h2>
+
+            {/* Avatar upload */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 20 }}>
+              {currentUser?.avatar_url ? (
+                <img
+                  src={currentUser.avatar_url}
+                  alt="avatar"
+                  style={{ width: 80, height: 80, borderRadius: 16, objectFit: "cover" }}
+                />
+              ) : (
+                <div style={{
+                  width: 80, height: 80, borderRadius: 16,
+                  background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 32, fontWeight: 800, color: "#000",
+                }}>
+                  {username[0]?.toUpperCase()}
+                </div>
+              )}
+
+              <label style={{
+                padding: "6px 16px", background: "#eff6ff", border: "1px solid #bfdbfe",
+                borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#1e3a8a",
+                cursor: "pointer", position: "relative",
+              }}>
+                {avatarUploading
+                  ? t("上传中...", "Uploading...")
+                  : t("编辑头像", "Change Avatar")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarUpload}
+                  disabled={avatarUploading}
+                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }}
+                />
+              </label>
+
+              {avatarError && (
+                <p style={{ color: "#dc2626", fontSize: 13, margin: 0 }}>{avatarError}</p>
+              )}
+            </div>
 
             <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
               {t("显示名称", "Display Name")}
