@@ -227,6 +227,7 @@
        password,
        options: {
          emailRedirectTo: `${baseUrl}/auth/confirm`,
+         data: { name },
        },
      });
 
@@ -278,20 +279,30 @@
        return { ok: false as const, error: "Login failed" };
      }
 
-     // Fetch user profile from public.users table
+     // Fetch user profile from public.users table (try by id first, then by email)
      let { data: user } = await supabase
        .from("users")
        .select("*")
-       .eq("email", normalizedEmail)
+       .eq("id", authData.user.id)
        .single();
 
-     // If public.users row is missing, auto-create it so FK constraints work
+     if (!user) {
+       // Try by email as fallback
+       const { data: userByEmail } = await supabase
+         .from("users")
+         .select("*")
+         .eq("email", normalizedEmail)
+         .single();
+       user = userByEmail;
+     }
+
+     // If public.users row is truly missing, create it (but never overwrite existing)
      if (!user) {
        const fallbackUsername = normalizedEmail.split("@")[0];
        const fallbackName = authData.user.user_metadata?.name || fallbackUsername;
        const { data: newUser } = await supabase
          .from("users")
-         .upsert({ id: authData.user.id, name: fallbackName, email: normalizedEmail, username: fallbackUsername }, { onConflict: "id" })
+         .insert({ id: authData.user.id, name: fallbackName, email: normalizedEmail, username: fallbackUsername })
          .select()
          .single();
        user = newUser;
@@ -374,28 +385,63 @@
        const session = getSessionUser();
        return { ok: true, user: (session || { id: userId }) as User };
      }
-     const { data, error } = await supabase
+     let { data, error } = await supabase
        .from("users")
        .update(dbFields)
        .eq("id", userId)
        .select()
        .single();
+     // If bio column doesn't exist in DB, retry without it and store bio in localStorage
+     if (error && dbFields.bio !== undefined && error.message.includes("bio")) {
+       const { bio, ...safeBioFields } = dbFields;
+       if (typeof window !== "undefined") {
+         localStorage.setItem(`bp_bio_${userId}`, bio);
+       }
+       if (Object.keys(safeBioFields).length === 0) {
+         const session = getSessionUser();
+         if (session && session.id === userId) {
+           setSessionUser({ ...session, bio });
+         }
+         return { ok: true, user: (session || { id: userId }) as User };
+       }
+       const retry = await supabase
+         .from("users")
+         .update(safeBioFields)
+         .eq("id", userId)
+         .select()
+         .single();
+       data = retry.data;
+       error = retry.error;
+       if (!error && data) {
+         data.bio = bio;
+       }
+     }
      if (error) return { ok: false, error: error.message };
      // Sync localStorage session with updated user data
      const session = getSessionUser();
      if (session && session.id === userId) {
        setSessionUser({ ...session, ...data });
      }
+     // Also sync name to Supabase Auth user_metadata for login fallback consistency
+     if (fields.name) {
+       supabase.auth.updateUser({ data: { name: fields.name } }).catch(() => {});
+     }
      return { ok: true, user: data as User };
    }
 
    export async function getUserProfile(username: string): Promise<{ id: string; name: string; username: string; avatar_url?: string; bio?: string } | null> {
+     // Use select("*") to avoid schema cache errors if bio column doesn't exist yet
      const { data, error } = await supabase
        .from("users")
-       .select("id, name, username, avatar_url, bio")
+       .select("*")
        .ilike("username", username)
        .single();
      if (error) return null;
+     // If bio wasn't in the DB, try localStorage fallback
+     if (data && !data.bio && typeof window !== "undefined") {
+       const localBio = localStorage.getItem(`bp_bio_${data.id}`);
+       if (localBio) data.bio = localBio;
+     }
      return data;
    }
 

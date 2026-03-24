@@ -202,7 +202,7 @@ export default function HomePage() {
               ) : (
                 <>
                   <Link href={`/u/${user.username}`} style={{ fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: "8px 4px" }}>
-                    {user.name}
+                    {user.name || user.username}
                   </Link>
                   <button onClick={handleLogout} style={{ padding: "8px 14px", fontSize: 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
                     {t("退出", "Logout")}
@@ -298,7 +298,7 @@ export default function HomePage() {
               ) : (
                 <>
                   <Link href={`/u/${user.username}`} onClick={() => setMenuOpen(false)} style={{ padding: "8px 4px", fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500 }}>
-                    {user.name}
+                    {user.name || user.username}
                   </Link>
                   <button onClick={() => { handleLogout(); setMenuOpen(false); }} style={{ padding: "8px 14px", fontSize: 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>
                     {t("退出", "Logout")}
