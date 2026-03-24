@@ -467,7 +467,8 @@ export default function DiscoverPage() {
 
 function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d: string) => string }) {
   const [hovered, setHovered] = useState(false);
-  const authorName = insight.author?.username || insight.author?.name || "Anonymous";
+  const authorName = insight.author?.name || insight.author?.username || "Anonymous";
+  const authorAvatar = insight.author?.avatar_url;
   const coverUrl = insight.cover_url || (insight.images?.[0] ?? null);
 
   return (
@@ -525,14 +526,18 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: "50%",
-                background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
-                color: "#fff", fontSize: 12, fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              }}>
-                {authorName[0]?.toUpperCase()}
-              </div>
+              {authorAvatar ? (
+                <img src={authorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{
+                  width: 28, height: 28, borderRadius: "50%",
+                  background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
+                  color: "#fff", fontSize: 12, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}>
+                  {authorName[0]?.toUpperCase()}
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{authorName}</div>
                 <div style={{ fontSize: 11, color: "#94a3b8" }}>{formatDate(insight.created_at)}</div>

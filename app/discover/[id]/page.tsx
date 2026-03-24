@@ -72,11 +72,16 @@ export default function DiscoverPostPage() {
 
   const isAuthor = user && insight && insight.author_id === user.id;
 
-  const getAuthorName = () => {
+  const getAuthorDisplayName = () => {
     if (!insight) return "Anonymous";
-    if (insight.author?.username) return insight.author.username;
-    if (insight.author?.name) return insight.author.name;
-    return "Anonymous";
+    return insight.author?.name || insight.author?.username || "Anonymous";
+  };
+  const getAuthorUsername = () => {
+    if (!insight) return "";
+    return insight.author?.username || "";
+  };
+  const getAuthorAvatar = () => {
+    return insight?.author?.avatar_url || null;
   };
 
   const allImages = insight?.images || (insight?.cover_url ? [insight.cover_url] : []);
@@ -302,12 +307,16 @@ export default function DiscoverPostPage() {
             <div style={{ display: "flex", flexDirection: "column", padding: 24, maxHeight: "80vh", overflowY: "auto" }}>
               {/* Author */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 16, borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
-                <Link href={`/u/${getAuthorName()}`} style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {getAuthorName()[0]?.toUpperCase()}
-                  </div>
+                <Link href={`/u/${getAuthorUsername()}`} style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
+                  {getAuthorAvatar() ? (
+                    <img src={getAuthorAvatar()!} alt="" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {getAuthorDisplayName()[0]?.toUpperCase()}
+                    </div>
+                  )}
                   <div>
-                    <div style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}>{getAuthorName()}</div>
+                    <div style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}>{getAuthorDisplayName()}</div>
                     <div style={{ fontSize: 12, color: "#94a3b8" }}>{formatDate(insight.created_at)}</div>
                   </div>
                 </Link>
@@ -410,13 +419,18 @@ export default function DiscoverPostPage() {
                     </div>
                   ) : (
                     visibleComments.map(comment => {
-                      const commentAuthor = comment.author?.username || comment.author?.name || "Anonymous";
+                      const commentAuthor = comment.author?.name || comment.author?.username || "Anonymous";
+                      const commentAvatar = comment.author?.avatar_url;
                       const isCommentAuthor = user && user.id === comment.author_id;
                       return (
                         <div key={comment.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            {commentAuthor[0]?.toUpperCase()}
-                          </div>
+                          {commentAvatar ? (
+                            <img src={commentAvatar} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              {commentAuthor[0]?.toUpperCase()}
+                            </div>
+                          )}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                               <span style={{ fontWeight: 600, color: "#0f172a", fontSize: 13 }}>{commentAuthor}</span>
