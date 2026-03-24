@@ -218,10 +218,16 @@
        .slice(0, 30);
      const username = rawHandle || normalizedEmail.split("@")[0];
 
+     // Build the confirmation redirect URL
+     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+
      // 1. Create Supabase Auth account — this is the ONLY auth authority
      const { data: authData, error: authError } = await supabase.auth.signUp({
        email: normalizedEmail,
        password,
+       options: {
+         emailRedirectTo: `${baseUrl}/auth/confirm`,
+       },
      });
 
      if (authError) {
@@ -249,7 +255,8 @@
 
      if (insertError) return { ok: false as const, error: insertError.message };
 
-     setSessionUser(newUser);
+     // Do NOT set session here — user must confirm email first.
+     // Session will be set on login after email confirmation.
      return { ok: true as const, user: newUser };
    }
 
@@ -298,6 +305,20 @@
      return { ok: true as const, user };
    }
    
+   // ==================== Email Confirmation ====================
+
+   export async function resendConfirmationEmail(email: string) {
+     const normalizedEmail = email.trim().toLowerCase();
+     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+     const { error } = await supabase.auth.resend({
+       type: "signup",
+       email: normalizedEmail,
+       options: { emailRedirectTo: `${baseUrl}/auth/confirm` },
+     });
+     if (error) return { ok: false as const, error: error.message };
+     return { ok: true as const };
+   }
+
    // ==================== Password Reset ====================
 
    export async function requestPasswordReset(email: string, redirectUrl?: string) {
