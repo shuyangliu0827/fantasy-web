@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { resendConfirmationEmail } from "@/lib/store";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const { t } = useLang();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
@@ -107,5 +107,13 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }
