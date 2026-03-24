@@ -17,7 +17,7 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
 
-    const res = await requestPasswordReset(email);
+    const res = await requestPasswordReset(email.trim().toLowerCase());
 
     if (!res.ok) {
       setError(res.error || t("发送失败", "Failed to send reset link"));
