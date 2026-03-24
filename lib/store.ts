@@ -204,113 +204,95 @@
      await supabase.auth.signOut().catch(() => {});
    }
    
-   // ==================== Auth (Supabase + localStorage for password) ====================
-   
+   // ==================== Auth (Supabase Auth as single source of truth) ====================
+
    export async function signup(name: string, email: string, password: string) {
+     // Normalize email
+     const normalizedEmail = email.trim().toLowerCase();
+
      // Derive username from the user's chosen name (URL-safe handle).
      // Fallback to email prefix only if name produces no URL-safe characters (e.g. pure Chinese).
      const rawHandle = name.trim().toLowerCase()
        .replace(/\s+/g, "_")
        .replace(/[^a-z0-9_-]/g, "")
        .slice(0, 30);
-     const username = rawHandle || email.split("@")[0];
+     const username = rawHandle || normalizedEmail.split("@")[0];
 
-     // Check if email already exists in users table
-     const { data: existing } = await supabase
-       .from("users")
-       .select("id")
-       .eq("email", email)
-       .single();
-     if (existing) return { ok: false as const, error: "Email already exists" };
+     // 1. Create Supabase Auth account — this is the ONLY auth authority
+     const { data: authData, error: authError } = await supabase.auth.signUp({
+       email: normalizedEmail,
+       password,
+     });
 
-     // 1. Try Supabase Auth signup
-     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-     let userId: string | undefined = authData?.user?.id;
-
-     // 2. If Auth fails (e.g. email rate limit), fall back to local-only auth
-     if (authError || !userId) {
-       const isDuplicate = authError?.message?.toLowerCase().includes("already") ||
-                           authError?.message?.toLowerCase().includes("exists");
-       if (isDuplicate) return { ok: false as const, error: "Email already exists" };
-       const isRateLimit = authError?.message?.toLowerCase().includes("rate") ||
-                           authError?.message?.toLowerCase().includes("email");
-       if (!isRateLimit && authError) return { ok: false as const, error: authError.message };
-       // Rate-limited or no user returned: generate a UUID and continue without Supabase Auth
-       userId = crypto.randomUUID();
+     if (authError) {
+       return { ok: false as const, error: authError.message };
      }
 
-     // 3. Insert into users table
+     if (!authData?.user?.id) {
+       return { ok: false as const, error: "Signup failed — please try again" };
+     }
+
+     // Supabase returns a user with identities=[] if the email is already registered
+     // but email confirmations are disabled. Detect this case.
+     if (authData.user.identities && authData.user.identities.length === 0) {
+       return { ok: false as const, error: "Email already exists" };
+     }
+
+     const userId = authData.user.id;
+
+     // 2. Create profile row in public.users table
      const { data: newUser, error: insertError } = await supabase
        .from("users")
-       .insert({ id: userId, name, email, username })
+       .upsert({ id: userId, name, email: normalizedEmail, username }, { onConflict: "id" })
        .select()
        .single();
 
      if (insertError) return { ok: false as const, error: insertError.message };
 
-     // 4. Store credentials in localStorage so login works without Supabase Auth
-     const storedUsers = JSON.parse(localStorage.getItem("bp_users") || "[]");
-     storedUsers.push({ id: userId, email, password, username, name });
-     localStorage.setItem("bp_users", JSON.stringify(storedUsers));
-
      setSessionUser(newUser);
      return { ok: true as const, user: newUser };
    }
-   
+
    export async function login(email: string, password: string) {
-     // 1. Try Supabase Auth first (works across all browsers/devices)
+     // Normalize email
+     const normalizedEmail = email.trim().toLowerCase();
+
+     // Authenticate via Supabase Auth — the ONLY auth authority
      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-       email,
+       email: normalizedEmail,
        password,
      });
 
-     if (!authError && authData.user) {
-       // Supabase Auth succeeded — fetch user profile
-       let { data: user } = await supabase
-         .from("users")
-         .select("*")
-         .eq("email", email)
-         .single();
-
-       // If public.users row is missing, auto-create it so FK constraints work
-       if (!user) {
-         const username = email.split("@")[0];
-         const name = authData.user.user_metadata?.name || username;
-         const { data: newUser } = await supabase
-           .from("users")
-           .upsert({ id: authData.user.id, name, email, username }, { onConflict: "id" })
-           .select()
-           .single();
-         user = newUser;
-       }
-
-       if (user) {
-         setSessionUser(user);
-         return { ok: true as const, user };
-       }
+     if (authError) {
+       return { ok: false as const, error: authError.message };
      }
 
-     // 2. Fallback: check localStorage for old accounts (backward compat)
-     const users = JSON.parse(localStorage.getItem("bp_users") || "[]");
-     const storedUser = users.find((u: any) => u.email === email);
-
-     if (!storedUser || storedUser.password !== password) {
-       return { ok: false as const, error: "Invalid credentials" };
+     if (!authData.user) {
+       return { ok: false as const, error: "Login failed" };
      }
 
-     // localStorage auth succeeded — fetch user profile from Supabase
-     const { data: user, error } = await supabase
+     // Fetch user profile from public.users table
+     let { data: user } = await supabase
        .from("users")
        .select("*")
-       .eq("email", email)
+       .eq("email", normalizedEmail)
        .single();
 
-     if (error || !user) {
-       return { ok: false as const, error: "User not found" };
+     // If public.users row is missing, auto-create it so FK constraints work
+     if (!user) {
+       const fallbackUsername = normalizedEmail.split("@")[0];
+       const fallbackName = authData.user.user_metadata?.name || fallbackUsername;
+       const { data: newUser } = await supabase
+         .from("users")
+         .upsert({ id: authData.user.id, name: fallbackName, email: normalizedEmail, username: fallbackUsername }, { onConflict: "id" })
+         .select()
+         .single();
+       user = newUser;
      }
 
-     // Auto-migrate: create Supabase Auth account so future logins work everywhere
-     await supabase.auth.signUp({ email, password }).catch(() => {});
+     if (!user) {
+       return { ok: false as const, error: "Failed to load user profile" };
+     }
 
      setSessionUser(user);
      return { ok: true as const, user };
