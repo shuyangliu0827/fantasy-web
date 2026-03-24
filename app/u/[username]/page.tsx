@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserBio, League, Insight, supabase } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight, supabase } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -46,6 +46,7 @@ export default function UserProfilePage() {
   const [editBio, setEditBio] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [profileBio, setProfileBio] = useState<string | null>(null);
+  const [profileUser, setProfileUser] = useState<{ id: string; name: string; username: string; avatar_url?: string; bio?: string } | null>(null);
 
   const loadData = async () => {
     const user = getSessionUser();
@@ -73,12 +74,12 @@ export default function UserProfilePage() {
 
     // 查询 profile 用户已加入的所有联赛（包括创建和加入的）
     let joinedLeagues: (League & { memberCount: number; role: string })[] = [];
-    const { data: profileUserData } = await supabase
-      .from("users").select("id, name, username, avatar_url").ilike("username", username).single();
+    const profileUserData = await getUserProfile(username);
+    setProfileUser(profileUserData);
     if (profileUserData) {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
       setUserLeagues(joinedLeagues as any);
-      setProfileBio(getUserBio(profileUserData.id));
+      setProfileBio(profileUserData.bio || null);
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
@@ -193,6 +194,9 @@ export default function UserProfilePage() {
     }
 
     setCurrentUser(getSessionUser());
+    if (profileUser) {
+      setProfileUser({ ...profileUser, avatar_url: uploadResult.url });
+    }
     setAvatarUploading(false);
   };
 
@@ -203,15 +207,13 @@ export default function UserProfilePage() {
     loadData();
   };
 
-  // Display name: prefer user.name, fall back to username
-  const displayName = currentUser && isOwnProfile
-    ? (currentUser.name || username)
-    : username;
+  // Display name: use Supabase profile data for any user, fall back to username
+  const displayName = profileUser?.name || username;
 
   const handleEditProfile = () => {
     if (!currentUser) return;
     setEditDisplayName(currentUser.name || "");
-    setEditBio(profileBio || getUserBio(currentUser.id) || "");
+    setEditBio(profileBio || "");
     setEditMode(true);
   };
 
@@ -226,6 +228,10 @@ export default function UserProfilePage() {
     if (result.ok) {
       setCurrentUser(getSessionUser());
       setProfileBio(editBio.trim() || null);
+      // Refresh profileUser from updated session data
+      if (profileUser) {
+        setProfileUser({ ...profileUser, name: editDisplayName.trim() || profileUser.name, bio: editBio.trim() || undefined });
+      }
       setEditMode(false);
     } else {
       alert(result.error);
@@ -265,8 +271,8 @@ export default function UserProfilePage() {
           {/* Body: avatar + info */}
           <div className="profile-body">
             <div className="avatar-wrap">
-              {currentUser?.avatar_url && isOwnProfile ? (
-                <img src={currentUser.avatar_url} alt="avatar" className="avatar-sq" style={{ objectFit: "cover" }} />
+              {profileUser?.avatar_url ? (
+                <img src={profileUser.avatar_url} alt="avatar" className="avatar-sq" style={{ objectFit: "cover" }} />
               ) : (
                 <div className="avatar-sq">{username[0]?.toUpperCase()}</div>
               )}

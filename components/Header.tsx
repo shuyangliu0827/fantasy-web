@@ -76,7 +76,7 @@ export default function Header() {
               </>
             ) : (
               <>
-                <Link className="btn btn-ghost" href={`/u/${user.username}`}>{user.name}</Link>
+                <Link className="btn btn-ghost" href={`/u/${user.username}`}>{user.name || user.username}</Link>
                 <button className="btn btn-ghost" onClick={handleLogout}>{t("退出", "Logout")}</button>
               </>
             )}

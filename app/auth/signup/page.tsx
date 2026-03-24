@@ -41,7 +41,7 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/");
+    router.push(`/auth/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
   };
 
   return (
