@@ -193,7 +193,7 @@
      }
    }
    
-   function setSessionUser(user: User) {
+   export function setSessionUser(user: User) {
      if (typeof window === "undefined") return;
      localStorage.setItem(SESSION_KEY, JSON.stringify(user));
    }
@@ -361,7 +361,7 @@
    
    export async function updateUserProfile(
      userId: string,
-     fields: { name?: string; bio?: string }
+     fields: { name?: string; bio?: string; avatar_url?: string }
    ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
      // Save bio to localStorage (bio column may not exist in DB yet)
      if (fields.bio !== undefined && typeof window !== "undefined") {
@@ -370,6 +370,7 @@
      // Only send DB-safe fields to Supabase
      const dbFields: Record<string, string> = {};
      if (fields.name) dbFields.name = fields.name;
+     if (fields.avatar_url) dbFields.avatar_url = fields.avatar_url;
      if (Object.keys(dbFields).length === 0) {
        // Nothing to update in DB, just sync session
        const session = getSessionUser();

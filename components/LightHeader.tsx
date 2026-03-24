@@ -17,13 +17,13 @@ const NAV = [
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
   const { t, lang, setLang } = useLang();
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; username: string; avatar_url?: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username });
+    if (u) setUser({ name: u.name, username: u.username, avatar_url: u.avatar_url });
 
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
@@ -40,6 +40,28 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
     setUser(null);
     window.location.href = "/";
   };
+
+  const avatarNode = user && (
+    user.avatar_url ? (
+      <img
+        src={user.avatar_url}
+        alt=""
+        style={{
+          width: isMobile ? 20 : 24, height: isMobile ? 20 : 24,
+          borderRadius: "50%", objectFit: "cover", flexShrink: 0,
+        }}
+      />
+    ) : (
+      <span style={{
+        width: isMobile ? 20 : 24, height: isMobile ? 20 : 24,
+        borderRadius: "50%", background: "linear-gradient(135deg, #f59e0b, #d97706)",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        fontSize: isMobile ? 10 : 12, fontWeight: 700, color: "#000", flexShrink: 0,
+      }}>
+        {user.username[0]?.toUpperCase()}
+      </span>
+    )
+  );
 
   return (
     <header style={{
@@ -139,7 +161,9 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
               <>
                 <Link href={`/u/${user.username}`} style={{
                   fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, padding: "8px 4px",
+                  display: "flex", alignItems: "center", gap: 6,
                 }}>
+                  {avatarNode}
                   {user.name}
                 </Link>
                 <button onClick={handleLogout} style={{
@@ -244,7 +268,8 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
             ) : (
               <>
                 <Link href={`/u/${user.username}`} onClick={() => setMenuOpen(false)}
-                  style={{ padding: "8px 4px", fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500 }}>
+                  style={{ padding: "8px 4px", fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+                  {avatarNode}
                   {user.name}
                 </Link>
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }}
