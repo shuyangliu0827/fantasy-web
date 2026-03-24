@@ -6,6 +6,7 @@
    ========================================================= */
 
    import { supabase } from "./supabase";
+   import { getCurrentSeasonLabel } from "./season";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
    import { PLAYER_POSITIONS } from "./player-positions";
@@ -21,6 +22,7 @@
      email: string;
      username: string;
      avatar_url?: string;
+     bio?: string;
    };
    
    export type League = {
@@ -357,6 +359,70 @@
      return data;
    }
    
+   export async function updateUserProfile(
+     userId: string,
+     fields: { name?: string; bio?: string }
+   ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
+     // Save bio to localStorage (bio column may not exist in DB yet)
+     if (fields.bio !== undefined && typeof window !== "undefined") {
+       localStorage.setItem(`bp_bio_${userId}`, fields.bio);
+     }
+     // Only send DB-safe fields to Supabase
+     const dbFields: Record<string, string> = {};
+     if (fields.name) dbFields.name = fields.name;
+     if (Object.keys(dbFields).length === 0) {
+       // Nothing to update in DB, just sync session
+       const session = getSessionUser();
+       if (session && session.id === userId) {
+         setSessionUser({ ...session, bio: fields.bio });
+       }
+       return { ok: true, user: (session || { id: userId }) as User };
+     }
+     const { data, error } = await supabase
+       .from("users")
+       .update(dbFields)
+       .eq("id", userId)
+       .select()
+       .single();
+     if (error) return { ok: false, error: error.message };
+     // Sync localStorage session with updated user data
+     const session = getSessionUser();
+     if (session && session.id === userId) {
+       setSessionUser({ ...session, ...data, bio: fields.bio });
+     }
+     return { ok: true, user: { ...data, bio: fields.bio } as User };
+   }
+
+   export function getUserBio(userId: string): string | null {
+     if (typeof window === "undefined") return null;
+     return localStorage.getItem(`bp_bio_${userId}`) || null;
+   }
+
+   // ==================== Search ====================
+
+   export async function searchInsights(query: string): Promise<Insight[]> {
+     const q = query.replace(/[%_]/g, c => "\\" + c);
+     const { data, error } = await supabase
+       .from("insights")
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .or(`title.ilike.%${q}%,body.ilike.%${q}%`)
+       .order("created_at", { ascending: false })
+       .limit(30);
+     if (error) { console.error("searchInsights error:", error); return []; }
+     return data || [];
+   }
+
+   export async function searchUsers(query: string): Promise<User[]> {
+     const q = query.replace(/[%_]/g, c => "\\" + c);
+     const { data, error } = await supabase
+       .from("users")
+       .select("*")
+       .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
+       .limit(20);
+     if (error) { console.error("searchUsers error:", error); return []; }
+     return data || [];
+   }
+
    // ==================== Image Upload (Supabase Storage) ====================
    
    export async function uploadImage(
@@ -686,7 +752,7 @@
          slug,
          commissioner_id: user.id,
          visibility: input.visibility,
-         season: "2024-25",
+         season: getCurrentSeasonLabel(),
          draft_type: "snake",
          status: "draft_pending",
        })

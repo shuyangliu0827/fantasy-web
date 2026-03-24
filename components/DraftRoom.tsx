@@ -116,6 +116,8 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   const playerPageSize = 25;
   const [showPickBanner, setShowPickBanner] = useState<DraftPick | null>(null);
   const [statsMap, setStatsMap] = useState<Record<string, LiveStats>>({});
+  const [isMobile, setIsMobile] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(false);
 
   const numTeams = teams.length;
   const totalPicksNeeded = numTeams * TOTAL_ROUNDS;
@@ -180,6 +182,13 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       applyPicks(newPicks);
     }
   }, [allPlayers, applyPicks]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     const stored = loadStoredPicks(league.id, allPlayers);
@@ -371,11 +380,42 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
         </div>
       )}
 
+      {/* Mobile: My Team toggle */}
+      {isMobile && (
+        <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "8px 14px", display: "flex", justifyContent: "flex-end" }}>
+          <button onClick={() => setShowRightPanel(o => !o)} style={{ padding: "6px 14px", background: showRightPanel ? "#eff6ff" : "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, fontWeight: 700, color: showRightPanel ? "#1e3a8a" : "#374151", cursor: "pointer" }}>
+            {showRightPanel ? "▲ 收起阵容" : `▼ 我的阵容 (${myPicks.length})`}
+          </button>
+        </div>
+      )}
+
+      {/* Mobile: collapsible roster panel */}
+      {isMobile && showRightPanel && (
+        <div style={{ background: "#fff", borderBottom: "2px solid #e5e7eb", maxHeight: 260, overflowY: "auto", padding: "6px 8px" }}>
+          {myPicks.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "20px 16px", color: "#9ca3af", fontSize: 13 }}>
+              {isMyTurn ? "轮到你了，请选择球员!" : "等待其他队伍选秀..."}
+            </div>
+          ) : (
+            myPicks.map((pick, i) => (
+              <div key={pick.player.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: i % 2 === 0 ? "#f9fafb" : "#fff", borderRadius: 8, marginBottom: 2 }}>
+                <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>R{pick.round}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.player.name}</div>
+                  <div style={{ fontSize: 10, color: "#9ca3af" }}>{pick.player.team} · {pick.player.position}</div>
+                </div>
+                <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, flexShrink: 0 }}>{pick.player.ppg}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {/* Main content */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* Left: Available Players */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: "1px solid #e5e7eb", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", borderRight: isMobile ? "none" : "1px solid #e5e7eb", minWidth: 0 }}>
 
           {/* Search & Filter */}
           <div style={{ padding: "10px 14px", background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -497,8 +537,8 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
           )}
         </div>
 
-        {/* Right panel */}
-        <div style={{ width: 300, display: "flex", flexDirection: "column", background: "#fff", flexShrink: 0, borderLeft: "1px solid #e5e7eb" }}>
+        {/* Right panel — hidden on mobile (shown as collapsible above) */}
+        <div style={{ width: 300, display: isMobile ? "none" : "flex", flexDirection: "column", background: "#fff", flexShrink: 0, borderLeft: "1px solid #e5e7eb" }}>
 
           {/* My Team Roster */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column", borderBottom: "1px solid #e5e7eb" }}>

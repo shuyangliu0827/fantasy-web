@@ -6,6 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import { getCurrentSeasonLabel, getCurrentSeasonYear } from "@/lib/season";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -241,7 +242,7 @@ export default function SchedulePage() {
                   {selectedName.toUpperCase()} {t("赛程", "Schedule")}
                 </h1>
                 <span className="schedule-season">
-                  {"2025-26"} Fantasy Hoops
+                  {getCurrentSeasonLabel()} Fantasy Hoops
                 </span>
               </div>
             </div>
@@ -267,7 +268,7 @@ export default function SchedulePage() {
             </div>
 
             <div className="season-subtitle">
-              <h2>{t("2026 赛季赛程", "2026 Season Schedule")}</h2>
+              <h2>{t(`${getCurrentSeasonYear()} 赛季赛程`, `${getCurrentSeasonYear()} Season Schedule`)}</h2>
             </div>
 
             {members.length < 2 ? (

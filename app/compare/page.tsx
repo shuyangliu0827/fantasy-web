@@ -103,7 +103,7 @@ function RadarChart({ players, stats, weights }: { players: Player[], stats: str
   });
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width="100%" height="auto" viewBox={`0 0 ${size} ${size}`} style={{ maxWidth: size, display: "block" }}>
       {gridLines}
       {axisLines}
       {playerPolygons}

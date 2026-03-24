@@ -69,7 +69,7 @@ export default function NewLeaguePage() {
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="例如：2024 Fantasy 联赛"
+                placeholder={`例如：${new Date().getFullYear()} Fantasy 联赛`}
                 maxLength={50}
                 disabled={submitting}
                 style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e5e7eb", borderRadius: 10, color: "#111827", fontSize: 15, outline: "none", boxSizing: "border-box", fontFamily: FONT, background: "#fff" }}
