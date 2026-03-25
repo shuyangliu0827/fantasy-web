@@ -21,7 +21,7 @@ export default function Header() {
     { href: "/rankings", label: t("球员排名", "Rankings") },
     { href: "/league", label: t("公开联赛", "Leagues") },
     { href: "/compare", label: t("球员对比", "Compare") },
-    { href: "/draft-guide", label: t("选秀指南", "Draft Guide") },
+    { href: "/draft-guide", label: t("Fantasy新闻", "Fantasy News") },
     { href: "/cheat-sheet", label: t("备忘单", "Cheat Sheet") },
     { href: "/how-to-play", label: t("新手入门", "How To Play") },
     { href: "/mock-draft", label: t("模拟选秀", "Mock Draft") },

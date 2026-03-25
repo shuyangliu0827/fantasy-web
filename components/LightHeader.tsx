@@ -10,7 +10,7 @@ const NAV = [
   { href: "/rankings",    zh: "球员排名", en: "Rankings" },
   { href: "/league",      zh: "公开联赛", en: "Leagues" },
   { href: "/compare",     zh: "球员对比", en: "Compare" },
-  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
+  { href: "/draft-guide", zh: "Fantasy新闻", en: "Fantasy News" },
   { href: "/cheat-sheet", zh: "备忘单",  en: "Cheat Sheet" },
   { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
 ];

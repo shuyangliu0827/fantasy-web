@@ -78,7 +78,7 @@ export default function WaiverWirePage() {
           <nav className="main-nav">
             <Link href="/">Home</Link>
             <Link href="/rankings">Rankings</Link>
-            <Link href="/draft-guide">Draft Guide</Link>
+            <Link href="/draft-guide">Fantasy News</Link>
             <Link href="/waiver-wire" className="active">Waiver Wire</Link>
             <Link href="/how-to-play">How to Play</Link>
           </nav>
