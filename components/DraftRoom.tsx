@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getPlayers, Player, getSessionUser } from "@/lib/store";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { supabase } from "@/lib/supabase";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -398,8 +399,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
             </div>
           ) : (
             myPicks.map((pick, i) => (
-              <div key={pick.player.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: i % 2 === 0 ? "#f9fafb" : "#fff", borderRadius: 8, marginBottom: 2 }}>
+              <div key={pick.player.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: i % 2 === 0 ? "#f9fafb" : "#fff", borderRadius: 8, marginBottom: 2 }}>
                 <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>R{pick.round}</div>
+                <PlayerAvatar name={pick.player.name} size={28} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.player.name}</div>
                   <div style={{ fontSize: 10, color: "#9ca3af" }}>{pick.player.team} · {pick.player.position}</div>
@@ -458,6 +460,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? "#fff" : "#f9fafb"; }}
                 >
                   <span style={{ color: "#9ca3af", fontWeight: 600, fontSize: 11 }}>#{player.rank}</span>
+                  <PlayerAvatar name={player.name} size={28} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {player.name}
@@ -558,10 +561,11 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
                 </div>
               ) : (
                 myPicks.map((pick, i) => (
-                  <div key={pick.player.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", background: i % 2 === 0 ? "#f9fafb" : "#fff", borderRadius: 8, marginBottom: 2 }}>
+                  <div key={pick.player.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: i % 2 === 0 ? "#f9fafb" : "#fff", borderRadius: 8, marginBottom: 2 }}>
                     <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>
                       R{pick.round}
                     </div>
+                    <PlayerAvatar name={pick.player.name} size={28} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.player.name}</div>
                       <div style={{ fontSize: 10, color: "#9ca3af" }}>{pick.player.team} · {pick.player.position}</div>
@@ -609,9 +613,10 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
             <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "left", maxHeight: 280, overflowY: "auto" }}>
               <div style={{ fontWeight: 700, marginBottom: 10, color: "#374151", fontSize: 12 }}>你的阵容:</div>
               {myPicks.map((pick, i) => (
-                <div key={pick.player.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: i < myPicks.length - 1 ? "1px solid #f3f4f6" : "none", fontSize: 12 }}>
+                <div key={pick.player.id} style={{ display: "flex", alignItems: "center", padding: "5px 0", borderBottom: i < myPicks.length - 1 ? "1px solid #f3f4f6" : "none", fontSize: 12 }}>
                   <span style={{ color: "#9ca3af", width: 24 }}>R{pick.round}</span>
-                  <span style={{ flex: 1, marginLeft: 10, fontWeight: 600, color: "#111827" }}>{pick.player.name}</span>
+                  <PlayerAvatar name={pick.player.name} size={24} style={{ marginLeft: 6 }} />
+                  <span style={{ flex: 1, marginLeft: 8, fontWeight: 600, color: "#111827" }}>{pick.player.name}</span>
                   <span style={{ color: "#6b7280" }}>{pick.player.position}</span>
                   <span style={{ color: "#1e3a8a", marginLeft: 10, fontWeight: 700 }}>{pick.player.ppg} PPG</span>
                 </div>

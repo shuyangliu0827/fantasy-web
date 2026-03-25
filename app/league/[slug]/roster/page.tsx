@@ -6,6 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
@@ -718,15 +719,18 @@ export default function RosterPage() {
         <div className="col-slot">
           <span className={`slot-badge ${badgeType}`}>{slotInfo?.labelEn || "-"}</span>
         </div>
-        <div className="col-player">
+        <div className="col-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {player ? (
-            <div className="player-info">
-              <span className="player-name">
-                {player.name}
-                {isLocked && <span className="lock-badge" title={t("已开赛，无法移动", "Game started, cannot move")}> &#x1F512;</span>}
-              </span>
-              <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
-            </div>
+            <>
+              <PlayerAvatar name={player.name} size={32} />
+              <div className="player-info">
+                <span className="player-name">
+                  {player.name}
+                  {isLocked && <span className="lock-badge" title={t("已开赛，无法移动", "Game started, cannot move")}> &#x1F512;</span>}
+                </span>
+                <span className="player-meta">{getLiveTeam(player)} · {getPlayerPosition(player)}</span>
+              </div>
+            </>
           ) : (
             <span className="empty-slot">{t("空位", "Empty")}</span>
           )}

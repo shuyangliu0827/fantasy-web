@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   DailyLineupMap,
   League,
@@ -420,9 +421,12 @@ export default function MatchupDetailPage() {
                     <tr key={`${row.slot}-${row.player.id}`}>
                       <td>{row.slot === "BE" ? "BE" : row.slot.replace("UTIL", "UTIL ")}</td>
                       <td>
-                        <div className="player-cell">
-                          <strong>{row.player.name}</strong>
-                          <span>{row.player.team} · {row.player.position}</span>
+                        <div className="player-cell" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <PlayerAvatar name={row.player.name} size={28} />
+                          <div>
+                            <strong>{row.player.name}</strong>
+                            <span>{row.player.team} · {row.player.position}</span>
+                          </div>
                         </div>
                       </td>
                       <td>

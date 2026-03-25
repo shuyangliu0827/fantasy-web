@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { getPlayers, getWatchlist, Player } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -91,6 +92,7 @@ export default function CheatSheetPage() {
         <span style={{ fontSize: 12, fontWeight: 700, color: accentColor, minWidth: 18, textAlign: "right", flexShrink: 0 }}>
           {p.rank}
         </span>
+        <PlayerAvatar name={p.name} size={24} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: 13, fontWeight: 600,

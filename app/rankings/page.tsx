@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -619,13 +620,7 @@ export default function PlayerRankingsPage() {
                           {/* 球员 */}
                           <td style={{ ...tdStyle, textAlign: "left", minWidth: 180 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <div style={{
-                                width: 40, height: 40, borderRadius: "50%",
-                                background: "#fff7ed", display: "flex", alignItems: "center",
-                                justifyContent: "center", fontSize: 18, flexShrink: 0,
-                              }}>
-                                
-                              </div>
+                              <PlayerAvatar name={player.name} size={40} />
                               <div>
                                 <div style={{ fontWeight: 700, color: "#111827", fontSize: 13 }}>
                                   {abbreviateName(player.name)}
@@ -710,9 +705,7 @@ export default function PlayerRankingsPage() {
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span style={getRankCircleStyle(player.rank)}>{player.rank}</span>
-                        <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#fff7ed", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                          
-                        </div>
+                        <PlayerAvatar name={player.name} size={38} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{abbreviateName(player.name)}</div>
                           <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{player.team} · {player.position}</div>
