@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { listInsights, getSessionUser, type Insight } from "@/lib/store";
+import { listNewsInsights, canUserPublishNews, getSessionUser, type Insight } from "@/lib/store";
 import LightHeader from "@/components/LightHeader";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
@@ -42,10 +42,12 @@ export default function FantasyNewsPage() {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [canPublish, setCanPublish] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     setUser(getSessionUser());
+    canUserPublishNews().then(setCanPublish);
     const handleResize = () => setIsMobile(window.innerWidth < 640);
     handleResize();
     window.addEventListener("resize", handleResize);
@@ -53,7 +55,7 @@ export default function FantasyNewsPage() {
   }, []);
 
   useEffect(() => {
-    listInsights().then((data) => {
+    listNewsInsights().then((data) => {
       setInsights(data);
       setLoading(false);
     });
@@ -90,8 +92,8 @@ export default function FantasyNewsPage() {
               {t("权威专家分析，助你制胜Fantasy联赛", "Expert analysis to help you win your Fantasy league")}
             </p>
           </div>
-          {user && (
-            <Link href="/discover/new" style={{
+          {user && canPublish && (
+            <Link href="/news/new" style={{
               padding: "10px 22px",
               background: "#f59e0b",
               color: "#000",
@@ -168,7 +170,7 @@ export default function FantasyNewsPage() {
             <div style={{ fontSize: 48, marginBottom: 16 }}>📰</div>
             <div style={{ fontSize: 16, fontWeight: 600 }}>{t("暂无新闻", "No news yet")}</div>
             <div style={{ fontSize: 14, marginTop: 8 }}>
-              {t("成为第一个发布新闻的人！", "Be the first to post news!")}
+              {t("敬请期待专家发布最新Fantasy分析", "Stay tuned for expert Fantasy analysis")}
             </div>
           </div>
         ) : (
