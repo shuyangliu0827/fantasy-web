@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
 import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
 
@@ -273,13 +274,7 @@ export default function MockDraftPage() {
                 onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
               >
                 <div style={{ width: 28, textAlign: "center", fontSize: 12, fontWeight: 700, color: "#9ca3af" }}>#{p.rank}</div>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 10, fontWeight: 700, color: "#2563eb",
-                }}>
-                  {p.position}
-                </div>
+                <PlayerAvatar name={p.name} size={32} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{p.name}</div>
                   <div style={{ fontSize: 12, color: "#9ca3af" }}>{p.team}</div>
@@ -344,10 +339,11 @@ export default function MockDraftPage() {
               <div style={{ padding: "32px 18px", textAlign: "center", fontSize: 13, color: "#9ca3af" }}>{t("等待选秀开始...", "Make your first pick!")}</div>
             ) : (
               myPicks.map((p, i) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", borderBottom: "1px solid #f9fafb" }}>
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", borderBottom: "1px solid #f9fafb" }}>
                   <div style={{ width: 22, height: 22, borderRadius: 6, background: "#f59e0b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff", flexShrink: 0 }}>
                     {i + 1}
                   </div>
+                  <PlayerAvatar name={p.name} size={28} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af" }}>{p.position} · {p.team}</div>

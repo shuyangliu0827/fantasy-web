@@ -6,6 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
@@ -242,7 +243,8 @@ export default function FreeAgentsPage() {
             {paginatedAgents.map((player) => (
               <div key={player.id} className="fa-row">
                 <div className="col-rank">{player.rank}</div>
-                <div className="col-player">
+                <div className="col-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <PlayerAvatar name={player.name} size={32} />
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-meta">{player.team} · {player.position}{player.injury ? ` · ${player.injury}` : ""}</span>

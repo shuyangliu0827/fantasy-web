@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { getPlayers, Player } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -239,9 +240,7 @@ export default function ComparePage() {
               <div key={player.id} style={{ background: "#fff", border: `2px solid ${color}`, borderRadius: 16, padding: 20, width: isMobile ? "100%" : 220, position: "relative", boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
                 <button onClick={() => removePlayer(player.id)} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>✕</button>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: textOnColor, fontSize: 14, flexShrink: 0 }}>
-                    {player.name.split(' ').map(n => n[0]).join('')}
-                  </div>
+                  <PlayerAvatar name={player.name} size={48} />
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 28, fontWeight: 700, color: color }}>{score.toFixed(0)}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af" }}>{t("综合评分", "Score")}</div>
@@ -370,7 +369,7 @@ export default function ComparePage() {
                       onMouseEnter={e => (e.currentTarget.style.background = "#f9fafb")}
                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                     >
-                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#1e3a8a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#fff", fontSize: 12, flexShrink: 0 }}>{player.name.split(' ').map(n => n[0]).join('')}</div>
+                      <PlayerAvatar name={player.name} size={40} />
                       <div style={{ flex: 1 }}>
                         <span style={{ display: "block", fontWeight: 600, color: "#111827", fontSize: 14 }}>{player.name}</span>
                         <span style={{ fontSize: 13, color: "#6b7280" }}>{player.team} · {player.position}</span>
