@@ -52,6 +52,7 @@
      cover_url?: string;
      images?: string[];      // 多图支持
      tags?: string[];
+     content_type?: string;  // 'community' | 'news'
      author_id: string;
      author?: User;
      heat: number;
@@ -510,12 +511,75 @@
      const { data, error } = await supabase
        .from("insights")
        .select(`*, author:users(id, name, username, avatar_url)`)
+       .or("content_type.eq.community,content_type.is.null")
        .order("created_at", { ascending: false });
      if (error) {
        console.error("Error fetching insights:", error);
        return [];
      }
      return data || [];
+   }
+
+   // ==================== News (separate from Discover) ====================
+
+   export async function listNewsInsights(): Promise<Insight[]> {
+     const { data, error } = await supabase
+       .from("insights")
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .eq("content_type", "news")
+       .order("created_at", { ascending: false });
+     if (error) {
+       console.error("Error fetching news:", error);
+       return [];
+     }
+     return data || [];
+   }
+
+   export async function canUserPublishNews(): Promise<boolean> {
+     const user = getSessionUser();
+     if (!user) return false;
+     const { data, error } = await supabase
+       .from("users")
+       .select("can_publish_news")
+       .eq("id", user.id)
+       .single();
+     if (error || !data) return false;
+     return data.can_publish_news === true;
+   }
+
+   export async function createNewsInsight(input: {
+     title: string;
+     body: string;
+     cover_url?: string;
+     images?: string[];
+     tags?: string[];
+   }) {
+     const user = getSessionUser();
+     if (!user) return { ok: false as const, error: "Login required" };
+
+     // Backend permission check — verify can_publish_news from DB
+     const allowed = await canUserPublishNews();
+     if (!allowed) return { ok: false as const, error: "Permission denied: not authorized to publish news" };
+
+     const { data, error } = await supabase
+       .from("insights")
+       .insert({
+         title: input.title.trim(),
+         body: input.body.trim(),
+         cover_url: input.cover_url,
+         images: input.images,
+         tags: input.tags,
+         author_id: user.id,
+         content_type: "news",
+         heat: 0,
+       })
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .single();
+
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const, insight: data };
    }
    
    export async function getInsightById(id: string): Promise<Insight | null> {

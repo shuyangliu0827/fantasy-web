@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
-  { href: "/draft-guide", labelZh: "选秀指南", labelEn: "Draft Guide" },
+  { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
   { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
   { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
 ];
@@ -390,7 +390,7 @@ export default function HomePage() {
                   transition: "all 0.15s",
                 }}
               >
-                {t("查看选秀指南", "Draft Guide")}
+                {t("查看Fantasy新闻", "Fantasy News")}
               </Link>
             </div>
           </div>

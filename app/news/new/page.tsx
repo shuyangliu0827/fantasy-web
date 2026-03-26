@@ -3,42 +3,30 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createInsight, getSessionUser, uploadImage } from "@/lib/store";
+import { createNewsInsight, canUserPublishNews, getSessionUser, uploadImage } from "@/lib/store";
 import { useLang } from "@/lib/lang";
+import LightHeader from "@/components/LightHeader";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
-const NAV_ITEMS = [
-  { href: "/", labelZh: "首页", labelEn: "Home" },
-  { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
-  { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
-  { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
-  { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
-  { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
-];
-
-const POPULAR_TAGS = ["选秀策略", "球员分析", "交易建议", "新手指南", "Punt策略"];
+const NEWS_TAGS = ["球员分析", "交易建议", "选秀策略", "伤病报告", "赛季预测"];
 
 type ImageItem = { id: string; file: File; preview: string };
-type Visibility = "public" | "followers" | "private";
 
-export default function NewPostPage() {
+export default function NewNewsPage() {
   const router = useRouter();
-  const { t, lang, setLang } = useLang();
+  const { t, lang } = useLang();
   const user = getSessionUser();
 
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [images, setImages] = useState<ImageItem[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
-  const [visibility, setVisibility] = useState<Visibility>("public");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState("");
-  const [loginHovered, setLoginHovered] = useState(false);
-  const [signupHovered, setSignupHovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +36,15 @@ export default function NewPostPage() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Check permission on mount
+  useEffect(() => {
+    if (!user) {
+      setAuthorized(false);
+      return;
+    }
+    canUserPublishNews().then((ok) => setAuthorized(ok));
   }, []);
 
   function handleFilesSelected(files: FileList | null) {
@@ -94,33 +91,41 @@ export default function NewPostPage() {
   async function onSubmit() {
     if (!user) { router.push("/auth/login"); return; }
     if (!title.trim()) { setError(t("请输入标题", "Title is required")); return; }
-    if (images.length === 0) { setError(t("请至少上传一张图片", "Please upload at least one image")); return; }
+    if (!body.trim()) { setError(t("请输入正文内容", "Body content is required")); return; }
 
     setSubmitting(true);
     setError(null);
 
     try {
+      // Upload images if any
       const uploadedUrls: string[] = [];
       for (let i = 0; i < images.length; i++) {
         setUploadProgress(t(`正在上传图片 ${i + 1}/${images.length}...`, `Uploading image ${i + 1}/${images.length}...`));
-        const res = await uploadImage(images[i].file, "posts");
+        const res = await uploadImage(images[i].file, "news");
         if (!res.ok) { setError(res.error || t("图片上传失败", "Image upload failed")); setSubmitting(false); setUploadProgress(""); return; }
         uploadedUrls.push(res.url);
       }
 
       setUploadProgress(t("正在发布...", "Publishing..."));
-      const res = await createInsight({
+
+      // createNewsInsight checks can_publish_news on the backend
+      const res = await createNewsInsight({
         title: title.trim(),
-        body: body.trim() || " ",
-        cover_url: uploadedUrls[0],
-        images: uploadedUrls,
+        body: body.trim(),
+        cover_url: uploadedUrls.length > 0 ? uploadedUrls[0] : undefined,
+        images: uploadedUrls.length > 0 ? uploadedUrls : undefined,
         tags: tags.length > 0 ? tags : undefined,
       });
 
-      if (!res.ok) { setError(res.error || t("发布失败", "Publish failed")); setSubmitting(false); setUploadProgress(""); return; }
+      if (!res.ok) {
+        setError(res.error || t("发布失败", "Publish failed"));
+        setSubmitting(false);
+        setUploadProgress("");
+        return;
+      }
 
       images.forEach(img => URL.revokeObjectURL(img.preview));
-      router.push("/discover");
+      router.push("/draft-guide");
     } catch {
       setError(t("发布失败，请重试", "Publish failed, please try again"));
       setSubmitting(false);
@@ -128,17 +133,14 @@ export default function NewPostPage() {
     }
   }
 
-  const handleLogout = () => { localStorage.removeItem("bp_session"); window.location.href = "/"; };
-
+  // Not logged in
   if (!user) {
     return (
       <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: FONT }}>
+        <LightHeader activeHref="/draft-guide" />
         <div style={{ maxWidth: 480, margin: "100px auto", textAlign: "center", background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: "48px 40px", boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
-          <div style={{ width: 56, height: 56, background: "#f1f5f9", borderRadius: 14, margin: "0 auto 16px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <div style={{ width: 24, height: 30, background: "#cbd5e1", borderRadius: 4 }} />
-          </div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>{t("需要登录", "Login Required")}</h2>
-          <p style={{ fontSize: 14, color: "#64748b", margin: "0 0 28px" }}>{t("登录后即可发布笔记", "Login to publish your notes")}</p>
+          <p style={{ fontSize: 14, color: "#64748b", margin: "0 0 28px" }}>{t("登录后才能发布新闻", "Login to publish news")}</p>
           <button onClick={() => router.push("/auth/login")} style={{ padding: "12px 32px", background: "#1e3a8a", color: "#fff", borderRadius: 10, border: "none", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}>
             {t("去登录", "Login")}
           </button>
@@ -147,61 +149,64 @@ export default function NewPostPage() {
     );
   }
 
+  // Permission check loading
+  if (authorized === null) {
+    return (
+      <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: FONT }}>
+        <LightHeader activeHref="/draft-guide" />
+        <div style={{ textAlign: "center", padding: "120px 0", color: "#9ca3af" }}>
+          <div style={{
+            width: 36, height: 36, border: "3px solid #e5e7eb", borderTopColor: "#1e3a8a",
+            borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px",
+          }} />
+          {t("验证权限中…", "Verifying permissions…")}
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authorized
+  if (!authorized) {
+    return (
+      <div style={{ background: "#f8fafc", minHeight: "100vh", fontFamily: FONT }}>
+        <LightHeader activeHref="/draft-guide" />
+        <div style={{ maxWidth: 480, margin: "100px auto", textAlign: "center", background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: "48px 40px", boxShadow: "0 4px 24px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "#0f172a", margin: "0 0 8px" }}>{t("无发布权限", "Not Authorized")}</h2>
+          <p style={{ fontSize: 14, color: "#64748b", margin: "0 0 28px", lineHeight: 1.6 }}>
+            {t("仅授权的编辑和专家可以发布Fantasy新闻。", "Only authorized editors and experts can publish Fantasy News.")}
+          </p>
+          <Link href="/draft-guide" style={{ padding: "12px 32px", background: "#1e3a8a", color: "#fff", borderRadius: 10, fontSize: 15, fontWeight: 700, textDecoration: "none", display: "inline-block" }}>
+            {t("返回新闻", "Back to News")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Authorized — show the editor
   return (
     <div style={{ background: "#f0f2f7", minHeight: "100vh", fontFamily: FONT }}>
-
-      {/* Header */}
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid #e2e8f0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px", height: isMobile ? 60 : 64, display: "flex", alignItems: "center", gap: isMobile ? 8 : 32 }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
-          </Link>
-          <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
-            {NAV_ITEMS.map(item => (
-              <Link key={item.href} href={item.href} style={{ padding: "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500, color: "#64748b", textDecoration: "none", whiteSpace: "nowrap" }}>
-                {lang === "zh" ? item.labelZh : item.labelEn}
-              </Link>
-            ))}
-          </nav>
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
-            <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: isMobile ? "6px 9px" : "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: isMobile ? 12 : 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-              中 / EN
-            </button>
-            <Link href={`/u/${user.username}`} style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, textDecoration: "none" }}>
-              <div style={{ width: isMobile ? 30 : 32, height: isMobile ? 30 : 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {user.name?.[0]?.toUpperCase()}
-              </div>
-              {!isMobile && <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>{t("我的主页", "My Profile")}</span>}
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LightHeader activeHref="/draft-guide" />
 
       {/* Page toolbar */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e2e8f0" }}>
         <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "10px 10px" : "0 24px", minHeight: isMobile ? 0 : 56, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <Link href="/discover" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748b", textDecoration: "none", fontWeight: 500, padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 7, background: "#f8fafc" }}>
-            ← {t("返回发现", "Back to Discover")}
+          <Link href="/draft-guide" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#64748b", textDecoration: "none", fontWeight: 500, padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 7, background: "#f8fafc" }}>
+            ← {t("返回新闻", "Back to News")}
           </Link>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", margin: 0, flex: 1, minWidth: isMobile ? "100%" : "auto", order: isMobile ? 2 : 0 }}>
-            {t("创建内容", "Create Post")}
+            {t("发布新闻", "Publish News")}
           </h1>
           <button
-            onClick={() => router.push("/discover")}
-            disabled={submitting}
-            style={{ padding: isMobile ? "8px 14px" : "8px 20px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#374151", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
-          >
-            {t("存为草稿", "Save Draft")}
-          </button>
-          <button
             onClick={onSubmit}
-            disabled={submitting || images.length === 0 || !title.trim()}
+            disabled={submitting || !title.trim() || !body.trim()}
             style={{
               padding: isMobile ? "8px 16px" : "8px 24px",
-              background: submitting || images.length === 0 || !title.trim() ? "#94a3b8" : "#1e3a8a",
+              background: submitting || !title.trim() || !body.trim() ? "#94a3b8" : "#1e3a8a",
               border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: submitting || images.length === 0 || !title.trim() ? "not-allowed" : "pointer",
+              cursor: submitting || !title.trim() || !body.trim() ? "not-allowed" : "pointer",
               fontFamily: FONT, transition: "background 0.15s",
             }}
           >
@@ -220,27 +225,25 @@ export default function NewPostPage() {
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", overflow: "hidden", marginBottom: 16 }}>
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => handleFilesSelected(e.target.files)} style={{ display: "none" }} disabled={submitting} />
 
-            {/* Drop zone */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={submitting || images.length >= 9}
               style={{
-                width: "calc(100% - 32px)", minHeight: 200, display: "flex", flexDirection: "column",
+                width: "calc(100% - 32px)", minHeight: 160, display: "flex", flexDirection: "column",
                 alignItems: "center", justifyContent: "center", gap: 10,
                 background: "#f8fafc", border: "2px dashed #cbd5e1",
                 borderRadius: 12, cursor: images.length >= 9 ? "not-allowed" : "pointer",
-                fontFamily: FONT, padding: 32, margin: 16,
+                fontFamily: FONT, padding: 24, margin: 16,
                 boxSizing: "border-box", transition: "all 0.15s",
               }}
               onMouseEnter={e => { if (images.length < 9) { (e.currentTarget as HTMLButtonElement).style.borderColor = "#1e3a8a"; (e.currentTarget as HTMLButtonElement).style.background = "#eff6ff"; } }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#cbd5e1"; (e.currentTarget as HTMLButtonElement).style.background = "#f8fafc"; }}
             >
               <div style={{ width: 48, height: 48, background: "#e2e8f0", borderRadius: 12 }} />
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>{t("点击或拖拽上传封面图 / 配图", "Click or drag to upload cover / images")}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#374151" }}>{t("上传封面图 / 配图（可选）", "Upload cover / images (optional)")}</div>
               <div style={{ fontSize: 12, color: "#94a3b8" }}>{t("支持 JPG、PNG、GIF · 单张最大 30MB · 最多 9 张", "JPG, PNG, GIF · Max 30MB each · Up to 9 images")}</div>
             </button>
 
-            {/* Uploaded thumbnails */}
             {images.length > 0 && (
               <div style={{ padding: "0 16px 16px" }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 10 }}>
@@ -273,13 +276,13 @@ export default function NewPostPage() {
 
           {/* Title */}
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("标题", "Title")}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("新闻标题", "News Title")}</div>
             <div style={{ position: "relative" }}>
               <input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
-                placeholder={t("填写标题...", "Write a title...")}
-                maxLength={50}
+                placeholder={t("填写新闻标题...", "Write a news title...")}
+                maxLength={100}
                 disabled={submitting}
                 style={{
                   width: "100%", padding: "12px 16px", fontSize: 16, fontWeight: 600,
@@ -289,37 +292,37 @@ export default function NewPostPage() {
                 onFocus={e => { (e.target as HTMLInputElement).style.borderColor = "#1e3a8a"; (e.target as HTMLInputElement).style.background = "#fff"; }}
                 onBlur={e => { (e.target as HTMLInputElement).style.borderColor = "#e2e8f0"; (e.target as HTMLInputElement).style.background = "#f8fafc"; }}
               />
-              <div style={{ position: "absolute", right: 12, bottom: -18, fontSize: 11, color: "#94a3b8" }}>{title.length}/50</div>
+              <div style={{ position: "absolute", right: 12, bottom: -18, fontSize: 11, color: "#94a3b8" }}>{title.length}/100</div>
             </div>
           </div>
 
           {/* Body */}
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16, marginTop: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("正文内容", "Body")}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{t("新闻正文", "News Body")}</div>
             <div style={{ position: "relative" }}>
               <textarea
                 value={body}
                 onChange={e => setBody(e.target.value)}
-                placeholder={t("分享你的想法...（可选）", "Share your thoughts... (optional)")}
-                rows={7}
-                maxLength={2000}
+                placeholder={t("撰写新闻内容...", "Write your news content...")}
+                rows={12}
+                maxLength={10000}
                 disabled={submitting}
                 style={{
                   width: "100%", padding: "12px 16px", fontSize: 14, color: "#374151",
                   background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 10,
-                  outline: "none", resize: "vertical", minHeight: 140, fontFamily: FONT,
+                  outline: "none", resize: "vertical", minHeight: 240, fontFamily: FONT,
                   lineHeight: 1.65, boxSizing: "border-box",
                 }}
                 onFocus={e => { (e.target as HTMLTextAreaElement).style.borderColor = "#1e3a8a"; (e.target as HTMLTextAreaElement).style.background = "#fff"; }}
                 onBlur={e => { (e.target as HTMLTextAreaElement).style.borderColor = "#e2e8f0"; (e.target as HTMLTextAreaElement).style.background = "#f8fafc"; }}
               />
-              <div style={{ position: "absolute", right: 12, bottom: -18, fontSize: 11, color: "#94a3b8" }}>{body.length}/2000</div>
+              <div style={{ position: "absolute", right: 12, bottom: -18, fontSize: 11, color: "#94a3b8" }}>{body.length}/10000</div>
             </div>
           </div>
 
           {/* Tags */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginBottom: 16, marginTop: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>{t("话题标签", "Hashtags")}</div>
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginTop: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>{t("新闻分类", "News Category")}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {tags.map(tg => (
                 <button key={tg} onClick={() => setTags(prev => prev.filter(x => x !== tg))} style={{
@@ -329,7 +332,7 @@ export default function NewPostPage() {
                   #{tg} <span style={{ marginLeft: 4, opacity: 0.6 }}>×</span>
                 </button>
               ))}
-              {POPULAR_TAGS.filter(tg => !tags.includes(tg)).map(tg => (
+              {NEWS_TAGS.filter(tg => !tags.includes(tg)).map(tg => (
                 <button key={tg} onClick={() => addTag(tg)} disabled={tags.length >= 5} style={{
                   padding: "5px 12px", background: "#f1f5f9", border: "1.5px solid #e2e8f0",
                   borderRadius: 999, color: "#64748b", fontSize: 12, fontWeight: 600,
@@ -341,34 +344,12 @@ export default function NewPostPage() {
               <input
                 value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
-                placeholder={t("添加话题...", "Add topic...")}
+                placeholder={t("添加分类...", "Add category...")}
                 maxLength={16}
                 disabled={tags.length >= 5}
                 style={{ padding: "5px 12px", fontSize: 12, color: "#374151", background: "transparent", border: "none", outline: "none", fontFamily: FONT, minWidth: 80 }}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(tagInput); setTagInput(""); } }}
               />
-            </div>
-          </div>
-
-          {/* Visibility */}
-          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: isMobile ? "16px 14px" : "20px 24px", marginTop: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 12 }}>{t("可见范围", "Visibility")}</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {([
-                { key: "public", zh: "公开", en: "Public" },
-                { key: "followers", zh: "仅关注者", en: "Followers" },
-                { key: "private", zh: "仅自己", en: "Only Me" },
-              ] as const).map(opt => (
-                <button key={opt.key} onClick={() => setVisibility(opt.key)} style={{
-                  padding: "7px 18px",
-                  background: visibility === opt.key ? "#1e3a8a" : "#f1f5f9",
-                  border: `1.5px solid ${visibility === opt.key ? "#1e3a8a" : "#e2e8f0"}`,
-                  borderRadius: 999, color: visibility === opt.key ? "#fff" : "#64748b",
-                  fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, transition: "all 0.15s",
-                }}>
-                  {lang === "zh" ? opt.zh : opt.en}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -390,43 +371,46 @@ export default function NewPostPage() {
 
           {/* Preview card */}
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("预览效果", "Preview")}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("新闻预览", "News Preview")}</div>
 
-            {/* Cover preview */}
-            <div style={{ aspectRatio: "4/3", background: "#f1f5f9", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {images[0] ? (
+            {images[0] ? (
+              <div style={{ aspectRatio: "16/9", background: "#f1f5f9", borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
                 <img src={images[0].preview} alt="cover" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-              ) : (
+              </div>
+            ) : (
+              <div style={{ aspectRatio: "16/9", background: "#f1f5f9", borderRadius: 10, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ fontSize: 11, color: "#94a3b8" }}>{t("封面预览", "Cover preview")}</div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a", marginBottom: 6, lineHeight: 1.4 }}>
-              {title || <span style={{ color: "#cbd5e1" }}>{t("标题将显示在这里", "Title appears here")}</span>}
+              {title || <span style={{ color: "#cbd5e1" }}>{t("新闻标题将显示在这里", "News title appears here")}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5, marginBottom: 8, maxHeight: 48, overflow: "hidden" }}>
+              {body ? body.slice(0, 100) : <span style={{ color: "#cbd5e1" }}>{t("正文摘要...", "Body excerpt...")}</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 22, height: 22, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {user.name?.[0]?.toUpperCase()}
               </div>
-              <span style={{ fontSize: 11, color: "#64748b" }}>{user.username || user.name}</span>
+              <span style={{ fontSize: 11, color: "#64748b" }}>{user.name || user.username}</span>
               <span style={{ fontSize: 11, color: "#94a3b8" }}>·</span>
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>{t("公开", "Public")}</span>
+              <span style={{ fontSize: 11, color: "#f59e0b", fontWeight: 600 }}>{t("新闻", "News")}</span>
             </div>
-            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>{t("发布后将以双列卡片形式展示在发现页", "Will appear as a card in the Discover feed")}</div>
           </div>
 
-          {/* Tips */}
+          {/* Guidelines */}
           <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", padding: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("发帖小贴士", "Tips")}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("新闻发布指南", "Publishing Guidelines")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>{t("封面图决定点击率", "Cover image drives clicks")}</div>
-                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>{t("清晰的数据截图或球员图片，搭配醒目标题，点击率提升 3 倍。", "Clear data screenshots or player photos paired with bold titles boost click-through 3x.")}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>{t("内容要求", "Content Requirements")}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>{t("新闻文章应包含专业分析、数据支撑和明确观点，帮助读者做出更好的Fantasy决策。", "News articles should include professional analysis, data-backed insights, and clear opinions to help readers make better Fantasy decisions.")}</div>
               </div>
               <div style={{ height: 1, background: "#f1f5f9" }} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>{t("善用话题标签", "Use hashtags")}</div>
-                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>{t("帖子中关联球员数据卡片，读者可以直接跳转球员详情页。", "Tag your post with relevant topics so it gets discovered by the right readers.")}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#0f172a", marginBottom: 4 }}>{t("分类标签", "Categories")}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.55 }}>{t("请选择合适的分类标签，方便读者按类别浏览新闻内容。", "Select appropriate category tags so readers can browse news by category.")}</div>
               </div>
             </div>
           </div>
