@@ -573,13 +573,16 @@ export default function PlayerRankingsPage() {
                         t("助攻", "AST"),
                         t("抢断", "STL"),
                         t("盖帽", "BLK"),
+                        t("失误", "TOV"),
+                        t("命中率", "FG%"),
+                        t("场均罚球", "FTM"),
                         t("趋势", "Trend"),
                       ].map((h, i) => (
                         <th
                           key={i}
                           style={{
                             ...thStyle,
-                            textAlign: i === 0 ? "center" : i === 1 ? "left" : i >= 8 ? "center" : "right",
+                            textAlign: i === 0 ? "center" : i === 1 ? "left" : i >= 11 ? "center" : "right",
                           }}
                         >
                           {h}
@@ -637,6 +640,15 @@ export default function PlayerRankingsPage() {
 
                           {/* 盖帽 */}
                           <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.blk.toFixed(1)}</td>
+
+                          {/* 失误 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.tov.toFixed(1)}</td>
+
+                          {/* 命中率 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{(player.averages.fg_pct * 100).toFixed(1)}%</td>
+
+                          {/* 场均罚球 */}
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.ftm.toFixed(1)}</td>
 
                           {/* 趋势 */}
                           <td style={{ ...tdStyle, textAlign: "center" }}>
@@ -697,6 +709,9 @@ export default function PlayerRankingsPage() {
                         { label: t("助攻", "AST"), val: player.averages.ast.toFixed(1) },
                         { label: t("抢断", "STL"), val: player.averages.stl.toFixed(1) },
                         { label: t("盖帽", "BLK"), val: player.averages.blk.toFixed(1) },
+                        { label: t("失误", "TOV"), val: player.averages.tov.toFixed(1) },
+                        { label: t("命中率", "FG%"), val: `${(player.averages.fg_pct * 100).toFixed(1)}%` },
+                        { label: t("场均罚球", "FTM"), val: player.averages.ftm.toFixed(1) },
                         { label: t("趋势", "Trend"), val: trend.label },
                       ].map((s) => (
                         <div key={s.label} style={{ background: "#f9fafb", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
