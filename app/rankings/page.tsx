@@ -110,7 +110,6 @@ export default function PlayerRankingsPage() {
   // --- new state ---
   const [healthFilter, setHealthFilter] = useState<HealthFilter>("all");
   const [minPts, setMinPts] = useState(0);
-  const [addedPlayers, setAddedPlayers] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [isMobile, setIsMobile] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -237,17 +236,6 @@ export default function PlayerRankingsPage() {
     setPage(1);
   }
 
-  function toggleAdded(id: number) {
-    setAddedPlayers((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }
 
   function getRankCircleStyle(rank: number): React.CSSProperties {
     const base: React.CSSProperties = {
@@ -586,7 +574,6 @@ export default function PlayerRankingsPage() {
                         t("抢断", "STL"),
                         t("盖帽", "BLK"),
                         t("趋势", "Trend"),
-                        t("操作", "Action"),
                       ].map((h, i) => (
                         <th
                           key={i}
@@ -603,7 +590,6 @@ export default function PlayerRankingsPage() {
                   <tbody>
                     {paginatedPlayers.map((player) => {
                       const trend = computeTrend(player);
-                      const isAdded = addedPlayers.has(player.id);
                       const rowBg = player.injury ? "#fff5f5" : undefined;
                       return (
                         <tr
@@ -663,21 +649,6 @@ export default function PlayerRankingsPage() {
                             </span>
                           </td>
 
-                          {/* 操作 */}
-                          <td style={{ ...tdStyle, textAlign: "center" }}>
-                            <button
-                              onClick={() => toggleAdded(player.id)}
-                              style={{
-                                padding: "6px 14px", fontSize: 12, fontWeight: 600,
-                                borderRadius: 8, border: "none", cursor: "pointer",
-                                background: isAdded ? "#f3f4f6" : "#1e3a8a",
-                                color: isAdded ? "#9ca3af" : "#fff",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {isAdded ? t("已添加", "Added") : t("+加入", "+ Add")}
-                            </button>
-                          </td>
                         </tr>
                       );
                     })}
@@ -692,7 +663,6 @@ export default function PlayerRankingsPage() {
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16 }}>
               {paginatedPlayers.map((player) => {
                 const trend = computeTrend(player);
-                const isAdded = addedPlayers.has(player.id);
                 return (
                   <div
                     key={player.id}
@@ -736,22 +706,11 @@ export default function PlayerRankingsPage() {
                       ))}
                     </div>
 
-                    {/* Trend badge + add button */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    {/* Trend badge */}
+                    <div style={{ display: "flex", alignItems: "center" }}>
                       <span style={{ background: trend.bg, color: trend.color, borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 600 }}>
                         {trend.label}
                       </span>
-                      <button
-                        onClick={() => toggleAdded(player.id)}
-                        style={{
-                          padding: "6px 14px", fontSize: 12, fontWeight: 600,
-                          borderRadius: 8, border: "none", cursor: "pointer",
-                          background: isAdded ? "#f3f4f6" : "#1e3a8a",
-                          color: isAdded ? "#9ca3af" : "#fff",
-                        }}
-                      >
-                        {isAdded ? t("已添加", "Added") : t("+加入", "+ Add")}
-                      </button>
                     </div>
                   </div>
                 );
