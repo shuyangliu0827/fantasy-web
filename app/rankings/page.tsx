@@ -640,7 +640,7 @@ export default function PlayerRankingsPage() {
                           <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.tov.toFixed(1)}</td>
 
                           {/* 命中率 */}
-                          <td style={{ ...tdStyle, textAlign: "right" }}>{(player.averages.fg_pct * 100).toFixed(1)}%</td>
+                          <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.fg_pct.toFixed(1)}%</td>
 
                           {/* 场均罚球 */}
                           <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.ftm.toFixed(1)}</td>
