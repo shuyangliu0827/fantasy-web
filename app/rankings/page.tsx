@@ -710,7 +710,7 @@ export default function PlayerRankingsPage() {
                         { label: t("抢断", "STL"), val: player.averages.stl.toFixed(1) },
                         { label: t("盖帽", "BLK"), val: player.averages.blk.toFixed(1) },
                         { label: t("失误", "TOV"), val: player.averages.tov.toFixed(1) },
-                        { label: t("命中率", "FG%"), val: `${(player.averages.fg_pct * 100).toFixed(1)}%` },
+                        { label: t("命中率", "FG%"), val: `${player.averages.fg_pct.toFixed(1)}%` },
                         { label: t("场均罚球", "FTM"), val: player.averages.ftm.toFixed(1) },
                         { label: t("趋势", "Trend"), val: trend.label },
                       ].map((s) => (
