@@ -353,7 +353,7 @@ export default function LeaguePage() {
           {/* ── Standings table ── */}
           {activeTab === "standings" && (
             <div style={{ flex: 1 }}>
-              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14 }}>
+              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>积分榜</h2>
                   <Link href={`/league/${leagueId}/standings`} style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 600, textDecoration: "none" }}>
