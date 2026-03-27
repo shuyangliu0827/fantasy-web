@@ -1597,8 +1597,50 @@
      return allPlayers.filter(p => !activeIds.has(p.id));
    }
 
+   // Returns the Monday date string (YYYY-MM-DD) for the current week
+   function getWeekStart(): string {
+     const today = new Date();
+     const day = today.getDay(); // 0=Sun, 1=Mon, ...
+     const diff = day === 0 ? -6 : 1 - day;
+     const monday = new Date(today);
+     monday.setDate(today.getDate() + diff);
+     return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+   }
+
+   export function getPickupCount(leagueId: string, teamId: string): number {
+     if (!canUseStorage()) return 0;
+     const stored = localStorage.getItem(`bp_pickup_${leagueId}_${teamId}`);
+     if (!stored) return 0;
+     const counts = JSON.parse(stored) as Record<string, number>;
+     return counts[getWeekStart()] || 0;
+   }
+
+   export function syncPickupCountFromDB(teamId: string, leagueId: string, dbCounts: Record<string, number>): void {
+     if (!canUseStorage()) return;
+     localStorage.setItem(`bp_pickup_${leagueId}_${teamId}`, JSON.stringify(dbCounts));
+   }
+
+   function incrementPickupCount(leagueId: string, teamId: string): void {
+     if (!canUseStorage()) return;
+     const key = `bp_pickup_${leagueId}_${teamId}`;
+     const stored = localStorage.getItem(key);
+     const counts: Record<string, number> = stored ? JSON.parse(stored) : {};
+     const weekStart = getWeekStart();
+     counts[weekStart] = (counts[weekStart] || 0) + 1;
+     localStorage.setItem(key, JSON.stringify(counts));
+     supabase.from("fantasy_teams").update({ pickup_counts: counts }).eq("id", teamId).then(() => {});
+   }
+
+   export const WEEKLY_PICKUP_LIMIT = 7;
+
    export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+
+     const pickupCount = getPickupCount(leagueId, teamId);
+     if (pickupCount >= WEEKLY_PICKUP_LIMIT) {
+       return { ok: false, error: "本周签约次数已达上限（每周最多7次）" };
+     }
+
      const roster = getTeamRoster(leagueId, teamId);
      const allPlayers = getPlayers();
      const player = allPlayers.find(p => p.id === playerId);
@@ -1656,6 +1698,7 @@
 
      roster.push(newPlayer);
      setTeamRoster(leagueId, teamId, roster);
+     incrementPickupCount(leagueId, teamId);
      return { ok: true };
    }
 
