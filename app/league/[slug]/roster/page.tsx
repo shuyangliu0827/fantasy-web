@@ -1392,8 +1392,8 @@ const styles = `
     .date-num { font-size: 11px; white-space: nowrap; }
     .slot-badge { white-space: nowrap; }
     .col-fpts { white-space: nowrap; }
-    .player-name { font-size: 12px; }
-    .player-meta { font-size: 10px; }
+    .player-name { font-size: 13px; font-weight: 500; }
+    .player-meta { font-size: 11px; }
     .page-content { padding: 16px 8px 48px; }
     .page-header-top { flex-direction: column; gap: 8px; }
   }

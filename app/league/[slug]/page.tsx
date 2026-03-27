@@ -327,14 +327,15 @@ export default function LeaguePage() {
 
         {/* ── Tab bar ── */}
         <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
                 style={{
-                  padding: "16px 20px", background: "none", border: "none", cursor: "pointer",
-                  fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                  padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
+                  fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,
+                  whiteSpace: "nowrap", flexShrink: 0,
                   color: activeTab === tab.key ? "#1e3a8a" : "#6b7280",
                   borderBottom: activeTab === tab.key ? "2.5px solid #1e3a8a" : "2.5px solid transparent",
                   transition: "all 0.15s",
@@ -359,7 +360,8 @@ export default function LeaguePage() {
                     查看完整排名 →
                   </Link>
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
                       <th style={thStyle}>次名</th>
@@ -435,6 +437,7 @@ export default function LeaguePage() {
                     })}
                   </tbody>
                 </table>
+                </div>
                 {sortedTeams.length === 0 && (
                   <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>
                     暂无队伍数据
@@ -687,14 +690,15 @@ export default function LeaguePage() {
 
       {/* ── Tab bar ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {PRE_DRAFT_TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
               style={{
-                padding: "16px 20px", background: "none", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
+                fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,
+                whiteSpace: "nowrap", flexShrink: 0,
                 color: activeTab === tab.key ? "#1e3a8a" : "#6b7280",
                 borderBottom: activeTab === tab.key ? "2.5px solid #1e3a8a" : "2.5px solid transparent",
                 transition: "all 0.15s",
@@ -885,6 +889,7 @@ const thStyle: React.CSSProperties = {
   textAlign: "center",
   borderBottom: "1px solid #e5e7eb",
   letterSpacing: "0.05em",
+  whiteSpace: "nowrap",
 };
 
 const tdStyle: React.CSSProperties = {
