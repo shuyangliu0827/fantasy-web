@@ -204,7 +204,6 @@ export const ALL_PLAYERS = [
   { id: "p191", name: "GG Jackson", team: "MEM", position: "PF", age: 19, ppg: 14.0, rpg: 4.0, apg: 1.5, spg: 0.5, bpg: 0.4, fg: 43.0, ft: 80.0, tov: 1.5, gp: 72, adp: 191.0, rank: 191, trend: "up" },
   { id: "p192", name: "Bennedict Mathurin", team: "IND", position: "SG", age: 22, ppg: 14.5, rpg: 4.0, apg: 1.5, spg: 0.5, bpg: 0.3, fg: 44.0, ft: 82.0, tov: 1.5, gp: 72, adp: 192.0, rank: 192, trend: "same" },
   { id: "p193", name: "Andrew Nembhard", team: "IND", position: "PG", age: 24, ppg: 9.2, rpg: 3.0, apg: 4.5, spg: 0.7, bpg: 0.2, fg: 48.0, ft: 76.0, tov: 1.5, gp: 75, adp: 193.0, rank: 193, trend: "same" },
-  { id: "p194", name: "Lu Dort", team: "OKC", position: "SG", age: 25, ppg: 11.0, rpg: 3.0, apg: 1.5, spg: 1.0, bpg: 0.3, fg: 42.5, ft: 80.0, tov: 1.2, gp: 68, adp: 194.0, rank: 194, trend: "same" },
 { id: "p195", name: "JaMychal Green", team: "SAS", position: "PF", age: 34, ppg: 4.5, rpg: 3.5, apg: 0.8, spg: 0.3, bpg: 0.3, fg: 46.0, ft: 76.0, tov: 0.5, gp: 60, adp: 195.0, rank: 195, trend: "same" },
 { id: "p196", name: "Zach Collins", team: "SAS", position: "C", age: 26, ppg: 11.2, rpg: 5.3, apg: 2.3, spg: 0.5, bpg: 0.6, fg: 53.0, ft: 81.0, tov: 1.5, gp: 69, adp: 196.0, rank: 196, trend: "same" },
 { id: "p197", name: "Patrick Beverley", team: "MIL", position: "PG", age: 36, ppg: 5.8, rpg: 2.8, apg: 2.5, spg: 0.8, bpg: 0.2, fg: 38.0, ft: 75.0, tov: 1.0, gp: 58, adp: 197.0, rank: 197, trend: "down" },
