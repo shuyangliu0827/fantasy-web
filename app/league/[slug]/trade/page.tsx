@@ -688,11 +688,16 @@ const styles = `
   .page-header h1 { font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
   .page-header p { font-size: 14px; color: #6b7280; margin: 0; }
 
-  .tabs { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 24px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 2px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
   .tab {
     padding: 10px 20px; background: #f9fafb; border: 1px solid #e5e7eb;
     border-radius: 8px; color: #6b7280; font-size: 14px; cursor: pointer;
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0;
   }
   .tab.active { background: #eff6ff; border-color: #1e3a8a; color: #1e3a8a; }
   .badge {
@@ -811,9 +816,15 @@ const styles = `
   }
 
   @media (max-width: 768px) {
+    .page-content { padding: 16px 8px 48px; }
     .trade-board { grid-template-columns: 1fr; }
     .trade-arrow { padding: 0; font-size: 20px; }
     .summary-content { flex-direction: column; }
     .tc-body { flex-direction: column; gap: 12px; }
+    .tc-header { flex-wrap: wrap; }
+    .tc-time { margin-left: 0; width: 100%; }
+    .tc-actions { flex-wrap: wrap; }
+    .trade-player { gap: 8px; }
+    .tp-stats { flex-shrink: 0; }
   }
 `;

@@ -532,7 +532,10 @@ const styles = `
   .schedule-table-wrapper {
     padding: 16px 0 0;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .schedule-table-wrapper::-webkit-scrollbar { display: none; }
   .schedule-table {
     width: 100%;
     border-collapse: collapse;
@@ -705,6 +708,7 @@ const styles = `
 
   /* ── Responsive ─────────────────────────────────────────────────── */
   @media (max-width: 768px) {
+    .page-content { padding: 16px 8px 48px; }
     .schedule-card-header { padding: 16px 16px 0; }
     .schedule-controls { padding: 16px 16px 0; }
     .season-subtitle { padding: 16px 16px 0; }
@@ -713,5 +717,9 @@ const styles = `
     .schedule-title { font-size: 18px; }
     .col-manager { display: none; }
     .schedule-table thead th.col-manager { display: none; }
+    .team-dropdown { min-width: 0; width: 100%; }
+    .team-dropdown-wrapper { width: 100%; }
+    .team-selector-section { width: 100%; }
+    .schedule-controls { flex-direction: column; align-items: flex-start; }
   }
 `;

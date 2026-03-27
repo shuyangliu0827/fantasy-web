@@ -229,6 +229,7 @@ export default function StandingsPage() {
           </div>
 
           <div className="standings-table-container">
+            <div className="standings-scroll-wrapper">
             <table className="standings-table">
               <thead>
                 <tr>
@@ -271,6 +272,7 @@ export default function StandingsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {members.length === 0 && (
@@ -344,11 +346,18 @@ const styles = `
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
-    overflow: hidden;
   }
+
+  .standings-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .standings-scroll-wrapper::-webkit-scrollbar { display: none; }
 
   .standings-table {
     width: 100%;
+    min-width: 640px;
     border-collapse: collapse;
   }
 
@@ -469,12 +478,9 @@ const styles = `
   }
 
   @media (max-width: 768px) {
-    .standings-table-container {
-      overflow-x: auto;
-    }
-
-    .standings-table {
-      min-width: 700px;
-    }
+    .page-content { padding: 16px 8px 48px; }
+    .standings-table th,
+    .standings-table td { padding: 10px 10px; }
+    .team-col { min-width: 160px; }
   }
 `;

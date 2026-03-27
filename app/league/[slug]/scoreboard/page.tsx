@@ -734,11 +734,14 @@ const styles = `
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
   }
   @media (max-width: 720px) {
-    .container { padding: 0 14px; }
+    .container { padding: 0 8px; }
     .league-bar-inner { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; flex-direction: column; }
-    .hero-card { padding: 22px; }
-    .hero-card h1 { font-size: 28px; }
-    .toolbar-card { padding: 18px; }
-    .score-block { font-size: 28px; }
+    .hero-card { padding: 18px; }
+    .hero-card h1 { font-size: 24px; }
+    .toolbar-card { padding: 14px; flex-direction: column; align-items: stretch; }
+    .toolbar-title-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .week-controls { flex-wrap: wrap; gap: 8px; }
+    .week-select { min-width: 0; width: 100%; }
+    .score-block { font-size: 26px; }
   }
 `;

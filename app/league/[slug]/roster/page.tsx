@@ -1048,8 +1048,11 @@ const styles = `
     gap: 8px;
     margin-bottom: 16px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     padding-bottom: 4px;
   }
+  .team-selector::-webkit-scrollbar { display: none; }
   .team-tab {
     padding: 8px 16px;
     background: #f9fafb;
@@ -1108,7 +1111,10 @@ const styles = `
     gap: 4px;
     flex: 1;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .date-tabs::-webkit-scrollbar { display: none; }
   .date-tab {
     flex: 1;
     min-width: 60px;
@@ -1199,9 +1205,12 @@ const styles = `
   /* Table */
   .table-wrapper {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     border-radius: 12px;
     border: 1px solid #e5e7eb;
   }
+  .table-wrapper::-webkit-scrollbar { display: none; }
   .lineup-table {
     background: #fff;
     min-width: 900px;
@@ -1378,10 +1387,14 @@ const styles = `
       grid-template-columns: 48px 1fr 72px 56px;
       padding: 8px;
     }
-    .date-tab { min-width: 48px; padding: 6px 4px; }
-    .date-day { font-size: 9px; }
-    .date-num { font-size: 11px; }
-    .player-name { font-size: 12px; }
-    .player-meta { font-size: 10px; }
+    .date-tab { min-width: 44px; padding: 6px 4px; }
+    .date-day { font-size: 9px; white-space: nowrap; }
+    .date-num { font-size: 11px; white-space: nowrap; }
+    .slot-badge { white-space: nowrap; }
+    .col-fpts { white-space: nowrap; }
+    .player-name { font-size: 8px; font-weight: 500; }
+    .player-meta { font-size: 8px; }
+    .page-content { padding: 16px 8px 48px; }
+    .page-header-top { flex-direction: column; gap: 8px; }
   }
 `;
