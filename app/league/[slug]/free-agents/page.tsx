@@ -256,6 +256,7 @@ export default function FreeAgentsPage() {
 
           {/* Free Agent List */}
           <div className="fa-table">
+            <div className="fa-scroll-wrapper">
             <div className="fa-header">
               <div className="col-rank">#</div>
               <div className="col-player">{t("球员", "Player")}</div>
@@ -299,6 +300,7 @@ export default function FreeAgentsPage() {
                 </div>
               </div>
             ))}
+            </div>
           </div>
           {totalPages > 1 && (
             <div className="pagination">
@@ -453,14 +455,22 @@ const styles = `
   }
 
   .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+  .fa-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .fa-scroll-wrapper::-webkit-scrollbar { display: none; }
   .fa-header {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
     padding: 12px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
     font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;
+    min-width: 560px; white-space: nowrap;
   }
   .fa-row {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
     padding: 12px 16px; border-bottom: 1px solid #f3f4f6; align-items: center;
+    min-width: 560px;
   }
   .fa-row:last-child { border-bottom: none; }
   .fa-row:hover { background: rgba(245, 158, 11, 0.03); }
@@ -557,10 +567,18 @@ const styles = `
 
   @media (max-width: 768px) {
     .fa-header, .fa-row {
-      grid-template-columns: 40px 1fr 45px 45px 45px 45px 45px 65px;
       padding: 10px 8px;
     }
-    .filters { flex-direction: column; }
-    .search-input { min-width: auto; }
+    .filters { flex-direction: column; align-items: stretch; }
+    .search-input { min-width: auto; width: 100%; }
+    .filter-group {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .filter-group::-webkit-scrollbar { display: none; }
+    .sort-select { width: 100%; }
+    .page-content { padding: 16px 8px 48px; }
   }
 `;

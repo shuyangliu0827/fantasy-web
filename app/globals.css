@@ -1656,9 +1656,12 @@ button {
 }
 
 /* ── Global overflow guard ── */
-html, body {
+html {
   overflow-x: hidden;
   max-width: 100vw;
+}
+body {
+  max-width: 100%;
 }
 
 /* ── Scrollbar hiding for horizontal nav containers ── */
@@ -1672,6 +1675,14 @@ html, body {
 .league-nav-scroll {
   scrollbar-width: none;
 }
+
+/* ── Reusable horizontal scroll container (hides scrollbar, touch-friendly) ── */
+.scroll-x-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.scroll-x-container::-webkit-scrollbar { display: none; }
 
 /* ── Responsive page padding ── */
 @media (max-width: 768px) {
