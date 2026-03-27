@@ -346,7 +346,6 @@ const styles = `
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
-    overflow: hidden;
   }
 
   .standings-scroll-wrapper {

@@ -454,7 +454,7 @@ const styles = `
     border-radius: 6px; color: #111827; font-size: 13px;
   }
 
-  .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+  .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
   .fa-scroll-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
