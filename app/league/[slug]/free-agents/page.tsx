@@ -17,6 +17,9 @@ import {
   addFreeAgent,
   dropPlayer,
   getCurrentRoster,
+  getPickupCount,
+  syncPickupCountFromDB,
+  WEEKLY_PICKUP_LIMIT,
   League,
   Player,
   RosterPlayer,
@@ -39,6 +42,7 @@ export default function FreeAgentsPage() {
   const [sortBy, setSortBy] = useState<"ppg" | "rpg" | "apg" | "rank">("ppg");
   const [showAddModal, setShowAddModal] = useState<Player | null>(null);
   const [dropPlayerId, setDropPlayerId] = useState<string | null>(null);
+  const [pickupCount, setPickupCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
@@ -63,6 +67,16 @@ export default function FreeAgentsPage() {
         setMyTeam(myT);
         // Filter to only active (non-released) players so count and drop UI are correct.
         setMyRoster(getCurrentRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id)));
+        // Sync pickup counts from DB then read local count
+        const { data: teamRow } = await supabase
+          .from("fantasy_teams")
+          .select("pickup_counts")
+          .eq("id", myT.id)
+          .single();
+        if (teamRow?.pickup_counts) {
+          syncPickupCountFromDB(myT.id, leagueData.id, teamRow.pickup_counts);
+        }
+        setPickupCount(getPickupCount(leagueData.id, myT.id));
       }
     }
 
@@ -100,6 +114,7 @@ export default function FreeAgentsPage() {
     // Refresh data — filter to active players so count and UI stay correct
     setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
     setFreeAgents(getUndraftedPlayers(league.id));
+    setPickupCount(getPickupCount(league.id, myTeam.id));
     setShowAddModal(null);
     setDropPlayerId(null);
   }
@@ -173,6 +188,20 @@ export default function FreeAgentsPage() {
             <h1>{t("自由市场", "Free Agents")}</h1>
             <p>{t("签约自由球员或放弃球员", "Add free agents or drop players from your roster")}</p>
           </div>
+
+          {myTeam && (
+            <div className={`pickup-limit-bar ${pickupCount >= WEEKLY_PICKUP_LIMIT ? "limit-reached" : ""}`}>
+              <span className="pickup-label">
+                {t("本周签约次数", "Weekly pickups")}：
+                <strong>{pickupCount}/{WEEKLY_PICKUP_LIMIT}</strong>
+              </span>
+              {pickupCount >= WEEKLY_PICKUP_LIMIT && (
+                <span className="pickup-warning">
+                  {t("本周签约次数已达上限，下周一重置", "Weekly limit reached. Resets on Monday.")}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* My Roster Summary */}
           {myTeam && myRoster.length > 0 && (
@@ -257,9 +286,15 @@ export default function FreeAgentsPage() {
                 <div className="col-stat">{player.bpg.toFixed(1)}</div>
                 <div className="col-action">
                   {myTeam && (
-                    <button className="add-btn" onClick={() => handleAddPlayer(player)}>
-                      + {t("签约", "Add")}
-                    </button>
+                    pickupCount >= WEEKLY_PICKUP_LIMIT ? (
+                      <span className="add-btn-disabled" title={t("本周签约次数已达上限", "Weekly pickup limit reached")}>
+                        {t("已达上限", "Limit")}
+                      </span>
+                    ) : (
+                      <button className="add-btn" onClick={() => handleAddPlayer(player)}>
+                        + {t("签约", "Add")}
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -436,9 +471,25 @@ const styles = `
   .player-meta { font-size: 12px; color: #6b7280; }
   .col-stat { font-size: 13px; color: #374151; text-align: center; }
   .col-action { text-align: center; }
+  .pickup-limit-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; margin-bottom: 16px;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+    font-size: 14px; color: #1e3a8a;
+  }
+  .pickup-limit-bar.limit-reached {
+    background: #fef2f2; border-color: #fecaca; color: #991b1b;
+  }
+  .pickup-label strong { font-weight: 700; }
+  .pickup-warning { font-size: 13px; color: #dc2626; }
   .add-btn {
     padding: 6px 14px; background: #ecfdf5; border: 1px solid #6ee7b7;
     border-radius: 6px; color: #059669; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .add-btn-disabled {
+    padding: 6px 14px; background: #f3f4f6; border: 1px solid #d1d5db;
+    border-radius: 6px; color: #9ca3af; font-size: 12px; font-weight: 600;
+    cursor: not-allowed; display: inline-block;
   }
   .add-btn:hover { background: #d1fae5; }
   .empty-row { padding: 40px; text-align: center; color: #6b7280; font-size: 14px; }
