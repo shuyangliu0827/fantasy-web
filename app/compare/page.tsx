@@ -5,7 +5,8 @@ import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
 import { formatDateStr } from "@/lib/week-utils";
 import { STRATEGY_PRESETS, type StrategyKey, RADAR_STATS, RADAR_MAX_VALUES } from "@/lib/compare-strategy-presets";
-import { generateCompareResult } from "@/lib/compare-engine";
+import { generateCompareResult, reweightPlayer, ESPN_DEFAULT_WEIGHTS } from "@/lib/compare-engine";
+import type { PointsWeights } from "@/lib/compare-engine";
 import type { CompareMode, CompareResult, DecisionView, Timeframe } from "@/lib/compare-types";
 
 // Components
@@ -20,6 +21,7 @@ import StatDimensionGroup, { type StatRow } from "@/components/compare/StatDimen
 import RiskNotes from "@/components/compare/RiskNotes";
 import RadarChart from "@/components/compare/RadarChart";
 import CategoryPreview from "@/components/compare/CategoryPreview";
+import ScoringWeightsPanel from "@/components/compare/ScoringWeightsPanel";
 
 import { FONT, COLORS, PLAYER_COLORS } from "@/components/compare/constants";
 
@@ -93,6 +95,9 @@ export default function ComparePage() {
   const [showSearch, setShowSearch] = useState<0 | 1 | null>(null);
   const [allPlayers, setAllPlayers] = useState<PlayerSummary[]>([]);
 
+  // Scoring weights — default to ESPN, user can customize
+  const [scoringWeights, setScoringWeights] = useState<PointsWeights>({ ...ESPN_DEFAULT_WEIGHTS });
+
   // Legacy strategy panel (collapsed by default — preserved for backwards compat)
   const [showStrategyPanel, setShowStrategyPanel] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState<StrategyKey>("balanced");
@@ -160,9 +165,12 @@ export default function ComparePage() {
     }
   }, [playerIds, timeframe, fetchCompareStats]);
 
-  // Re-run engine client-side when view changes (no new fetch needed)
+  // Apply custom scoring weights + re-run engine (client-side, no fetch needed)
   const activeResult = compareResult
-    ? { ...compareResult, ...generateCompareResult(compareResult.players) }
+    ? (() => {
+        const reweighted = compareResult.players.map(p => reweightPlayer(p, scoringWeights));
+        return { ...compareResult, players: reweighted, ...generateCompareResult(reweighted) };
+      })()
     : null;
 
   const handleSelectPlayer = (slot: 0 | 1, id: string) => {
@@ -247,6 +255,9 @@ export default function ComparePage() {
             />
           </div>
         </div>
+
+        {/* ── Scoring Weights ── */}
+        <ScoringWeightsPanel weights={scoringWeights} onChange={setScoringWeights} isMobile={isMobile} />
 
         {/* ── Timeframe Selector ── */}
         <TimeframeSelector timeframe={timeframe} onChange={setTimeframe} isLoading={isLoading} />

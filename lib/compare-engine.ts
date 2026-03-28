@@ -13,6 +13,7 @@ import type {
   RiskNote,
   ScenarioRecommendation,
 } from './compare-types';
+import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS, type PointsWeights } from './scoring-config';
 
 // ─────────────────────────────────────────────────────────────
 // Stability computation (exported so API route can reuse)
@@ -450,3 +451,83 @@ export function generateCompareResult(
     riskNotes: generateRiskNotes(players),
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// Reweight: apply custom scoring weights to a player's stats
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Recomputes all fpts-derived fields for a player using custom scoring weights.
+ * If game logs are present, recomputes fpts per game from raw stats (exact).
+ * If no logs (lastSeason static data), recomputes from per-game averages (approximate).
+ */
+export function reweightPlayer(player: CompareStats, weights: PointsWeights): CompareStats {
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+
+  if (player.gameLogs.length === 0) {
+    // No logs: recompute from per-game averages
+    const fptsPerGame = r1(
+      player.ppg    * weights.pts  +
+      player.rpg    * weights.reb  +
+      player.apg    * weights.ast  +
+      player.spg    * weights.stl  +
+      player.bpg    * weights.blk  +
+      player.fg3mPg * weights.fg3m +
+      player.tov    * weights.tov
+    );
+    const stability = fptsPerGame > 0
+      ? estimateStabilityHeuristic(fptsPerGame, player.mpg)
+      : estimateStabilityHeuristic(0, player.mpg);
+    return {
+      ...player,
+      fptsPerGame,
+      totalFpts: r1(fptsPerGame * player.gp),
+      recentTrend: stability.recentTrend,
+      last5FptsAvg: stability.last5FptsAvg,
+      trendDelta: stability.trendDelta,
+      consistencyScore: stability.consistencyScore,
+      stdDev: stability.stdDev,
+      floor: stability.floor,
+      ceiling: stability.ceiling,
+      boomRate: stability.boomRate,
+      bustRate: stability.bustRate,
+    };
+  }
+
+  // Recompute fpts in each game log from raw stats
+  const adjustedLogs: GameLog[] = player.gameLogs.map(log => ({
+    ...log,
+    fpts: r1(calcFantasyPoints(
+      { pts: log.pts, reb: log.reb, ast: log.ast, stl: log.stl, blk: log.blk, fg3m: log.fg3m, tov: log.tov },
+      weights,
+    )),
+  }));
+
+  const played = adjustedLogs.filter(l => l.played);
+  const gp = played.length;
+  const totalFpts = r1(played.reduce((s, l) => s + l.fpts, 0));
+  const fptsPerGame = gp > 0 ? r1(totalFpts / gp) : 0;
+
+  const stability = gp >= 3
+    ? computeStabilityFromLogs(adjustedLogs, fptsPerGame)
+    : estimateStabilityHeuristic(fptsPerGame, player.mpg);
+
+  return {
+    ...player,
+    fptsPerGame,
+    totalFpts,
+    gameLogs: adjustedLogs,
+    recentTrend: stability.recentTrend,
+    last5FptsAvg: stability.last5FptsAvg,
+    trendDelta: stability.trendDelta,
+    consistencyScore: stability.consistencyScore,
+    stdDev: stability.stdDev,
+    floor: stability.floor,
+    ceiling: stability.ceiling,
+    boomRate: stability.boomRate,
+    bustRate: stability.bustRate,
+  };
+}
+
+export { ESPN_DEFAULT_WEIGHTS };
+export type { PointsWeights };
