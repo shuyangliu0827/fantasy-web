@@ -1,96 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import PlayerRevealVisual, { type HeroPlayer } from "./PlayerRevealVisual";
-
-const NBA_HEADSHOT = (id: number) =>
-  `https://cdn.nba.com/headshots/nba/latest/1040x760/${id}.png`;
-
-const HERO_PLAYERS: HeroPlayer[] = [
-  {
-    id: "lebron",
-    name: "LeBron James",
-    nameZh: "勒布朗·詹姆斯",
-    team: "LAL",
-    teamZh: "湖人",
-    number: "23",
-    position: "SF",
-    portraitImage: NBA_HEADSHOT(2544),
-    jerseyImage: NBA_HEADSHOT(2544),
-    accent: "#552583",
-    accentLight: "#7B48A8",
-  },
-  {
-    id: "jokic",
-    name: "Nikola Jokić",
-    nameZh: "尼古拉·约基奇",
-    team: "DEN",
-    teamZh: "掘金",
-    number: "15",
-    position: "C",
-    portraitImage: NBA_HEADSHOT(203999),
-    jerseyImage: NBA_HEADSHOT(203999),
-    accent: "#0E2240",
-    accentLight: "#1D4477",
-  },
-  {
-    id: "curry",
-    name: "Stephen Curry",
-    nameZh: "斯蒂芬·库里",
-    team: "GSW",
-    teamZh: "勇士",
-    number: "30",
-    position: "PG",
-    portraitImage: NBA_HEADSHOT(201939),
-    jerseyImage: NBA_HEADSHOT(201939),
-    accent: "#1D428A",
-    accentLight: "#FFC72C",
-  },
-  {
-    id: "giannis",
-    name: "Giannis Antetokounmpo",
-    nameZh: "扬尼斯·安特托昆博",
-    team: "MIL",
-    teamZh: "雄鹿",
-    number: "34",
-    position: "PF",
-    portraitImage: NBA_HEADSHOT(203507),
-    jerseyImage: NBA_HEADSHOT(203507),
-    accent: "#00471B",
-    accentLight: "#007A33",
-  },
-  {
-    id: "luka",
-    name: "Luka Dončić",
-    nameZh: "卢卡·东契奇",
-    team: "DAL",
-    teamZh: "独行侠",
-    number: "77",
-    position: "PG",
-    portraitImage: NBA_HEADSHOT(1629029),
-    jerseyImage: NBA_HEADSHOT(1629029),
-    accent: "#00538C",
-    accentLight: "#0078C0",
-  },
-  {
-    id: "shai",
-    name: "Shai Gilgeous-Alexander",
-    nameZh: "谢·吉尔杰斯-亚历山大",
-    team: "OKC",
-    teamZh: "雷霆",
-    number: "2",
-    position: "SG",
-    portraitImage: NBA_HEADSHOT(1628983),
-    jerseyImage: NBA_HEADSHOT(1628983),
-    accent: "#007AC1",
-    accentLight: "#EF6100",
-  },
-];
+import { HERO_PLAYERS, type HeroPlayer } from "@/lib/heroPlayers";
+import PlayerRevealVisual from "./PlayerRevealVisual";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
+
+function pickRandom(exclude?: string): HeroPlayer {
+  const pool = exclude
+    ? HERO_PLAYERS.filter((p) => p.id !== exclude)
+    : HERO_PLAYERS;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 export default function HomeHeroShowcase() {
   const { t } = useLang();
@@ -99,11 +23,11 @@ export default function HomeHeroShowcase() {
   const [cta2Hovered, setCta2Hovered] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  const player = useMemo(() => {
-    return HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)];
-  }, []);
+  // Avoid hydration mismatch: render nothing on server, pick player on client
+  const [player, setPlayer] = useState<HeroPlayer | null>(null);
 
   useEffect(() => {
+    setPlayer(pickRandom());
     setMounted(true);
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -111,149 +35,162 @@ export default function HomeHeroShowcase() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Fallback: if image fails, swap to another player
+  const handleImageError = useCallback(() => {
+    setPlayer((prev) => pickRandom(prev?.id));
+  }, []);
+
+  // Before client mount, render a placeholder matching the layout
+  if (!player) {
+    return (
+      <section
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100vh",
+          background: "linear-gradient(180deg, #f0f2f7 0%, #e4e8f0 100%)",
+        }}
+      />
+    );
+  }
+
   return (
     <section
       style={{
         position: "relative",
         width: "100%",
-        minHeight: isMobile ? "auto" : "100vh",
-        background: "#fafbfd",
+        height: isMobile ? "85vh" : "100vh",
+        minHeight: isMobile ? 560 : 680,
         overflow: "hidden",
         fontFamily: FONT,
+        background: `linear-gradient(180deg, #f0f2f7 0%, #e4e8f0 100%)`,
       }}
     >
-      {/* Background decorative elements */}
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-        {/* Soft blob top-right */}
-        <div
-          style={{
-            position: "absolute",
-            top: "-15%",
-            right: "-10%",
-            width: "55%",
-            height: "70%",
-            background:
-              "radial-gradient(ellipse at center, rgba(37, 99, 235, 0.045) 0%, transparent 70%)",
-            borderRadius: "50%",
-          }}
-        />
-        {/* Soft blob bottom-left */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: "-20%",
-            left: "-15%",
-            width: "50%",
-            height: "60%",
-            background:
-              "radial-gradient(ellipse at center, rgba(245, 158, 11, 0.035) 0%, transparent 70%)",
-            borderRadius: "50%",
-          }}
-        />
-        {/* Light contour rings */}
-        <svg
-          style={{
-            position: "absolute",
-            top: "10%",
-            right: "5%",
-            opacity: 0.04,
-          }}
-          width="500"
-          height="500"
-          viewBox="0 0 500 500"
-          fill="none"
-        >
-          <circle cx="250" cy="250" r="200" stroke="#1e3a8a" strokeWidth="1" />
-          <circle cx="250" cy="250" r="160" stroke="#1e3a8a" strokeWidth="0.7" />
-          <circle cx="250" cy="250" r="120" stroke="#1e3a8a" strokeWidth="0.5" />
-        </svg>
-        {/* Horizontal fine lines */}
-        <svg
-          style={{
-            position: "absolute",
-            bottom: "15%",
-            left: "3%",
-            opacity: 0.03,
-          }}
-          width="300"
-          height="200"
-          viewBox="0 0 300 200"
-          fill="none"
-        >
-          {Array.from({ length: 8 }).map((_, i) => (
-            <line
-              key={i}
-              x1="0"
-              y1={i * 28}
-              x2="300"
-              y2={i * 28}
-              stroke="#1e3a8a"
-              strokeWidth="0.5"
-            />
-          ))}
-        </svg>
-        {/* Small accent dots */}
-        <div
-          style={{
-            position: "absolute",
-            top: "22%",
-            left: "8%",
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: "#f59e0b",
-            opacity: 0.3,
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: "70%",
-            right: "12%",
-            width: 4,
-            height: 4,
-            borderRadius: "50%",
-            background: "#2563eb",
-            opacity: 0.2,
-          }}
-        />
-        {/* Subtle grid pattern overlay */}
+      {/* === Full-screen player image layer === */}
+      <PlayerRevealVisual
+        player={player}
+        isMobile={isMobile}
+        onImageError={handleImageError}
+      />
+
+      {/* === Background decorative elements (on top of image) === */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 6,
+          overflow: "hidden",
+        }}
+      >
+        {/* Subtle grid overlay */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             backgroundImage: `
-              linear-gradient(rgba(30, 58, 138, 0.015) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(30, 58, 138, 0.015) 1px, transparent 1px)
+              linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)
             `,
             backgroundSize: "80px 80px",
           }}
         />
+        {/* Soft contour rings */}
+        <svg
+          style={{
+            position: "absolute",
+            top: "5%",
+            right: "3%",
+            opacity: 0.05,
+          }}
+          width="400"
+          height="400"
+          viewBox="0 0 400 400"
+          fill="none"
+        >
+          <circle cx="200" cy="200" r="180" stroke="#fff" strokeWidth="0.8" />
+          <circle cx="200" cy="200" r="140" stroke="#fff" strokeWidth="0.5" />
+          <circle cx="200" cy="200" r="100" stroke="#fff" strokeWidth="0.3" />
+        </svg>
+        {/* Accent dots */}
+        <div
+          style={{
+            position: "absolute",
+            top: "18%",
+            left: "6%",
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            background: "#f59e0b",
+            opacity: 0.4,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: "65%",
+            right: "8%",
+            width: 4,
+            height: 4,
+            borderRadius: "50%",
+            background: "#2563eb",
+            opacity: 0.3,
+          }}
+        />
       </div>
 
-      {/* Main content */}
+      {/* === Left-side overlay gradient for text readability === */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 7,
+          pointerEvents: "none",
+          background: isMobile
+            ? `linear-gradient(180deg, rgba(250,251,253,0.85) 0%, rgba(250,251,253,0.6) 40%, transparent 70%, rgba(15,23,42,0.3) 100%)`
+            : `linear-gradient(90deg, rgba(250,251,253,0.92) 0%, rgba(250,251,253,0.75) 30%, rgba(250,251,253,0.3) 50%, transparent 65%)`,
+        }}
+      />
+      {/* Additional bottom fade for text at bottom */}
+      {!isMobile && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "30%",
+            zIndex: 7,
+            pointerEvents: "none",
+            background:
+              "linear-gradient(to bottom, transparent, rgba(250,251,253,0.4) 60%, rgba(250,251,253,0.8) 100%)",
+          }}
+        />
+      )}
+
+      {/* === Content overlay === */}
       <div
         style={{
           position: "relative",
-          zIndex: 1,
+          zIndex: 10,
           maxWidth: 1200,
           margin: "0 auto",
-          padding: isMobile ? "48px 16px 56px" : "0 24px",
-          minHeight: isMobile ? "auto" : "100vh",
+          padding: isMobile ? "0 20px" : "0 48px",
+          height: "100%",
           display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: "center",
-          gap: isMobile ? 40 : 64,
+          flexDirection: "column",
+          justifyContent: isMobile ? "flex-start" : "center",
+          paddingTop: isMobile ? 40 : 0,
+          pointerEvents: "none",
         }}
       >
-        {/* Left: Copy */}
         <div
           style={{
-            flex: isMobile ? "none" : "0 0 46%",
-            width: isMobile ? "100%" : undefined,
+            maxWidth: isMobile ? "100%" : 480,
             opacity: mounted ? 1 : 0,
-            transform: mounted ? "translateY(0)" : "translateY(20px)",
+            transform: mounted ? "translateY(0)" : "translateY(24px)",
             transition: "opacity 0.7s ease, transform 0.7s ease",
+            pointerEvents: "auto",
           }}
         >
           {/* Eyebrow */}
@@ -263,10 +200,10 @@ export default function HomeHeroShowcase() {
               alignItems: "center",
               gap: 8,
               padding: "5px 14px",
-              background: "rgba(37, 99, 235, 0.06)",
-              border: "1px solid rgba(37, 99, 235, 0.1)",
+              background: "rgba(37, 99, 235, 0.08)",
+              border: "1px solid rgba(37, 99, 235, 0.12)",
               borderRadius: 999,
-              marginBottom: 28,
+              marginBottom: 24,
             }}
           >
             <span
@@ -278,20 +215,27 @@ export default function HomeHeroShowcase() {
                 animation: "heroEyebrowPulse 2.5s ease-in-out infinite",
               }}
             />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#2563eb", letterSpacing: "0.5px" }}>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "#2563eb",
+                letterSpacing: "0.5px",
+              }}
+            >
               {t("智能范特西篮球平台", "INTELLIGENT FANTASY BASKETBALL")}
             </span>
           </div>
 
           {/* Headline */}
-          <h1 style={{ margin: 0, lineHeight: 1.1 }}>
+          <h1 style={{ margin: 0, lineHeight: 1.08 }}>
             <span
               style={{
                 display: "block",
-                fontSize: isMobile ? 34 : 52,
+                fontSize: isMobile ? 36 : 56,
                 fontWeight: 800,
                 color: "#0f172a",
-                letterSpacing: isMobile ? "-1px" : "-2px",
+                letterSpacing: isMobile ? "-1px" : "-2.5px",
                 marginBottom: 4,
               }}
             >
@@ -300,9 +244,9 @@ export default function HomeHeroShowcase() {
             <span
               style={{
                 display: "block",
-                fontSize: isMobile ? 34 : 52,
+                fontSize: isMobile ? 36 : 56,
                 fontWeight: 800,
-                letterSpacing: isMobile ? "-1px" : "-2px",
+                letterSpacing: isMobile ? "-1px" : "-2.5px",
                 background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
@@ -316,10 +260,10 @@ export default function HomeHeroShowcase() {
           {/* Supporting paragraph */}
           <p
             style={{
-              margin: "24px 0 36px",
+              margin: "20px 0 32px",
               fontSize: isMobile ? 15 : 16,
-              lineHeight: 1.8,
-              color: "#64748b",
+              lineHeight: 1.75,
+              color: "#475569",
               maxWidth: 400,
             }}
           >
@@ -330,7 +274,14 @@ export default function HomeHeroShowcase() {
           </p>
 
           {/* CTAs */}
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 14,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <Link
               href="/auth/signup"
               onMouseEnter={() => setCta1Hovered(true)}
@@ -367,13 +318,17 @@ export default function HomeHeroShowcase() {
                 alignItems: "center",
                 gap: 6,
                 padding: isMobile ? "13px 26px" : "15px 32px",
-                border: `1.5px solid ${cta2Hovered ? "#cbd5e1" : "#e2e8f0"}`,
+                border: `1.5px solid ${cta2Hovered ? "rgba(203,213,225,0.8)" : "rgba(226,232,240,0.7)"}`,
                 color: "#374151",
                 borderRadius: 12,
                 fontSize: 16,
                 fontWeight: 600,
                 textDecoration: "none",
-                background: cta2Hovered ? "#f8fafc" : "rgba(255,255,255,0.7)",
+                background: cta2Hovered
+                  ? "rgba(248,250,252,0.85)"
+                  : "rgba(255,255,255,0.6)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
                 transition: "all 0.2s ease",
               }}
             >
@@ -381,10 +336,10 @@ export default function HomeHeroShowcase() {
             </Link>
           </div>
 
-          {/* Subtle trust indicators */}
+          {/* Trust indicators */}
           <div
             style={{
-              marginTop: 44,
+              marginTop: isMobile ? 28 : 40,
               display: "flex",
               gap: isMobile ? 20 : 32,
               alignItems: "center",
@@ -410,7 +365,7 @@ export default function HomeHeroShowcase() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "#94a3b8",
+                    color: "#64748b",
                     fontWeight: 500,
                     marginTop: 4,
                   }}
@@ -421,172 +376,143 @@ export default function HomeHeroShowcase() {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Right: Player Visual */}
+      {/* === Player info chip — bottom right === */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: isMobile ? 24 : 40,
+          right: isMobile ? 16 : 48,
+          zIndex: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          background: "rgba(255, 255, 255, 0.82)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderRadius: 16,
+          padding: isMobile ? "10px 14px" : "14px 20px",
+          boxShadow: "0 4px 32px rgba(0,0,0,0.08)",
+          border: "1px solid rgba(255,255,255,0.5)",
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? "translateY(0)" : "translateY(10px)",
+          transition: "opacity 0.6s ease 0.3s, transform 0.6s ease 0.3s",
+        }}
+      >
         <div
           style={{
-            flex: 1,
-            width: "100%",
-            minWidth: 0,
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? "translateY(0) scale(1)" : "translateY(30px) scale(0.97)",
-            transition: "opacity 0.8s ease 0.15s, transform 0.8s ease 0.15s",
+            width: 40,
+            height: 40,
+            borderRadius: 12,
+            background: player.accent,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 15,
+            fontWeight: 800,
+            color: "#fff",
           }}
         >
+          {player.number}
+        </div>
+        <div>
           <div
             style={{
-              position: "relative",
-              width: "100%",
-              maxWidth: isMobile ? 380 : 520,
-              margin: "0 auto",
-              aspectRatio: "3 / 4",
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#0f172a",
+              lineHeight: 1.2,
             }}
           >
-            {/* Decorative ring behind the frame */}
-            <div
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                width: "115%",
-                height: "115%",
-                transform: "translate(-50%, -50%)",
-                borderRadius: "50%",
-                border: "1px solid rgba(37, 99, 235, 0.06)",
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                width: "130%",
-                height: "130%",
-                transform: "translate(-50%, -50%)",
-                borderRadius: "50%",
-                border: "1px solid rgba(37, 99, 235, 0.03)",
-                pointerEvents: "none",
-              }}
-            />
-
-            {/* Shadow under the frame */}
-            <div
-              style={{
-                position: "absolute",
-                bottom: -12,
-                left: "10%",
-                right: "10%",
-                height: 40,
-                background:
-                  "radial-gradient(ellipse at center, rgba(30, 58, 138, 0.08) 0%, transparent 70%)",
-                borderRadius: "50%",
-                pointerEvents: "none",
-              }}
-            />
-
-            {/* The reveal component */}
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                borderRadius: 28,
-                boxShadow: "0 24px 80px rgba(30, 58, 138, 0.12), 0 8px 32px rgba(0, 0, 0, 0.06)",
-              }}
-            >
-              <PlayerRevealVisual player={player} isMobile={isMobile} />
-            </div>
-
-            {/* Floating stat chip */}
-            {!isMobile && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: 32,
-                  right: -48,
-                  background: "rgba(255, 255, 255, 0.92)",
-                  backdropFilter: "blur(16px)",
-                  WebkitBackdropFilter: "blur(16px)",
-                  borderRadius: 14,
-                  padding: "12px 16px",
-                  boxShadow: "0 4px 24px rgba(0, 0, 0, 0.06)",
-                  border: "1px solid rgba(226, 232, 240, 0.6)",
-                  opacity: mounted ? 1 : 0,
-                  transform: mounted ? "translateX(0)" : "translateX(-10px)",
-                  transition: "opacity 0.6s ease 0.5s, transform 0.6s ease 0.5s",
-                }}
-              >
-                <div style={{ fontSize: 10, fontWeight: 600, color: "#94a3b8", marginBottom: 4, letterSpacing: "0.5px" }}>
-                  FANTASY VALUE
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", lineHeight: 1 }}>
-                  68.4
-                </div>
-              </div>
-            )}
-
-            {/* Floating position badge */}
-            {!isMobile && (
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: 80,
-                  left: -36,
-                  background: player.accent,
-                  borderRadius: 12,
-                  padding: "8px 14px",
-                  boxShadow: `0 4px 20px ${player.accent}44`,
-                  opacity: mounted ? 1 : 0,
-                  transform: mounted ? "translateX(0)" : "translateX(10px)",
-                  transition: "opacity 0.6s ease 0.6s, transform 0.6s ease 0.6s",
-                }}
-              >
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
-                  {player.position}
-                </div>
-              </div>
-            )}
+            {player.name}
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#64748b",
+              fontWeight: 500,
+              marginTop: 2,
+            }}
+          >
+            {player.team} · {player.position}
           </div>
         </div>
       </div>
 
-      {/* Bottom fade into next section */}
+      {/* === Hover hint === */}
+      {!isMobile && (
+        <div
+          style={{
+            position: "absolute",
+            top: 24,
+            right: 48,
+            zIndex: 12,
+            background: "rgba(255,255,255,0.6)",
+            backdropFilter: "blur(12px)",
+            WebkitBackdropFilter: "blur(12px)",
+            borderRadius: 10,
+            padding: "6px 14px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "#64748b",
+            opacity: mounted ? 0.7 : 0,
+            transition: "opacity 0.6s ease 0.5s",
+            pointerEvents: "none",
+          }}
+        >
+          {t("移动鼠标探索球员", "Move cursor to explore")}
+        </div>
+      )}
+
+      {/* === Bottom fade to next section === */}
       <div
         style={{
           position: "absolute",
           bottom: 0,
           left: 0,
           right: 0,
-          height: 80,
+          height: 100,
           background: "linear-gradient(to bottom, transparent, #ffffff)",
           pointerEvents: "none",
-          zIndex: 2,
+          zIndex: 11,
         }}
       />
 
-      {/* Scroll indicator */}
+      {/* === Scroll indicator === */}
       {!isMobile && (
         <div
           style={{
             position: "absolute",
-            bottom: 32,
+            bottom: 28,
             left: "50%",
             transform: "translateX(-50%)",
-            zIndex: 3,
+            zIndex: 12,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            gap: 6,
-            opacity: 0.4,
+            gap: 5,
+            opacity: 0.35,
             animation: "heroScrollBounce 2s ease-in-out infinite",
           }}
         >
-          <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b", letterSpacing: "1px" }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              color: "#64748b",
+              letterSpacing: "1.5px",
+            }}
+          >
             SCROLL
           </span>
-          <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-            <path d="M1 1L8 8L15 1" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
+          <svg width="14" height="8" viewBox="0 0 14 8" fill="none">
+            <path
+              d="M1 1L7 7L13 1"
+              stroke="#64748b"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           </svg>
         </div>
       )}
