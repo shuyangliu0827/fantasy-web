@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/store";
 import { getCurrentSeasonLabel } from "@/lib/season";
 import HeroSection from "@/components/HeroSection";
 import DraftWinsSection from "@/components/DraftWinsSection";
+import BrandCurtain from "@/components/BrandCurtain";
 import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 
 const NAV_ITEMS = [
@@ -120,6 +121,7 @@ export default function HomePage() {
 
   return (
     <div style={{ background: "#fff", minHeight: "100vh", fontFamily: FONT, color: "#0f172a" }}>
+      <BrandCurtain />
 
       {/* Header */}
       <header style={{
