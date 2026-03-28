@@ -457,6 +457,11 @@ export default function HomePage() {
               </div>
             </div>
 
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Section 2: Draft wins — product explainer */}
       {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
