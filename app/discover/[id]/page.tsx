@@ -45,6 +45,7 @@ export default function DiscoverPostPage() {
   const [newComment, setNewComment] = useState("");
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
+  const [isLiking, setIsLiking] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingPost, setDeletingPost] = useState(false);
@@ -89,13 +90,20 @@ export default function DiscoverPostPage() {
 
   const handleLike = async () => {
     if (!user) { alert(t("请先登录", "Please login first")); return; }
+    if (isLiking) return;
+    setIsLiking(true);
     if (liked) {
+      setLiked(false);
+      setLikeCount(prev => Math.max(0, prev - 1));
       const res = await unlikeInsight(id);
-      if (res.ok) { setLiked(false); setLikeCount(prev => Math.max(0, prev - 1)); }
+      if (!res.ok) { setLiked(true); setLikeCount(prev => prev + 1); }
     } else {
+      setLiked(true);
+      setLikeCount(prev => prev + 1);
       const res = await likeInsight(id);
-      if (res.ok) { setLiked(true); setLikeCount(prev => prev + 1); }
+      if (!res.ok) { setLiked(false); setLikeCount(prev => Math.max(0, prev - 1)); }
     }
+    setIsLiking(false);
   };
 
   const handleDeletePost = async () => {
