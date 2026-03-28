@@ -68,6 +68,8 @@ export default function HomePage() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
+  const [cta1Hovered, setCta1Hovered] = useState(false);
+  const [cta2Hovered, setCta2Hovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
