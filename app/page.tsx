@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 import { getCurrentSeasonLabel } from "@/lib/season";
+import HomeHeroShowcase from "@/components/HomeHeroShowcase";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
@@ -309,6 +310,9 @@ export default function HomePage() {
           </div>
         )}
       </header>
+
+      {/* Premium Hero Showcase */}
+      <HomeHeroShowcase />
 
       {/* Hero */}
       <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
