@@ -7,7 +7,7 @@ import { getSessionUser } from "@/lib/store";
 import { getCurrentSeasonLabel } from "@/lib/season";
 import HeroSection from "@/components/HeroSection";
 import DraftWinsSection from "@/components/DraftWinsSection";
-import { HERO_PLAYERS, type HeroPlayer } from "@/lib/heroPlayers";
+import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
@@ -78,8 +78,33 @@ export default function HomePage() {
     const u = getSessionUser();
     if (u) setUser({ name: u.name, username: u.username });
 
-    // Pick random player on client to avoid hydration mismatch
-    setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]);
+    // Pick random player with live stats from rankings API
+    fetch("/api/nba-stats")
+      .then(r => r.json())
+      .then(data => {
+        const fallback = () => setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]);
+        if (!data.players || data.players.length === 0) { fallback(); return; }
+        const liveMap = new Map<string, { team: string; pts: number; reb: number; ast: number }>(
+          data.players.map((p: { name: string; team: string; averages: { pts: number; reb: number; ast: number } }) => [
+            p.name.toLowerCase(),
+            { team: p.team, pts: p.averages.pts, reb: p.averages.reb, ast: p.averages.ast },
+          ])
+        );
+        const enriched: HeroPlayer[] = HERO_PLAYERS.map(hp => {
+          const live = liveMap.get(hp.name.toLowerCase());
+          if (!live) return hp;
+          return {
+            ...hp,
+            team: live.team,
+            teamZh: TEAM_ZH[live.team] ?? hp.teamZh,
+            pts: live.pts.toFixed(1),
+            reb: live.reb.toFixed(1),
+            ast: live.ast.toFixed(1),
+          };
+        });
+        setHeroPlayer(enriched[Math.floor(Math.random() * enriched.length)]);
+      })
+      .catch(() => setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]));
 
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
