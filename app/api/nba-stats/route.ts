@@ -10,17 +10,8 @@ import { createClient } from "@supabase/supabase-js";
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
 import { getCurrentSeasonYear } from "@/lib/season";
+import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 const CURRENT_SEASON = getCurrentSeasonYear();
-
-const FANTASY_WEIGHTS = {
-  pts: 1,
-  reb: 1,
-  ast: 1,
-  stl: 2,
-  blk: 2,
-  fg3m: 1,
-  tov: -1,
-};
 
 // Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
@@ -166,10 +157,12 @@ async function refreshAndPersist() {
         tov:  r1(totals.tov  / gp), pts:  r1(totals.pts  / gp),
       };
       const fptsAvg = r1(
-        avg.pts * FANTASY_WEIGHTS.pts + avg.reb * FANTASY_WEIGHTS.reb +
-        avg.ast * FANTASY_WEIGHTS.ast + avg.stl * FANTASY_WEIGHTS.stl +
-        avg.blk * FANTASY_WEIGHTS.blk + avg.fg3m * FANTASY_WEIGHTS.fg3m +
-        avg.tov * FANTASY_WEIGHTS.tov
+        avg.pts  * ESPN_DEFAULT_WEIGHTS.pts  + avg.fgm  * ESPN_DEFAULT_WEIGHTS.fgm  +
+        avg.fga  * ESPN_DEFAULT_WEIGHTS.fga  + avg.fg3m * ESPN_DEFAULT_WEIGHTS.fg3m +
+        avg.ftm  * ESPN_DEFAULT_WEIGHTS.ftm  + avg.fta  * ESPN_DEFAULT_WEIGHTS.fta  +
+        avg.reb  * ESPN_DEFAULT_WEIGHTS.reb  + avg.ast  * ESPN_DEFAULT_WEIGHTS.ast  +
+        avg.stl  * ESPN_DEFAULT_WEIGHTS.stl  + avg.blk  * ESPN_DEFAULT_WEIGHTS.blk  +
+        avg.tov  * ESPN_DEFAULT_WEIGHTS.tov
       );
       rows.push({
         player_id: playerId,

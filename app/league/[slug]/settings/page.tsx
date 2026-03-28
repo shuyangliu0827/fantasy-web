@@ -28,13 +28,17 @@ const SCORING_OPTIONS: { key: ScoringTypeKey; label: string; supported: boolean 
 ];
 
 const ESPN_FORMULA_ROWS: { stat: string; label_zh: string; label_en: string; value: number }[] = [
-  { stat: "pts",  label_zh: "得分",   label_en: "Points",     value: ESPN_DEFAULT_WEIGHTS.pts  },
-  { stat: "reb",  label_zh: "篮板",   label_en: "Rebounds",   value: ESPN_DEFAULT_WEIGHTS.reb  },
-  { stat: "ast",  label_zh: "助攻",   label_en: "Assists",    value: ESPN_DEFAULT_WEIGHTS.ast  },
-  { stat: "stl",  label_zh: "抢断",   label_en: "Steals",     value: ESPN_DEFAULT_WEIGHTS.stl  },
-  { stat: "blk",  label_zh: "盖帽",   label_en: "Blocks",     value: ESPN_DEFAULT_WEIGHTS.blk  },
-  { stat: "fg3m", label_zh: "三分命中", label_en: "3-Pointers", value: ESPN_DEFAULT_WEIGHTS.fg3m },
-  { stat: "tov",  label_zh: "失误",   label_en: "Turnovers",  value: ESPN_DEFAULT_WEIGHTS.tov  },
+  { stat: "pts",  label_zh: "得分",     label_en: "Points",          value: ESPN_DEFAULT_WEIGHTS.pts  },
+  { stat: "fg3m", label_zh: "三分命中", label_en: "3-Pointers Made", value: ESPN_DEFAULT_WEIGHTS.fg3m },
+  { stat: "fga",  label_zh: "投篮出手", label_en: "FG Attempts",     value: ESPN_DEFAULT_WEIGHTS.fga  },
+  { stat: "fgm",  label_zh: "投篮命中", label_en: "FG Made",         value: ESPN_DEFAULT_WEIGHTS.fgm  },
+  { stat: "fta",  label_zh: "罚球出手", label_en: "FT Attempts",     value: ESPN_DEFAULT_WEIGHTS.fta  },
+  { stat: "ftm",  label_zh: "罚球命中", label_en: "FT Made",         value: ESPN_DEFAULT_WEIGHTS.ftm  },
+  { stat: "reb",  label_zh: "篮板",     label_en: "Rebounds",        value: ESPN_DEFAULT_WEIGHTS.reb  },
+  { stat: "ast",  label_zh: "助攻",     label_en: "Assists",         value: ESPN_DEFAULT_WEIGHTS.ast  },
+  { stat: "stl",  label_zh: "抢断",     label_en: "Steals",          value: ESPN_DEFAULT_WEIGHTS.stl  },
+  { stat: "blk",  label_zh: "盖帽",     label_en: "Blocks",          value: ESPN_DEFAULT_WEIGHTS.blk  },
+  { stat: "tov",  label_zh: "失误",     label_en: "Turnovers",       value: ESPN_DEFAULT_WEIGHTS.tov  },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────

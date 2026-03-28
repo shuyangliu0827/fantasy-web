@@ -16,7 +16,7 @@ const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1
 const BATCH_SIZE = 75;       // players per run — keeps total API calls under 60/min
 const REQ_DELAY_MS = 1000;   // 1 s between season_averages calls
 
-const FANTASY_WEIGHTS = { pts: 1, reb: 1, ast: 1, stl: 2, blk: 2, fg3m: 1, tov: -1 };
+const FANTASY_WEIGHTS = { pts: 1, fgm: 2, fga: -1, fg3m: 1, ftm: 1, fta: -1, reb: 1, ast: 2, stl: 4, blk: 4, tov: -2 };
 
 async function fetchRaw(url: string): Promise<any> {
   const res = await fetch(url, { headers: { Authorization: API_KEY } });
@@ -24,14 +24,18 @@ async function fetchRaw(url: string): Promise<any> {
   return res.json();
 }
 
-function calcFpts(avg: { pts: number; reb: number; ast: number; stl: number; blk: number; fg3m: number; tov: number }): number {
+function calcFpts(avg: { pts: number; fgm: number; fga: number; fg3m: number; ftm: number; fta: number; reb: number; ast: number; stl: number; blk: number; tov: number }): number {
   return (
     avg.pts  * FANTASY_WEIGHTS.pts  +
+    avg.fgm  * FANTASY_WEIGHTS.fgm  +
+    avg.fga  * FANTASY_WEIGHTS.fga  +
+    avg.fg3m * FANTASY_WEIGHTS.fg3m +
+    avg.ftm  * FANTASY_WEIGHTS.ftm  +
+    avg.fta  * FANTASY_WEIGHTS.fta  +
     avg.reb  * FANTASY_WEIGHTS.reb  +
     avg.ast  * FANTASY_WEIGHTS.ast  +
     avg.stl  * FANTASY_WEIGHTS.stl  +
     avg.blk  * FANTASY_WEIGHTS.blk  +
-    avg.fg3m * FANTASY_WEIGHTS.fg3m +
     avg.tov  * FANTASY_WEIGHTS.tov
   );
 }
@@ -117,8 +121,10 @@ Deno.serve(async () => {
         : (minRaw || 0);
 
       const avgObj = {
-        pts: avg.pts || 0, reb: avg.reb || 0, ast: avg.ast || 0,
-        stl: avg.stl || 0, blk: avg.blk || 0, fg3m: avg.fg3m || 0,
+        pts: avg.pts || 0, fgm: avg.fgm || 0, fga: avg.fga || 0,
+        fg3m: avg.fg3m || 0, ftm: avg.ftm || 0, fta: avg.fta || 0,
+        reb: avg.reb || 0, ast: avg.ast || 0,
+        stl: avg.stl || 0, blk: avg.blk || 0,
         tov: avg.turnover || 0,
       };
       const fptsAvg = r1(calcFpts(avgObj));
