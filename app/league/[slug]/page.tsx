@@ -543,8 +543,8 @@ export default function LeaguePage() {
                       const isMe = msg.user_id === currentUser?.id;
                       return (
                         <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8 }}>
-                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: isMe ? "#1e3a8a" : "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: isMe ? "#fff" : "#374151", flexShrink: 0 }}>
-                            {msg.username?.[0]?.toUpperCase() || "?"}
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: isMe ? "#1e3a8a" : "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: isMe ? "#fff" : "#374151", flexShrink: 0, textAlign: "center", padding: "0 2px", overflow: "hidden", lineHeight: 1.2 }}>
+                            {msg.username || "?"}
                           </div>
                           <div style={{ maxWidth: "65%" }}>
                             {!isMe && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>{msg.username}</div>}
