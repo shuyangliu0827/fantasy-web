@@ -21,8 +21,27 @@ const supabase = createClient(
 
 // ──────────────────────────────────────────────
 // Transform a player_stats_cache row → API shape
+// fptsAvg is recomputed from per-game averages using the current ESPN_DEFAULT_WEIGHTS
+// so that ranking reflects the latest scoring formula regardless of what is cached in DB.
 // ──────────────────────────────────────────────
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
 function rowToPlayer(row: any, index: number) {
+  const fptsAvg = r1(
+    (row.pts_avg  || 0) * ESPN_DEFAULT_WEIGHTS.pts  +
+    (row.fgm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fgm  +
+    (row.fga_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fga  +
+    (row.fg3m_avg || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
+    (row.ftm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ftm  +
+    (row.fta_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fta  +
+    (row.reb_avg  || 0) * ESPN_DEFAULT_WEIGHTS.reb  +
+    (row.ast_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ast  +
+    (row.stl_avg  || 0) * ESPN_DEFAULT_WEIGHTS.stl  +
+    (row.blk_avg  || 0) * ESPN_DEFAULT_WEIGHTS.blk  +
+    (row.tov_avg  || 0) * ESPN_DEFAULT_WEIGHTS.tov
+  );
+  const fpts = r1(fptsAvg * (row.games_played || 0));
+
   return {
     id: row.player_id,
     name: row.name,
@@ -62,8 +81,8 @@ function rowToPlayer(row: any, index: number) {
       tov:     row.tov_avg,
       pts:     row.pts_avg,
     },
-    fpts:     row.fpts,
-    fptsAvg:  row.fpts_avg,
+    fpts,
+    fptsAvg,
     rank:     index + 1,
     injury:   row.injury,
   };
@@ -231,7 +250,11 @@ export async function GET() {
     });
   }
 
-  const players = data.map((row, i) => rowToPlayer(row, i));
+  // Re-sort by recomputed fptsAvg (new weights) and reassign ranks
+  const unsorted = data.map((row) => rowToPlayer(row, 0));
+  unsorted.sort((a, b) => b.fptsAvg - a.fptsAvg);
+  unsorted.forEach((p, i) => { p.rank = i + 1; });
+  const players = unsorted;
   const lastUpdated = data.reduce((max: string | null, row) =>
     !max || row.updated_at > max ? row.updated_at : max, null);
 
