@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 
 // ── Tuneable constants ────────────────────────────────────────────
-const TEXT_IN_DURATION    = 780;   // blur → clear
-const HOLD_DURATION       = 520;   // breathe pause
-const CURTAIN_UP_DURATION = 1100;  // slide-up exit
+const TEXT_IN_DURATION    = 780;
+const HOLD_DURATION       = 520;
+const CURTAIN_UP_DURATION = 1100;
 const TOTAL_HOLD = TEXT_IN_DURATION + HOLD_DURATION;
 const TOTAL      = TOTAL_HOLD + CURTAIN_UP_DURATION + 40;
 
@@ -13,17 +13,20 @@ const BG           = "linear-gradient(160deg, #0a1628 0%, #0f2252 52%, #0c1e42 1
 const CURTAIN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 const FONT         = "'Barlow Condensed', sans-serif";
 
+// Module-level flag:
+//   • resets to false on every hard refresh (module re-initialises)
+//   • stays true across client-side SPA navigations
+// → curtain plays on refresh, skips on in-session nav back to home
+let hasPlayedThisSession = false;
+
 type Phase = "text-in" | "holding" | "exiting" | "done";
 
 export default function BrandCurtain() {
   const [phase, setPhase] = useState<Phase>("text-in");
 
   useEffect(() => {
-    const key = "bp_intro_v4";
-    const isFirst = !sessionStorage.getItem(key);
-
-    if (!isFirst) { setPhase("done"); return; }
-    sessionStorage.setItem(key, "1");
+    if (hasPlayedThisSession) { setPhase("done"); return; }
+    hasPlayedThisSession = true;
 
     const t1 = setTimeout(() => setPhase("holding"),  TEXT_IN_DURATION);
     const t2 = setTimeout(() => setPhase("exiting"),  TOTAL_HOLD);
