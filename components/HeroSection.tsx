@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import type { HeroPlayer } from "@/lib/heroPlayers";
@@ -37,13 +37,20 @@ export default function HeroSection({ player }: Props) {
         position: "relative",
         width: "100%",
         height: "100vh",
-        minHeight: 680,
+        minHeight: 600,
         overflow: "hidden",
         fontFamily: FONT,
         background: "#0a0e1a",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      {/* === BG: team-tinted dark gradient === */}
+      {/* ============================================= */}
+      {/* BG LAYERS — these fill the full viewport      */}
+      {/* ============================================= */}
+
+      {/* BG: team-tinted dark gradient */}
       <div
         style={{
           position: "absolute",
@@ -58,14 +65,14 @@ export default function HeroSection({ player }: Props) {
         }}
       />
 
-      {/* === BG: breathing glow === */}
+      {/* BG: breathing glow */}
       <div
         style={{
           position: "absolute",
           top: "25%",
           left: "50%",
-          width: isMobile ? 400 : 700,
-          height: isMobile ? 400 : 700,
+          width: "clamp(300px, 45vw, 700px)",
+          height: "clamp(300px, 45vw, 700px)",
           transform: "translateX(-50%)",
           borderRadius: "50%",
           background: `radial-gradient(circle, ${player.accent}15 0%, transparent 70%)`,
@@ -77,7 +84,7 @@ export default function HeroSection({ player }: Props) {
         }}
       />
 
-      {/* === BG: faint grid === */}
+      {/* BG: faint grid */}
       <div
         style={{
           position: "absolute",
@@ -93,18 +100,18 @@ export default function HeroSection({ player }: Props) {
         }}
       />
 
-      {/* === BG: vignette === */}
+      {/* BG: vignette */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: `radial-gradient(ellipse 80% 70% at 50% 45%, transparent 30%, #0a0e1a 100%)`,
+          background: "radial-gradient(ellipse 80% 70% at 50% 45%, transparent 30%, #0a0e1a 100%)",
           pointerEvents: "none",
           zIndex: 2,
         }}
       />
 
-      {/* === Corner micro label === */}
+      {/* Corner micro labels — pinned to viewport */}
       <div
         style={{
           position: "absolute",
@@ -139,240 +146,275 @@ export default function HeroSection({ player }: Props) {
         PLATE · {player.number.padStart(2, "0")}
       </div>
 
-      {/* === Player image (centered) === */}
+      {/* ============================================= */}
+      {/* COMPOSITION CANVAS — bounded, uniformly scaled */}
+      {/* ============================================= */}
       <div
         style={{
-          position: "absolute",
-          top: isMobile ? "8%" : "5%",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: isMobile ? "90%" : "42%",
-          maxWidth: 600,
-          height: isMobile ? "65%" : "78%",
+          position: "relative",
+          width: "100%",
+          maxWidth: 900,
+          height: "90vh",
+          maxHeight: 860,
+          minHeight: 520,
           zIndex: 3,
-          opacity: entered ? 1 : 0,
-          filter: entered ? "none" : "blur(8px)",
-          transition: "opacity 0.8s ease 0.15s, filter 0.9s ease 0.15s",
-          animation: entered && !isMobile ? "heroPlayerFloat 7s ease-in-out infinite" : "none",
-        }}
-      >
-        <img
-          src={player.portraitImage}
-          alt={player.name}
-          onLoad={() => setImgLoaded(true)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: "center 10%",
-            maskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 60%, transparent 100%)",
-          }}
-        />
-      </div>
-
-      {/* === Player name (editorial overlay) === */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: isMobile ? "28%" : "24%",
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          textAlign: "center",
-          opacity: entered ? 1 : 0,
-          transform: entered ? "translateY(0)" : "translateY(20px)",
-          transition: "opacity 0.7s ease 0.5s, transform 0.7s ease 0.5s",
-          pointerEvents: "none",
-        }}
-      >
-        {firstName !== lastName && (
-          <div
-            style={{
-              fontSize: isMobile ? 14 : 16,
-              fontWeight: 500,
-              color: "rgba(255,255,255,0.35)",
-              letterSpacing: isMobile ? "6px" : "12px",
-              marginBottom: isMobile ? 4 : 8,
-              textTransform: "uppercase",
-            }}
-          >
-            {firstName}
-          </div>
-        )}
-        <div
-          style={{
-            fontSize: isMobile ? 42 : 72,
-            fontWeight: 800,
-            color: "#fff",
-            letterSpacing: isMobile ? "2px" : "6px",
-            textTransform: "uppercase",
-            textShadow: `0 0 80px ${player.accent}40, 0 2px 30px rgba(0,0,0,0.5)`,
-            lineHeight: 1,
-          }}
-        >
-          {lastName || firstName}
-        </div>
-      </div>
-
-      {/* === Team / Position subtle label === */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: isMobile ? "24%" : "20%",
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          textAlign: "center",
-          opacity: entered ? 0.35 : 0,
-          transition: "opacity 0.6s ease 0.7s",
-          pointerEvents: "none",
-        }}
-      >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#fff",
-            letterSpacing: "3px",
-          }}
-        >
-          {player.team} · {player.teamZh} · {player.position}
-        </span>
-      </div>
-
-      {/* === Stats row === */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: isMobile ? "16%" : "13%",
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          display: "flex",
-          justifyContent: "center",
-          gap: isMobile ? 28 : 48,
-          opacity: entered ? 1 : 0,
-          transform: entered ? "translateY(0)" : "translateY(12px)",
-          transition: "opacity 0.6s ease 0.8s, transform 0.6s ease 0.8s",
-          pointerEvents: "none",
-        }}
-      >
-        {[
-          { label: "PTS", value: player.pts },
-          { label: "REB", value: player.reb },
-          { label: "AST", value: player.ast },
-        ].map((s) => (
-          <div key={s.label} style={{ textAlign: "center" }}>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.3)",
-                letterSpacing: "2px",
-                marginBottom: 4,
-              }}
-            >
-              {s.label}
-            </div>
-            <div
-              style={{
-                fontSize: isMobile ? 20 : 26,
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.85)",
-                letterSpacing: "-0.5px",
-              }}
-            >
-              {s.value}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* === Brand mark + CTA === */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: isMobile ? 24 : 36,
-          left: 0,
-          right: 0,
-          zIndex: 20,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: isMobile ? 12 : 16,
-          opacity: entered ? 1 : 0,
-          transform: entered ? "translateY(0)" : "translateY(10px)",
-          transition: "opacity 0.6s ease 1s, transform 0.6s ease 1s",
         }}
       >
-        {/* Brand */}
-        <div style={{ textAlign: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2 }}>
-            <span style={{ fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
-              蓝本
-            </span>
-            <span
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: "#f59e0b",
-                marginBottom: 8,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              fontSize: 8,
-              fontWeight: 500,
-              color: "rgba(255,255,255,0.2)",
-              letterSpacing: "3px",
-              marginTop: 2,
-            }}
-          >
-            DRAFT INTELLIGENCE
-          </div>
-        </div>
-
-        {/* CTA */}
-        <Link
-          href="/auth/signup"
-          onMouseEnter={() => setCtaHover(true)}
-          onMouseLeave={() => setCtaHover(false)}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: isMobile ? "11px 28px" : "12px 32px",
-            background: ctaHover
-              ? "rgba(255,255,255,0.15)"
-              : "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 10,
-            fontSize: 14,
-            fontWeight: 600,
-            color: "#fff",
-            textDecoration: "none",
-            backdropFilter: "blur(8px)",
-            WebkitBackdropFilter: "blur(8px)",
-            transition: "all 0.25s ease",
-          }}
-        >
-          {t("免费开始", "Get Started")}
-          <span style={{ opacity: 0.6 }}>→</span>
-        </Link>
-
-        {/* Progress bar accent */}
+        {/* === Player image — positioned within canvas === */}
         <div
           style={{
-            width: isMobile ? 40 : 56,
-            height: 2,
-            borderRadius: 1,
-            background: `linear-gradient(90deg, ${player.accent}, ${player.accentLight})`,
-            opacity: 0.5,
+            position: "absolute",
+            top: 0,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: isMobile ? "88%" : "clamp(280px, 50%, 480px)",
+            height: "75%",
+            zIndex: 1,
+            opacity: entered ? 1 : 0,
+            filter: entered ? "none" : "blur(8px)",
+            transition: "opacity 0.8s ease 0.15s, filter 0.9s ease 0.15s",
+            animation: entered && !isMobile ? "heroPlayerFloat 7s ease-in-out infinite" : "none",
           }}
-        />
+        >
+          <img
+            src={player.portraitImage}
+            alt={player.name}
+            onLoad={() => setImgLoaded(true)}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "center 10%",
+              maskImage: "linear-gradient(to bottom, black 55%, transparent 95%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 95%)",
+            }}
+          />
+        </div>
+
+        {/* === Content stack — all text in one flex column === */}
+        <div
+          style={{
+            position: "relative",
+            zIndex: 10,
+            width: "100%",
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            paddingBottom: isMobile ? 16 : 24,
+            gap: 0,
+          }}
+        >
+          {/* -- Player name block -- */}
+          <div
+            style={{
+              textAlign: "center",
+              opacity: entered ? 1 : 0,
+              transform: entered ? "translateY(0)" : "translateY(16px)",
+              transition: "opacity 0.7s ease 0.5s, transform 0.7s ease 0.5s",
+              pointerEvents: "none",
+              marginBottom: "clamp(4px, 0.8vh, 10px)",
+            }}
+          >
+            {firstName !== lastName && (
+              <div
+                style={{
+                  fontSize: "clamp(11px, 1.2vw, 16px)",
+                  fontWeight: 500,
+                  color: "rgba(255,255,255,0.3)",
+                  letterSpacing: "clamp(4px, 1vw, 12px)",
+                  marginBottom: "clamp(2px, 0.5vh, 8px)",
+                  textTransform: "uppercase",
+                }}
+              >
+                {firstName}
+              </div>
+            )}
+            <div
+              style={{
+                fontSize: "clamp(32px, 5.5vw, 68px)",
+                fontWeight: 800,
+                color: "#fff",
+                letterSpacing: "clamp(1px, 0.5vw, 6px)",
+                textTransform: "uppercase",
+                textShadow: `0 0 60px ${player.accent}40, 0 2px 20px rgba(0,0,0,0.5)`,
+                lineHeight: 1,
+              }}
+            >
+              {lastName || firstName}
+            </div>
+          </div>
+
+          {/* -- Team / Position -- */}
+          <div
+            style={{
+              textAlign: "center",
+              opacity: entered ? 0.35 : 0,
+              transition: "opacity 0.6s ease 0.65s",
+              pointerEvents: "none",
+              marginBottom: "clamp(10px, 1.8vh, 22px)",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "clamp(9px, 0.9vw, 12px)",
+                fontWeight: 600,
+                color: "#fff",
+                letterSpacing: "3px",
+              }}
+            >
+              {player.team} · {player.teamZh} · {player.position}
+            </span>
+          </div>
+
+          {/* -- Stats row -- */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              gap: "clamp(20px, 4vw, 48px)",
+              opacity: entered ? 1 : 0,
+              transform: entered ? "translateY(0)" : "translateY(10px)",
+              transition: "opacity 0.6s ease 0.75s, transform 0.6s ease 0.75s",
+              pointerEvents: "none",
+              marginBottom: "clamp(14px, 2.5vh, 32px)",
+            }}
+          >
+            {[
+              { label: "PTS", value: player.pts },
+              { label: "REB", value: player.reb },
+              { label: "AST", value: player.ast },
+            ].map((s) => (
+              <div key={s.label} style={{ textAlign: "center" }}>
+                <div
+                  style={{
+                    fontSize: "clamp(8px, 0.8vw, 10px)",
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.3)",
+                    letterSpacing: "2px",
+                    marginBottom: "clamp(2px, 0.4vh, 5px)",
+                  }}
+                >
+                  {s.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: "clamp(16px, 2vw, 24px)",
+                    fontWeight: 700,
+                    color: "rgba(255,255,255,0.85)",
+                    letterSpacing: "-0.5px",
+                  }}
+                >
+                  {s.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* -- Brand mark -- */}
+          <div
+            style={{
+              textAlign: "center",
+              opacity: entered ? 1 : 0,
+              transform: entered ? "translateY(0)" : "translateY(8px)",
+              transition: "opacity 0.6s ease 0.9s, transform 0.6s ease 0.9s",
+              marginBottom: "clamp(10px, 1.5vh, 18px)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "clamp(14px, 1.4vw, 18px)",
+                  fontWeight: 800,
+                  color: "#fff",
+                  letterSpacing: "-0.5px",
+                }}
+              >
+                蓝本
+              </span>
+              <span
+                style={{
+                  width: "clamp(4px, 0.4vw, 5px)",
+                  height: "clamp(4px, 0.4vw, 5px)",
+                  borderRadius: "50%",
+                  background: "#f59e0b",
+                  marginBottom: "clamp(5px, 0.7vw, 8px)",
+                }}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: "clamp(7px, 0.7vw, 9px)",
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.2)",
+                letterSpacing: "3px",
+                marginTop: 2,
+              }}
+            >
+              DRAFT INTELLIGENCE
+            </div>
+          </div>
+
+          {/* -- CTA button -- */}
+          <div
+            style={{
+              opacity: entered ? 1 : 0,
+              transform: entered ? "translateY(0)" : "translateY(8px)",
+              transition: "opacity 0.6s ease 1s, transform 0.6s ease 1s",
+              marginBottom: "clamp(8px, 1.2vh, 14px)",
+            }}
+          >
+            <Link
+              href="/auth/signup"
+              onMouseEnter={() => setCtaHover(true)}
+              onMouseLeave={() => setCtaHover(false)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "clamp(9px, 1vh, 12px) clamp(22px, 2.5vw, 32px)",
+                background: ctaHover
+                  ? "rgba(255,255,255,0.15)"
+                  : "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                borderRadius: 10,
+                fontSize: "clamp(12px, 1.1vw, 14px)",
+                fontWeight: 600,
+                color: "#fff",
+                textDecoration: "none",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                transition: "all 0.25s ease",
+              }}
+            >
+              {t("免费开始", "Get Started")}
+              <span style={{ opacity: 0.6 }}>→</span>
+            </Link>
+          </div>
+
+          {/* -- Accent bar -- */}
+          <div
+            style={{
+              width: "clamp(32px, 4vw, 56px)",
+              height: 2,
+              borderRadius: 1,
+              background: `linear-gradient(90deg, ${player.accent}, ${player.accentLight})`,
+              opacity: entered ? 0.5 : 0,
+              transition: "opacity 0.6s ease 1.1s",
+            }}
+          />
+        </div>
       </div>
 
       {/* Keyframes */}
