@@ -97,6 +97,10 @@ export default function HomePage() {
     window.location.href = "/";
   };
 
+  const giannisData = HERO_PLAYERS.find(p => p.id === "giannis")!;
+  const curryData = HERO_PLAYERS.find(p => p.id === "curry")!;
+  const abbrevName = (n: string) => { const p = n.split(" "); return `${p[0][0]}. ${p.slice(1).join(" ")}`; };
+
   return (
     <div style={{ background: "#fff", minHeight: "100vh", fontFamily: FONT, color: "#0f172a" }}>
 
@@ -422,10 +426,10 @@ export default function HomePage() {
               zIndex: 1,
               overflow: "hidden",
             }}>
-              <div style={{ fontSize: isMobile ? 46 : 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>34</div>
+              <div style={{ fontSize: isMobile ? 46 : 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>{giannisData.number}</div>
               <div style={{ position: "absolute", bottom: isMobile ? 12 : 24, left: isMobile ? 12 : 20 }}>
-                <div style={{ fontSize: isMobile ? 10 : 13, fontWeight: 700, marginBottom: 2 }}>G. Antetokounmpo</div>
-                <div style={{ fontSize: isMobile ? 9 : 11, color: "rgba(255,255,255,0.55)" }}>MIL · 雄鹿</div>
+                <div style={{ fontSize: isMobile ? 10 : 13, fontWeight: 700, marginBottom: 2 }}>{abbrevName(giannisData.name)}</div>
+                <div style={{ fontSize: isMobile ? 9 : 11, color: "rgba(255,255,255,0.55)" }}>{giannisData.team} · {giannisData.teamZh}</div>
               </div>
             </div>
 
@@ -446,11 +450,11 @@ export default function HomePage() {
                 display: "inline-block", padding: "3px 9px",
                 background: "rgba(255,255,255,0.28)",
                 borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#fff", marginBottom: isMobile ? 6 : 10,
-              }}>PG</div>
-              <div style={{ fontSize: isMobile ? 12 : 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>S. Curry</div>
-              <div style={{ fontSize: isMobile ? 9 : 12, color: "rgba(255,255,255,0.65)", marginBottom: isMobile ? 10 : 22 }}>GSW · 勇士</div>
+              }}>{curryData.position}</div>
+              <div style={{ fontSize: isMobile ? 12 : 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{abbrevName(curryData.name)}</div>
+              <div style={{ fontSize: isMobile ? 9 : 12, color: "rgba(255,255,255,0.65)", marginBottom: isMobile ? 10 : 22 }}>{curryData.team} · {curryData.teamZh}</div>
               <div style={{ display: "flex", gap: isMobile ? 8 : 16 }}>
-                {[["26.4", "分"], ["4.5", "篮"], ["6.1", "助"]].map(([val, label]) => (
+                {[[curryData.pts, "分"], [curryData.reb, "篮"], [curryData.ast, "助"]].map(([val, label]) => (
                   <div key={label} style={{ textAlign: "center" }}>
                     <div style={{ fontSize: isMobile ? 12 : 17, fontWeight: 800, color: "#fff" }}>{val}</div>
                     <div style={{ fontSize: isMobile ? 8 : 10, color: "rgba(255,255,255,0.65)" }}>{label}</div>
