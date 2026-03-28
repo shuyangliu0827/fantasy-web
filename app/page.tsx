@@ -367,48 +367,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Hot players section */}
-      <section style={{ background: "#fff", padding: "64px 24px 80px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", margin: 0, letterSpacing: "-0.5px" }}>
-              {t("本周热门球员", "Hot Players This Week")}
-            </h2>
-            <Link href="/rankings" style={{ fontSize: 14, fontWeight: 600, color: "#2563eb", textDecoration: "none" }}>
-              {t("查看全部排名", "View All Rankings")} →
-            </Link>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)", gap: 16 }}>
-            {[
-              { rank: 1, name: "N. Jokić", team: "DEN · C", score: 68.4, color: "#f59e0b" },
-              { rank: 2, name: "L. Dončić", team: "DAL · PG", score: 64.2, color: "#64748b" },
-              { rank: 3, name: "G. Antetokounmpo", team: "MIL · PF", score: 62.8, color: "#64748b" },
-              { rank: 4, name: "S. Curry", team: "GSW · PG", score: 58.7, color: "#64748b" },
-            ].map((p) => (
-              <Link key={p.rank} href="/rankings" style={{ textDecoration: "none" }}>
-                <div style={{
-                  background: "#f8fafc",
-                  borderRadius: 14,
-                  padding: "18px 20px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  border: "1px solid #e2e8f0",
-                  transition: "all 0.15s",
-                }}>
-                  <div style={{ fontSize: 22, fontWeight: 900, color: p.color, minWidth: 28, textAlign: "center" }}>{p.rank}</div>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                    <div style={{ fontSize: 12, color: "#94a3b8" }}>{p.team}</div>
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{p.score}</div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
 
     </div>
   );
