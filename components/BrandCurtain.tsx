@@ -2,56 +2,43 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * BrandCurtain — premium brand opening sequence for the homepage.
- *
- * First visit in session  → full cinematic curtain (text reveal → hold → slide up)
- * In-session return       → instant dismiss (no curtain shown)
- *
- * Tuneable constants are grouped at the top for easy adjustments.
- */
-
 // ── Timing (ms) ──────────────────────────────────────────────────
-const TEXT_IN_DURATION    = 780;   // text blur→clear animation
-const HOLD_DURATION       = 480;   // pause after text settles
-const CURTAIN_UP_DURATION = 1100;  // slide-up exit animation
-const TOTAL_HOLD          = TEXT_IN_DURATION + HOLD_DURATION;       // 1260 ms
-const TOTAL               = TOTAL_HOLD + CURTAIN_UP_DURATION + 40;  // 2400 ms
+const SHOW_DURATION  = 1600;  // spinner visible before curtain lifts
+const SLIDE_DURATION = 950;   // curtain slide-up
+const TOTAL          = SHOW_DURATION + SLIDE_DURATION + 30;
 
 // ── Brand colour ─────────────────────────────────────────────────
-// Deep premium navy — ties to the existing --gradient-hero in globals.css
 const BG = "linear-gradient(160deg, #0a1628 0%, #0f2252 52%, #0c1e42 100%)";
 
 // ── Easing ───────────────────────────────────────────────────────
-// expo-out: starts fast, decelerates smoothly — like a curtain being pulled
 const CURTAIN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
-type Phase = "text-in" | "holding" | "exiting" | "done";
+// Circumference of the ring (r=58): 2π×58 ≈ 364
+// Arc length 100 → ~27% of circle; gap 265 → ~73%
+const RING_R    = 58;
+const ARC_LEN   = 100;
+const GAP_LEN   = Math.round(2 * Math.PI * RING_R) - ARC_LEN;
+
+type Phase = "showing" | "exiting" | "done";
 
 export default function BrandCurtain() {
-  const [phase, setPhase] = useState<Phase>("text-in");
+  const [phase, setPhase] = useState<Phase>("showing");
 
   useEffect(() => {
-    const key = "bp_intro_v1";
-    const isFirstVisit = !sessionStorage.getItem(key);
+    const key = "bp_intro_v2";
+    const isFirst = !sessionStorage.getItem(key);
 
-    if (!isFirstVisit) {
-      // In-session navigation: skip curtain entirely
+    if (!isFirst) {
       setPhase("done");
       return;
     }
 
     sessionStorage.setItem(key, "1");
 
-    const t1 = setTimeout(() => setPhase("holding"),  TEXT_IN_DURATION);
-    const t2 = setTimeout(() => setPhase("exiting"),  TOTAL_HOLD);
-    const t3 = setTimeout(() => setPhase("done"),     TOTAL);
+    const t1 = setTimeout(() => setPhase("exiting"), SHOW_DURATION);
+    const t2 = setTimeout(() => setPhase("done"),    TOTAL);
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
   if (phase === "done") return null;
@@ -67,97 +54,108 @@ export default function BrandCurtain() {
         zIndex:         9999,
         background:     BG,
         display:        "flex",
+        flexDirection:  "column",
         alignItems:     "center",
         justifyContent: "center",
-        // Curtain slides up — the page content is revealed beneath
         transform:      isExiting ? "translateY(-100%)" : "translateY(0)",
         transition:     isExiting
-          ? `transform ${CURTAIN_UP_DURATION}ms ${CURTAIN_EASE}`
+          ? `transform ${SLIDE_DURATION}ms ${CURTAIN_EASE}`
           : "none",
-        // Shadow creates depth as the curtain lifts off the page content
-        boxShadow:      isExiting
-          ? "0 36px 100px rgba(0, 0, 0, 0.5)"
-          : "none",
+        boxShadow:      isExiting ? "0 36px 100px rgba(0,0,0,0.5)" : "none",
         willChange:     "transform",
-        // Allow clicks through while exiting so the page is responsive immediately
         pointerEvents:  isExiting ? "none" : "auto",
       }}
     >
-      {/* Radial brand-blue glow — ties to accent-blue var */}
-      <div
-        style={{
-          position:      "absolute",
-          inset:         0,
-          background:    "radial-gradient(ellipse 58% 48% at 50% 46%, rgba(37,99,235,0.22) 0%, transparent 70%)",
-          pointerEvents: "none",
-        }}
-      />
+      {/* Center radial glow */}
+      <div style={{
+        position:      "absolute",
+        inset:         0,
+        background:    "radial-gradient(ellipse 58% 48% at 50% 46%, rgba(37,99,235,0.22) 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
 
-      {/* Brand text block */}
+      {/* ── BF Spinner ────────────────────────────────────────────── */}
+      {/*
+          A ring where B sits at the top (12 o'clock) and F at the
+          bottom (6 o'clock). The whole assembly rotates so the ring
+          itself is "formed" by the two letters orbiting the center.
+          A bright arc segment riding the ring gives the loading feel.
+      */}
+      <div
+        className="bp-spin"
+        style={{ position: "relative", zIndex: 1, userSelect: "none" }}
+      >
+        <svg
+          viewBox="0 0 140 140"
+          width="140"
+          height="140"
+          overflow="visible"
+        >
+          {/* Subtle full ring — the circular track */}
+          <circle
+            cx="70" cy="70" r={RING_R}
+            fill="none"
+            stroke="rgba(255,255,255,0.13)"
+            strokeWidth="2"
+          />
+
+          {/* Bright arc that rides the ring — the loading indicator */}
+          <circle
+            cx="70" cy="70" r={RING_R}
+            fill="none"
+            stroke="rgba(255,255,255,0.82)"
+            strokeWidth="3"
+            strokeDasharray={`${ARC_LEN} ${GAP_LEN}`}
+            strokeLinecap="round"
+          />
+
+          {/* ── B — top of ring (12 o'clock) ── */}
+          <text
+            x="70" y="12"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily="'Barlow Condensed', sans-serif"
+            fontWeight="800"
+            fontStyle="italic"
+            fontSize="28"
+            fill="white"
+          >
+            B
+          </text>
+
+          {/* ── F — bottom of ring (6 o'clock) ── */}
+          <text
+            x="70" y="128"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontFamily="'Barlow Condensed', sans-serif"
+            fontWeight="800"
+            fontStyle="italic"
+            fontSize="28"
+            fill="white"
+          >
+            F
+          </text>
+        </svg>
+      </div>
+
+      {/* ── "LOAD BLUEPRINT FANTASY" ──────────────────────────────── */}
       <div
         style={{
-          position:   "relative",
-          zIndex:     1,
-          textAlign:  "center",
-          userSelect: "none",
+          position:      "relative",
+          zIndex:        1,
+          marginTop:     40,
+          fontFamily:    "'Barlow Condensed', sans-serif",
+          fontWeight:    700,
+          fontStyle:     "italic",
+          fontSize:      "clamp(12px, 1.8vw, 15px)",
+          color:         "rgba(191,219,254,0.72)",
+          letterSpacing: "0.32em",
+          textTransform: "uppercase",
+          userSelect:    "none",
         }}
       >
-        {/* "BLUEPRINT FANTASY" — primary logotype */}
-        <div
-          className={
-            phase === "text-in" ? "bp-text-reveal"
-            : phase === "holding" ? "bp-text-breathe"
-            : undefined
-          }
-          style={{
-            fontSize:              "clamp(56px, 11vw, 108px)",
-            fontWeight:            800,
-            fontStyle:             "italic",
-            fontFamily:            "'Barlow Condensed', sans-serif",
-            lineHeight:            0.95,
-            letterSpacing:         "0.03em",
-            textTransform:         "uppercase",
-            // Blue-to-white gradient text — matches the sports logo style
-            background:            "linear-gradient(175deg, #ffffff 0%, #bfdbfe 28%, #60a5fa 58%, #1d4ed8 100%)",
-            WebkitBackgroundClip:  "text",
-            WebkitTextFillColor:   "transparent",
-            backgroundClip:        "text",
-            // Outer glow for the sports-chrome feel
-            filter:                "drop-shadow(0 0 18px rgba(96,165,250,0.55)) drop-shadow(0 2px 4px rgba(0,0,0,0.4))",
-          }}
-        >
-          Blueprint<br />Fantasy
-        </div>
-
-        {/* Accent hairline */}
-        <div
-          className={phase === "text-in" ? "bp-line-reveal" : undefined}
-          style={{
-            width:        48,
-            height:       1,
-            background:   "rgba(255, 255, 255, 0.35)",
-            margin:       "20px auto",
-            borderRadius: 1,
-            opacity:      phase === "text-in" ? 0 : 1,
-          }}
-        />
-
-        {/* "BASKETBALL" — subtitle */}
-        <div
-          className={phase === "text-in" ? "bp-line-reveal" : undefined}
-          style={{
-            fontSize:      "clamp(10px, 1.5vw, 14px)",
-            fontWeight:    700,
-            fontStyle:     "italic",
-            fontFamily:    "'Barlow Condensed', sans-serif",
-            color:         "rgba(191, 219, 254, 0.7)",
-            letterSpacing: "0.38em",
-            textTransform: "uppercase",
-            opacity:       phase === "text-in" ? 0 : 1,
-          }}
-        >
-          Basketball
-        </div>
+        Load Blueprint Fantasy
       </div>
     </div>
   );

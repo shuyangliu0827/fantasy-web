@@ -70,6 +70,15 @@ a {
 }
 
 /* ── Brand Curtain Opening Sequence ─────────────────────────────── */
+@keyframes bp-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.bp-spin {
+  animation: bp-spin 2.2s linear infinite;
+  transform-origin: center;
+}
 @keyframes bp-text-reveal {
   from {
     opacity: 0;
