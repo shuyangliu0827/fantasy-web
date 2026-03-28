@@ -102,7 +102,7 @@ export default function BrandCurtain() {
           userSelect: "none",
         }}
       >
-        {/* "BLUEPRINT" — primary logotype */}
+        {/* "BLUEPRINT FANTASY" — primary logotype */}
         <div
           className={
             phase === "text-in" ? "bp-text-reveal"
@@ -110,16 +110,23 @@ export default function BrandCurtain() {
             : undefined
           }
           style={{
-            fontSize:      "clamp(52px, 10vw, 96px)",
-            fontWeight:    600,
-            color:         "#ffffff",
-            letterSpacing: "0.22em",
-            fontFamily:    "'Oswald', sans-serif",
-            lineHeight:    1,
-            textTransform: "uppercase",
+            fontSize:              "clamp(56px, 11vw, 108px)",
+            fontWeight:            800,
+            fontStyle:             "italic",
+            fontFamily:            "'Barlow Condensed', sans-serif",
+            lineHeight:            0.95,
+            letterSpacing:         "0.03em",
+            textTransform:         "uppercase",
+            // Blue-to-white gradient text — matches the sports logo style
+            background:            "linear-gradient(175deg, #ffffff 0%, #bfdbfe 28%, #60a5fa 58%, #1d4ed8 100%)",
+            WebkitBackgroundClip:  "text",
+            WebkitTextFillColor:   "transparent",
+            backgroundClip:        "text",
+            // Outer glow for the sports-chrome feel
+            filter:                "drop-shadow(0 0 18px rgba(96,165,250,0.55)) drop-shadow(0 2px 4px rgba(0,0,0,0.4))",
           }}
         >
-          Blueprint
+          Blueprint<br />Fantasy
         </div>
 
         {/* Accent hairline */}
@@ -129,26 +136,27 @@ export default function BrandCurtain() {
             width:        48,
             height:       1,
             background:   "rgba(255, 255, 255, 0.35)",
-            margin:       "18px auto",
+            margin:       "20px auto",
             borderRadius: 1,
             opacity:      phase === "text-in" ? 0 : 1,
           }}
         />
 
-        {/* "FANTASY BASKETBALL" — subtitle */}
+        {/* "BASKETBALL" — subtitle */}
         <div
           className={phase === "text-in" ? "bp-line-reveal" : undefined}
           style={{
-            fontSize:      "clamp(11px, 1.6vw, 15px)",
-            fontWeight:    300,
-            color:         "rgba(255, 255, 255, 0.62)",
-            letterSpacing: "0.42em",
-            fontFamily:    "'Oswald', sans-serif",
+            fontSize:      "clamp(10px, 1.5vw, 14px)",
+            fontWeight:    700,
+            fontStyle:     "italic",
+            fontFamily:    "'Barlow Condensed', sans-serif",
+            color:         "rgba(191, 219, 254, 0.7)",
+            letterSpacing: "0.38em",
             textTransform: "uppercase",
             opacity:       phase === "text-in" ? 0 : 1,
           }}
         >
-          Fantasy Basketball
+          Basketball
         </div>
       </div>
     </div>

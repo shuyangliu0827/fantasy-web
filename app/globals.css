@@ -1,7 +1,7 @@
 /* globals.css - Premium Dark Theme */
 
-/* ── Google Fonts: Oswald (brand curtain) — must be first ── */
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;600&display=swap');
+/* ── Google Fonts: Barlow Condensed (brand curtain) — must be first ── */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,700;1,800&display=swap');
 
 /* ========== Reset ========== */
 *, *::before, *::after {
