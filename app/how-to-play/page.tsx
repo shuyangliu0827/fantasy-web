@@ -44,7 +44,7 @@ const STEP_CONTENT: StepContent[] = [
         headingEn: "The Basics",
         items: [
           { zh: "每位玩家通过选秀选出一支由真实 NBA 球员组成的队伍", en: "Each manager drafts a roster of real NBA players" },
-          { zh: "球员在现实比赛中的表现直接转化为你的幻想积分", en: "Player real-game stats convert directly into your fantasy points" },
+          { zh: "球员在现实比赛中的表现直接转化为你的 fpts（分数）", en: "Player real-game stats convert directly into your fantasy points" },
           { zh: "每周你的队伍与另一位玩家的队伍正面对决", en: "Each week your team faces off head-to-head against another manager" },
           { zh: "积累更多胜场，进入季后赛争夺冠军", en: "Stack wins during the regular season to make the playoffs and compete for the title" },
         ],
@@ -70,7 +70,7 @@ const STEP_CONTENT: StepContent[] = [
         headingZh: "H2H 积分制对决",
         headingEn: "H2H Points Matchups",
         items: [
-          { zh: "每周双方所有首发球员的幻想积分加总相比较", en: "Each week, both teams' total fantasy points are compared" },
+          { zh: "每周双方所有首发球员的 fpts（分数）加总相比较", en: "Each week, both teams' total fantasy points are compared" },
           { zh: "总积分高者赢得本周对决，记为 1 胜", en: "The team with the higher total wins the matchup and earns 1 win" },
           { zh: "不按统计类别分项比较，总分直接决定胜负", en: "No per-category breakdown — your combined total determines the result" },
           { zh: "常规赛结束后，胜场数最多的球队进入季后赛", en: "After the regular season, teams with the most wins advance to the playoffs" },
