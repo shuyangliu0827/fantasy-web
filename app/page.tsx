@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
   { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
   { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
+  { href: "/discover", labelZh: "发现", labelEn: "Discover" },
 ];
 
 const FEATURES = [
@@ -262,33 +263,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Page tabs: 首页 / 发现 */}
-        <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px",
-          display: "flex", gap: 0, overflowX: "auto",
-          borderTop: "1px solid #f1f5f9",
-        }}>
-          {[
-            { labelZh: "首页", labelEn: "Home", href: "/", active: true },
-            { labelZh: "发现", labelEn: "Discover", href: "/discover", active: false },
-          ].map(tab => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              style={{
-                padding: "11px 20px",
-                fontSize: 14,
-                fontWeight: tab.active ? 700 : 500,
-                color: tab.active ? "#1e3a8a" : "#64748b",
-                textDecoration: "none",
-                borderBottom: tab.active ? "2px solid #1e3a8a" : "2px solid transparent",
-                transition: "all 0.15s",
-              }}
-            >
-              {lang === "zh" ? tab.labelZh : tab.labelEn}
-            </Link>
-          ))}
-        </div>
 
         {/* Mobile drawer */}
         {isMobile && menuOpen && (
