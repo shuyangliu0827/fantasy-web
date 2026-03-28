@@ -82,14 +82,15 @@ export default function HomePage() {
       .then(data => {
         const fallback = () => setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]);
         if (!data.players || data.players.length === 0) { fallback(); return; }
+        const norm = (n: string) => n.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const liveMap = new Map<string, { team: string; pts: number; reb: number; ast: number }>(
           data.players.map((p: { name: string; team: string; averages: { pts: number; reb: number; ast: number } }) => [
-            p.name.toLowerCase(),
+            norm(p.name),
             { team: p.team, pts: p.averages.pts, reb: p.averages.reb, ast: p.averages.ast },
           ])
         );
         const enriched: HeroPlayer[] = HERO_PLAYERS.map(hp => {
-          const live = liveMap.get(hp.name.toLowerCase());
+          const live = liveMap.get(norm(hp.name));
           if (!live) return hp;
           return {
             ...hp,
