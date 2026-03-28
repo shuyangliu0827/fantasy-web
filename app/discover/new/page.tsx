@@ -10,6 +10,7 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
+  { href: "/discover", labelZh: "发现", labelEn: "Discover" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
