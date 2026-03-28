@@ -5,6 +5,9 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 import { getCurrentSeasonLabel } from "@/lib/season";
+import HeroSection from "@/components/HeroSection";
+import DraftWinsSection from "@/components/DraftWinsSection";
+import { HERO_PLAYERS, type HeroPlayer } from "@/lib/heroPlayers";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
@@ -65,14 +68,16 @@ export default function HomePage() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
-  const [cta1Hovered, setCta1Hovered] = useState(false);
-  const [cta2Hovered, setCta2Hovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
 
   useEffect(() => {
     const u = getSessionUser();
     if (u) setUser({ name: u.name, username: u.username });
+
+    // Pick random player on client to avoid hydration mismatch
+    setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]);
 
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
@@ -310,6 +315,8 @@ export default function HomePage() {
         )}
       </header>
 
+      {/* Section 1: Dark cinematic hero */}
+      {heroPlayer && <HeroSection player={heroPlayer} />}
       {/* Hero */}
       <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
         <div style={{
@@ -450,51 +457,8 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* LeBron card — white, front */}
-            <div style={{
-              position: "absolute",
-              top: isMobile ? 24 : 50, left: isMobile ? 60 : 100,
-              width: isMobile ? 168 : 235, height: isMobile ? 220 : 305,
-              background: "#fff",
-              borderRadius: 22,
-              boxShadow: "0 28px 80px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.06)",
-              padding: isMobile ? "14px 14px" : "22px 24px",
-              zIndex: 3,
-              overflow: "hidden",
-            }}>
-              <div style={{
-                display: "inline-block", padding: "4px 10px",
-                background: "#eff6ff",
-                borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#2563eb", marginBottom: isMobile ? 8 : 14,
-              }}>SF</div>
-              <div style={{ fontSize: isMobile ? 54 : 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
-              <div style={{ fontSize: isMobile ? 14 : 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
-              <div style={{ fontSize: isMobile ? 10 : 13, color: "#94a3b8", marginBottom: isMobile ? 10 : 22 }}>LAL · 湖人</div>
-              <div style={{ height: 1, background: "#f1f5f9", marginBottom: isMobile ? 10 : 18 }} />
-              <div style={{ display: "flex", gap: 0 }}>
-                {[["25.2", "分"], ["7.3", "篮"], ["8.1", "助"]].map(([val, label], i) => (
-                  <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f1f5f9" : "none", paddingBottom: 4 }}>
-                    <div style={{ fontSize: isMobile ? 15 : 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px" }}>{val}</div>
-                    <div style={{ fontSize: isMobile ? 9 : 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Amber dot accent */}
-            <div style={{
-              position: "absolute",
-              bottom: isMobile ? 24 : 45, right: isMobile ? 4 : 18,
-              width: isMobile ? 32 : 48, height: isMobile ? 32 : 48,
-              background: "#f59e0b",
-              borderRadius: "50%",
-              boxShadow: "0 4px 20px rgba(245,158,11,0.35)",
-              zIndex: 4,
-            }} />
-            </div>
-          )}
-        </div>
-      </section>
+      {/* Section 2: Draft wins — product explainer */}
+      {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
       {/* Stats bar */}
       <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
