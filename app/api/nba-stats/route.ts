@@ -10,17 +10,8 @@ import { createClient } from "@supabase/supabase-js";
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
 import { getCurrentSeasonYear } from "@/lib/season";
+import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 const CURRENT_SEASON = getCurrentSeasonYear();
-
-const FANTASY_WEIGHTS = {
-  pts: 1,
-  reb: 1,
-  ast: 1,
-  stl: 2,
-  blk: 2,
-  fg3m: 1,
-  tov: -1,
-};
 
 // Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
@@ -30,8 +21,27 @@ const supabase = createClient(
 
 // ──────────────────────────────────────────────
 // Transform a player_stats_cache row → API shape
+// fptsAvg is recomputed from per-game averages using the current ESPN_DEFAULT_WEIGHTS
+// so that ranking reflects the latest scoring formula regardless of what is cached in DB.
 // ──────────────────────────────────────────────
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
 function rowToPlayer(row: any, index: number) {
+  const fptsAvg = r1(
+    (row.pts_avg  || 0) * ESPN_DEFAULT_WEIGHTS.pts  +
+    (row.fgm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fgm  +
+    (row.fga_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fga  +
+    (row.fg3m_avg || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
+    (row.ftm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ftm  +
+    (row.fta_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fta  +
+    (row.reb_avg  || 0) * ESPN_DEFAULT_WEIGHTS.reb  +
+    (row.ast_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ast  +
+    (row.stl_avg  || 0) * ESPN_DEFAULT_WEIGHTS.stl  +
+    (row.blk_avg  || 0) * ESPN_DEFAULT_WEIGHTS.blk  +
+    (row.tov_avg  || 0) * ESPN_DEFAULT_WEIGHTS.tov
+  );
+  const fpts = r1(fptsAvg * (row.games_played || 0));
+
   return {
     id: row.player_id,
     name: row.name,
@@ -71,8 +81,8 @@ function rowToPlayer(row: any, index: number) {
       tov:     row.tov_avg,
       pts:     row.pts_avg,
     },
-    fpts:     row.fpts,
-    fptsAvg:  row.fpts_avg,
+    fpts,
+    fptsAvg,
     rank:     index + 1,
     injury:   row.injury,
   };
@@ -166,10 +176,12 @@ async function refreshAndPersist() {
         tov:  r1(totals.tov  / gp), pts:  r1(totals.pts  / gp),
       };
       const fptsAvg = r1(
-        avg.pts * FANTASY_WEIGHTS.pts + avg.reb * FANTASY_WEIGHTS.reb +
-        avg.ast * FANTASY_WEIGHTS.ast + avg.stl * FANTASY_WEIGHTS.stl +
-        avg.blk * FANTASY_WEIGHTS.blk + avg.fg3m * FANTASY_WEIGHTS.fg3m +
-        avg.tov * FANTASY_WEIGHTS.tov
+        avg.pts  * ESPN_DEFAULT_WEIGHTS.pts  + avg.fgm  * ESPN_DEFAULT_WEIGHTS.fgm  +
+        avg.fga  * ESPN_DEFAULT_WEIGHTS.fga  + avg.fg3m * ESPN_DEFAULT_WEIGHTS.fg3m +
+        avg.ftm  * ESPN_DEFAULT_WEIGHTS.ftm  + avg.fta  * ESPN_DEFAULT_WEIGHTS.fta  +
+        avg.reb  * ESPN_DEFAULT_WEIGHTS.reb  + avg.ast  * ESPN_DEFAULT_WEIGHTS.ast  +
+        avg.stl  * ESPN_DEFAULT_WEIGHTS.stl  + avg.blk  * ESPN_DEFAULT_WEIGHTS.blk  +
+        avg.tov  * ESPN_DEFAULT_WEIGHTS.tov
       );
       rows.push({
         player_id: playerId,
@@ -238,7 +250,11 @@ export async function GET() {
     });
   }
 
-  const players = data.map((row, i) => rowToPlayer(row, i));
+  // Re-sort by recomputed fptsAvg (new weights) and reassign ranks
+  const unsorted = data.map((row) => rowToPlayer(row, 0));
+  unsorted.sort((a, b) => b.fptsAvg - a.fptsAvg);
+  unsorted.forEach((p, i) => { p.rank = i + 1; });
+  const players = unsorted;
   const lastUpdated = data.reduce((max: string | null, row) =>
     !max || row.updated_at > max ? row.updated_at : max, null);
 

@@ -69,13 +69,17 @@ async function fetchGameLogs(
         const min = parseMin(stat.min);
         if (min === 0 && stat.pts === 0) continue; // skip DNP stubs
         const fpts = calcFantasyPoints({
-          pts: stat.pts || 0,
-          reb: stat.reb || 0,
-          ast: stat.ast || 0,
-          stl: stat.stl || 0,
-          blk: stat.blk || 0,
-          fg3m: stat.fg3m || 0,
-          tov: stat.turnover || 0,
+          pts:  stat.pts     || 0,
+          fgm:  stat.fgm     || 0,
+          fga:  stat.fga     || 0,
+          fg3m: stat.fg3m    || 0,
+          ftm:  stat.ftm     || 0,
+          fta:  stat.fta     || 0,
+          reb:  stat.reb     || 0,
+          ast:  stat.ast     || 0,
+          stl:  stat.stl     || 0,
+          blk:  stat.blk     || 0,
+          tov:  stat.turnover || 0,
         }, ESPN_DEFAULT_WEIGHTS);
 
         logMap.get(pid)!.push({
@@ -312,13 +316,14 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
     ) ?? ALL_PLAYERS[0]; // ultimate fallback
 
     const fptsPerGame = r1(
-      staticPlayer.ppg * 1 +
-      staticPlayer.rpg * 1 +
-      staticPlayer.apg * 1 +
-      staticPlayer.spg * 2 +
-      staticPlayer.bpg * 2 +
-      (staticPlayer as any).fg3m * 1 +
-      staticPlayer.tov * -1
+      staticPlayer.ppg                  * ESPN_DEFAULT_WEIGHTS.pts  +
+      staticPlayer.rpg                  * ESPN_DEFAULT_WEIGHTS.reb  +
+      staticPlayer.apg                  * ESPN_DEFAULT_WEIGHTS.ast  +
+      staticPlayer.spg                  * ESPN_DEFAULT_WEIGHTS.stl  +
+      staticPlayer.bpg                  * ESPN_DEFAULT_WEIGHTS.blk  +
+      ((staticPlayer as any).fg3m || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
+      staticPlayer.tov                  * ESPN_DEFAULT_WEIGHTS.tov
+      // fgm/fga/ftm/fta not available in static lastSeason data → 0
     );
 
     const stability = estimateStabilityHeuristic(fptsPerGame, (staticPlayer as any).mpg ?? 32);
