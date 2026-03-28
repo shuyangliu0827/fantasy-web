@@ -66,6 +66,9 @@ a {
   color: inherit;
 }
 
+/* ── Google Fonts: Oswald (brand curtain) ───────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;600&display=swap');
+
 /* ── Brand Curtain Opening Sequence ─────────────────────────────── */
 @keyframes bp-text-reveal {
   from {

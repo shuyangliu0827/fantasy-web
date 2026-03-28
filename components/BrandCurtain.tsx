@@ -102,7 +102,7 @@ export default function BrandCurtain() {
           userSelect: "none",
         }}
       >
-        {/* "蓝本" logotype */}
+        {/* "BLUEPRINT" — primary logotype */}
         <div
           className={
             phase === "text-in" ? "bp-text-reveal"
@@ -110,31 +110,46 @@ export default function BrandCurtain() {
             : undefined
           }
           style={{
-            // fluid: 64px → 100px across screen widths
-            fontSize:   "clamp(64px, 11vw, 100px)",
-            fontWeight: 700,
-            color:      "#ffffff",
-            letterSpacing: "0.14em",
-            fontFamily: "'PingFang SC', 'Noto Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif",
-            lineHeight: 1,
+            fontSize:      "clamp(52px, 10vw, 96px)",
+            fontWeight:    600,
+            color:         "#ffffff",
+            letterSpacing: "0.22em",
+            fontFamily:    "'Oswald', sans-serif",
+            lineHeight:    1,
+            textTransform: "uppercase",
           }}
         >
-          蓝本
+          Blueprint
         </div>
 
-        {/* Accent hairline — appears with a short delay after the text */}
+        {/* Accent hairline */}
         <div
           className={phase === "text-in" ? "bp-line-reveal" : undefined}
           style={{
-            width:        36,
-            height:       2,
-            background:   "rgba(255, 255, 255, 0.38)",
-            margin:       "20px auto 0",
+            width:        48,
+            height:       1,
+            background:   "rgba(255, 255, 255, 0.35)",
+            margin:       "18px auto",
             borderRadius: 1,
-            // Stays visible after text-in phase
             opacity:      phase === "text-in" ? 0 : 1,
           }}
         />
+
+        {/* "FANTASY BASKETBALL" — subtitle */}
+        <div
+          className={phase === "text-in" ? "bp-line-reveal" : undefined}
+          style={{
+            fontSize:      "clamp(11px, 1.6vw, 15px)",
+            fontWeight:    300,
+            color:         "rgba(255, 255, 255, 0.62)",
+            letterSpacing: "0.42em",
+            fontFamily:    "'Oswald', sans-serif",
+            textTransform: "uppercase",
+            opacity:       phase === "text-in" ? 0 : 1,
+          }}
+        >
+          Fantasy Basketball
+        </div>
       </div>
     </div>
   );
