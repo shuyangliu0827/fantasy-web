@@ -3,21 +3,12 @@
 import { useEffect, useState } from "react";
 
 // ── Timing (ms) ──────────────────────────────────────────────────
-const SHOW_DURATION  = 1600;  // spinner visible before curtain lifts
-const SLIDE_DURATION = 950;   // curtain slide-up
+const SHOW_DURATION  = 1700;
+const SLIDE_DURATION = 950;
 const TOTAL          = SHOW_DURATION + SLIDE_DURATION + 30;
 
-// ── Brand colour ─────────────────────────────────────────────────
-const BG = "linear-gradient(160deg, #0a1628 0%, #0f2252 52%, #0c1e42 100%)";
-
-// ── Easing ───────────────────────────────────────────────────────
+const BG          = "linear-gradient(160deg, #0a1628 0%, #0f2252 52%, #0c1e42 100%)";
 const CURTAIN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
-
-// Circumference of the ring (r=58): 2π×58 ≈ 364
-// Arc length 100 → ~27% of circle; gap 265 → ~73%
-const RING_R    = 58;
-const ARC_LEN   = 100;
-const GAP_LEN   = Math.round(2 * Math.PI * RING_R) - ARC_LEN;
 
 type Phase = "showing" | "exiting" | "done";
 
@@ -25,24 +16,18 @@ export default function BrandCurtain() {
   const [phase, setPhase] = useState<Phase>("showing");
 
   useEffect(() => {
-    const key = "bp_intro_v2";
+    const key = "bp_intro_v3";
     const isFirst = !sessionStorage.getItem(key);
 
-    if (!isFirst) {
-      setPhase("done");
-      return;
-    }
-
+    if (!isFirst) { setPhase("done"); return; }
     sessionStorage.setItem(key, "1");
 
     const t1 = setTimeout(() => setPhase("exiting"), SHOW_DURATION);
     const t2 = setTimeout(() => setPhase("done"),    TOTAL);
-
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
   if (phase === "done") return null;
-
   const isExiting = phase === "exiting";
 
   return (
@@ -57,94 +42,119 @@ export default function BrandCurtain() {
         flexDirection:  "column",
         alignItems:     "center",
         justifyContent: "center",
-        transform:      isExiting ? "translateY(-100%)" : "translateY(0)",
-        transition:     isExiting
-          ? `transform ${SLIDE_DURATION}ms ${CURTAIN_EASE}`
-          : "none",
-        boxShadow:      isExiting ? "0 36px 100px rgba(0,0,0,0.5)" : "none",
+        transform:  isExiting ? "translateY(-100%)" : "translateY(0)",
+        transition: isExiting ? `transform ${SLIDE_DURATION}ms ${CURTAIN_EASE}` : "none",
+        boxShadow:  isExiting ? "0 36px 100px rgba(0,0,0,0.5)" : "none",
         willChange:     "transform",
         pointerEvents:  isExiting ? "none" : "auto",
       }}
     >
-      {/* Center radial glow */}
+      {/* Radial glow */}
       <div style={{
-        position:      "absolute",
-        inset:         0,
-        background:    "radial-gradient(ellipse 58% 48% at 50% 46%, rgba(37,99,235,0.22) 0%, transparent 70%)",
-        pointerEvents: "none",
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: "radial-gradient(ellipse 58% 48% at 50% 46%, rgba(37,99,235,0.22) 0%, transparent 70%)",
       }} />
 
-      {/* ── BF Spinner ────────────────────────────────────────────── */}
-      {/*
-          A ring where B sits at the top (12 o'clock) and F at the
-          bottom (6 o'clock). The whole assembly rotates so the ring
-          itself is "formed" by the two letters orbiting the center.
-          A bright arc segment riding the ring gives the loading feel.
-      */}
+      {/* ── BF logo spinner ────────────────────────────────────────
+          Hand-crafted SVG that imitates the circular bf logo:
+          • outer ring
+          • lowercase b  — tall stem with top curl, leaf, D-bowl
+          • lowercase f  — sweeping hook touching the ring, crossbar
+          • three leaf accents (top-of-b, f-hook junction, bottom-right)
+          The whole SVG rotates via .bp-spin.
+      ──────────────────────────────────────────────────────────── */}
       <div
         className="bp-spin"
         style={{ position: "relative", zIndex: 1, userSelect: "none" }}
       >
         <svg
-          viewBox="0 0 140 140"
-          width="140"
-          height="140"
-          overflow="visible"
+          viewBox="0 0 120 120"
+          width="160"
+          height="160"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Subtle full ring — the circular track */}
+          {/* ── Outer ring ────────────────────────────── */}
           <circle
-            cx="70" cy="70" r={RING_R}
-            fill="none"
-            stroke="rgba(255,255,255,0.13)"
-            strokeWidth="2"
+            cx="60" cy="60" r="50"
+            stroke="white" strokeWidth="2.8"
           />
 
-          {/* Bright arc that rides the ring — the loading indicator */}
-          <circle
-            cx="70" cy="70" r={RING_R}
-            fill="none"
-            stroke="rgba(255,255,255,0.82)"
-            strokeWidth="3"
-            strokeDasharray={`${ARC_LEN} ${GAP_LEN}`}
+          {/* ── "b" stem ──────────────────────────────── */}
+          {/*   Runs from bottom up; curves at the top     */}
+          {/*   into the leaf curl (right-hand curl)       */}
+          <path
+            d="M 43 84
+               C 43 70 42 50 42 35
+               C 42 26 45 21 49 19
+               C 52 17.5 55 18 57 21"
+            stroke="white" strokeWidth="3.5"
+            strokeLinecap="round" strokeLinejoin="round"
+          />
+
+          {/* ── "b" bowl ──────────────────────────────── */}
+          {/*   D-shaped loop from stem mid to stem lower  */}
+          <path
+            d="M 42 51
+               C 51 46 68 48 68 60
+               C 68 73 53 81 42 78"
+            stroke="white" strokeWidth="3.5"
             strokeLinecap="round"
           />
 
-          {/* ── B — top of ring (12 o'clock) ── */}
-          <text
-            x="70" y="12"
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontFamily="'Barlow Condensed', sans-serif"
-            fontWeight="800"
-            fontStyle="italic"
-            fontSize="28"
-            fill="white"
-          >
-            B
-          </text>
+          {/* ── "f" vertical stem ─────────────────────── */}
+          <line
+            x1="70" y1="26" x2="70" y2="84"
+            stroke="white" strokeWidth="3.5" strokeLinecap="round"
+          />
 
-          {/* ── F — bottom of ring (6 o'clock) ── */}
-          <text
-            x="70" y="128"
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontFamily="'Barlow Condensed', sans-serif"
-            fontWeight="800"
-            fontStyle="italic"
-            fontSize="28"
+          {/* ── "f" hook ──────────────────────────────── */}
+          {/*   Sweeps from stem top rightward, arching    */}
+          {/*   toward the outer ring (upper-right area)   */}
+          <path
+            d="M 70 28
+               C 70 17 80 11 87 18
+               C 92 23 91 33 83 36"
+            stroke="white" strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+
+          {/* ── "f" crossbar ──────────────────────────── */}
+          {/*   Horizontal bar at the same level as the   */}
+          {/*   b bowl's upper edge, creating unity        */}
+          <line
+            x1="57" y1="52" x2="82" y2="52"
+            stroke="white" strokeWidth="3.5" strokeLinecap="round"
+          />
+
+          {/* ── Leaf: top of b curl ───────────────────── */}
+          <path
+            d="M 57 21 C 61 12 68 14 64 22 C 62 27 56 25 57 21 Z"
             fill="white"
-          >
-            F
-          </text>
+          />
+
+          {/* ── Leaf: f hook junction with ring ──────── */}
+          {/*   Sits where the hook arc meets the circle  */}
+          <path
+            d="M 87 18 C 93 10 100 15 95 23 C 92 28 85 24 87 18 Z"
+            fill="white"
+          />
+
+          {/* ── Leaf: lower-right decorative accent ──── */}
+          {/*   Matches the bottom leaf in the reference  */}
+          <path
+            d="M 90 75 C 96 68 102 73 96 81 C 93 85 87 80 90 75 Z"
+            fill="white"
+          />
         </svg>
       </div>
 
-      {/* ── "LOAD BLUEPRINT FANTASY" ──────────────────────────────── */}
+      {/* ── "LOAD BLUEPRINT FANTASY" ────────────────────────────── */}
       <div
         style={{
           position:      "relative",
           zIndex:        1,
-          marginTop:     40,
+          marginTop:     36,
           fontFamily:    "'Barlow Condensed', sans-serif",
           fontWeight:    700,
           fontStyle:     "italic",
