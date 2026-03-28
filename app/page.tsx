@@ -68,8 +68,6 @@ export default function HomePage() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
-  const [cta1Hovered, setCta1Hovered] = useState(false);
-  const [cta2Hovered, setCta2Hovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
@@ -345,92 +343,6 @@ export default function HomePage() {
 
       {/* Section 1: Dark cinematic hero */}
       {heroPlayer && <HeroSection player={heroPlayer} />}
-      {/* Hero */}
-      <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
-        <div style={{
-          maxWidth: 1200, margin: "0 auto",
-          display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 24 : 48,
-        }}>
-
-          {/* Left: copy */}
-          <div style={{ flex: "0 0 52%", minWidth: 0 }}>
-
-            {/* Badge */}
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "6px 14px",
-              background: "#eff6ff",
-              borderRadius: 999,
-              marginBottom: 28,
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb" }}>
-                {t(`${getCurrentSeasonLabel()} NBA赛季 · 数据实时更新`, `${getCurrentSeasonLabel()} NBA Season · Live Data`)}
-              </span>
-            </div>
-
-            {/* Heading */}
-            <h1 style={{ margin: 0, lineHeight: 1.12 }}>
-              <div style={{ fontSize: isMobile ? 36 : 58, fontWeight: 800, color: "#0f172a", letterSpacing: isMobile ? "-1px" : "-2px" }}>
-                {t("用数据赢得", "Win Your Draft")}
-              </div>
-              <div style={{ fontSize: isMobile ? 36 : 58, fontWeight: 800, color: "#2563eb", letterSpacing: isMobile ? "-1px" : "-2px", fontStyle: "italic" }}>
-                {t("每一场选秀", "With Data")}
-              </div>
-            </h1>
-
-            {/* Description */}
-            <p style={{ margin: "22px 0 36px", fontSize: 16, lineHeight: 1.75, color: "#64748b", maxWidth: 430 }}>
-              {t(
-                "中国首个专业范特西篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
-                "China's first professional fantasy basketball platform. AI rankings, live data, deep analysis — so you nail every pick."
-              )}
-            </p>
-
-            {/* CTAs */}
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <Link
-                href="/auth/signup"
-                onMouseEnter={() => setCta1Hovered(true)}
-                onMouseLeave={() => setCta1Hovered(false)}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 8,
-                  padding: "14px 30px",
-                  background: cta1Hovered ? "#1e40af" : "#1e3a8a",
-                  color: "#fff",
-                  borderRadius: 10,
-                  fontSize: 16,
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  transition: "background 0.15s",
-                  boxShadow: "0 4px 16px rgba(30,58,138,0.25)",
-                }}
-              >
-                {t("免费开始", "Get Started")} →
-              </Link>
-              <Link
-                href="/draft-guide"
-                onMouseEnter={() => setCta2Hovered(true)}
-                onMouseLeave={() => setCta2Hovered(false)}
-                style={{
-                  display: "inline-flex", alignItems: "center",
-                  padding: "14px 30px",
-                  border: `2px solid ${cta2Hovered ? "#cbd5e1" : "#e2e8f0"}`,
-                  color: "#374151",
-                  borderRadius: 10,
-                  fontSize: 16,
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  background: cta2Hovered ? "#f8fafc" : "#fff",
-                  transition: "all 0.15s",
-                }}
-              >
-                {t("查看Fantasy新闻", "Fantasy News")}
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Section 2: Draft wins — product explainer */}
       {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
