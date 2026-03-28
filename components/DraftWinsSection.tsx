@@ -317,7 +317,6 @@ function StatCapsule({
 
 export default function DraftWinsSection({ player, isMobile }: Props) {
   const { t } = useLang();
-  const [cta1Hover, setCta1Hover] = useState(false);
   const [cta2Hover, setCta2Hover] = useState(false);
 
   return (
@@ -411,28 +410,7 @@ export default function DraftWinsSection({ player, isMobile }: Props) {
           </p>
 
           {/* CTAs */}
-          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            <Link
-              href="/auth/signup"
-              onMouseEnter={() => setCta1Hover(true)}
-              onMouseLeave={() => setCta1Hover(false)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "14px 30px",
-                background: cta1Hover ? "#1e40af" : "#1e3a8a",
-                color: "#fff",
-                borderRadius: 10,
-                fontSize: 16,
-                fontWeight: 700,
-                textDecoration: "none",
-                transition: "background 0.15s",
-                boxShadow: "0 4px 16px rgba(30,58,138,0.25)",
-              }}
-            >
-              {t("免费开始", "Get Started")} →
-            </Link>
+          <div style={{ display: "flex" }}>
             <Link
               href="/how-to-play"
               onMouseEnter={() => setCta2Hover(true)}
