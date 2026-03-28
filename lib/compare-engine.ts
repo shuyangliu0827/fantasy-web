@@ -498,7 +498,7 @@ export function reweightPlayer(player: CompareStats, weights: PointsWeights): Co
   const adjustedLogs: GameLog[] = player.gameLogs.map(log => ({
     ...log,
     fpts: r1(calcFantasyPoints(
-      { pts: log.pts, reb: log.reb, ast: log.ast, stl: log.stl, blk: log.blk, fg3m: log.fg3m, tov: log.tov },
+      { pts: log.pts, fgm: log.fgm, fga: log.fga, fg3m: log.fg3m, ftm: log.ftm, fta: log.fta, reb: log.reb, ast: log.ast, stl: log.stl, blk: log.blk, tov: log.tov },
       weights,
     )),
   }));
