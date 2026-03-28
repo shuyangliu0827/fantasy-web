@@ -9,6 +9,7 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
+  { href: "/discover", labelZh: "发现", labelEn: "Discover" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
@@ -210,24 +211,6 @@ export default function DiscoverPage() {
           </div>
         )}
 
-        {/* Page tabs */}
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 24px", display: "flex", gap: 0, overflowX: "auto", borderTop: "1px solid #f1f5f9" }}>
-          {[
-            { labelZh: "首页", labelEn: "Home", href: "/", active: false },
-            { labelZh: "发现", labelEn: "Discover", href: "/discover", active: true },
-          ].map(tab => (
-            <Link key={tab.href} href={tab.href} style={{
-              padding: "11px 20px", fontSize: 14,
-              fontWeight: tab.active ? 700 : 500,
-              color: tab.active ? "#1e3a8a" : "#64748b",
-              textDecoration: "none",
-              borderBottom: tab.active ? "2px solid #1e3a8a" : "2px solid transparent",
-              transition: "all 0.15s",
-            }}>
-              {lang === "zh" ? tab.labelZh : tab.labelEn}
-            </Link>
-          ))}
-        </div>
       </header>
 
       {/* Hero bar */}
