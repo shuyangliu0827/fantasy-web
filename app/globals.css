@@ -66,6 +66,41 @@ a {
   color: inherit;
 }
 
+/* ── Brand Curtain Opening Sequence ─────────────────────────────── */
+@keyframes bp-text-reveal {
+  from {
+    opacity: 0;
+    filter: blur(14px);
+    transform: scale(0.94) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes bp-text-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.82; transform: scale(1.006); }
+}
+
+@keyframes bp-line-reveal {
+  from { opacity: 0; transform: scaleX(0); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+.bp-text-reveal {
+  animation: bp-text-reveal 0.78s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.bp-text-breathe {
+  animation: bp-text-breathe 3s ease-in-out infinite;
+}
+.bp-line-reveal {
+  animation: bp-line-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+  transform-origin: center;
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
