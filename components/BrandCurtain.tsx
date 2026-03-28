@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 
 // ── Tuneable constants ────────────────────────────────────────────
-const TEXT_IN_DURATION    = 780;   // blur → clear
-const HOLD_DURATION       = 520;   // breathe pause
-const CURTAIN_UP_DURATION = 1100;  // slide-up exit
+const TEXT_IN_DURATION    = 780;
+const HOLD_DURATION       = 520;
+const CURTAIN_UP_DURATION = 1100;
 const TOTAL_HOLD = TEXT_IN_DURATION + HOLD_DURATION;
 const TOTAL      = TOTAL_HOLD + CURTAIN_UP_DURATION + 40;
 
@@ -19,12 +19,6 @@ export default function BrandCurtain() {
   const [phase, setPhase] = useState<Phase>("text-in");
 
   useEffect(() => {
-    const key = "bp_intro_v4";
-    const isFirst = !sessionStorage.getItem(key);
-
-    if (!isFirst) { setPhase("done"); return; }
-    sessionStorage.setItem(key, "1");
-
     const t1 = setTimeout(() => setPhase("holding"),  TEXT_IN_DURATION);
     const t2 = setTimeout(() => setPhase("exiting"),  TOTAL_HOLD);
     const t3 = setTimeout(() => setPhase("done"),     TOTAL);
