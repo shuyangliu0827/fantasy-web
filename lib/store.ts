@@ -52,6 +52,7 @@
      cover_url?: string;
      images?: string[];      // 多图支持
      tags?: string[];
+     content_type?: string;  // 'community' | 'news'
      author_id: string;
      author?: User;
      heat: number;
@@ -218,10 +219,17 @@
        .slice(0, 30);
      const username = rawHandle || normalizedEmail.split("@")[0];
 
+     // Build the confirmation redirect URL
+     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+
      // 1. Create Supabase Auth account — this is the ONLY auth authority
      const { data: authData, error: authError } = await supabase.auth.signUp({
        email: normalizedEmail,
        password,
+       options: {
+         emailRedirectTo: `${baseUrl}/auth/confirm`,
+         data: { name },
+       },
      });
 
      if (authError) {
@@ -249,7 +257,8 @@
 
      if (insertError) return { ok: false as const, error: insertError.message };
 
-     setSessionUser(newUser);
+     // Do NOT set session here — user must confirm email first.
+     // Session will be set on login after email confirmation.
      return { ok: true as const, user: newUser };
    }
 
@@ -271,20 +280,30 @@
        return { ok: false as const, error: "Login failed" };
      }
 
-     // Fetch user profile from public.users table
+     // Fetch user profile from public.users table (try by id first, then by email)
      let { data: user } = await supabase
        .from("users")
        .select("*")
-       .eq("email", normalizedEmail)
+       .eq("id", authData.user.id)
        .single();
 
-     // If public.users row is missing, auto-create it so FK constraints work
+     if (!user) {
+       // Try by email as fallback
+       const { data: userByEmail } = await supabase
+         .from("users")
+         .select("*")
+         .eq("email", normalizedEmail)
+         .single();
+       user = userByEmail;
+     }
+
+     // If public.users row is truly missing, create it (but never overwrite existing)
      if (!user) {
        const fallbackUsername = normalizedEmail.split("@")[0];
        const fallbackName = authData.user.user_metadata?.name || fallbackUsername;
        const { data: newUser } = await supabase
          .from("users")
-         .upsert({ id: authData.user.id, name: fallbackName, email: normalizedEmail, username: fallbackUsername }, { onConflict: "id" })
+         .insert({ id: authData.user.id, name: fallbackName, email: normalizedEmail, username: fallbackUsername })
          .select()
          .single();
        user = newUser;
@@ -298,6 +317,20 @@
      return { ok: true as const, user };
    }
    
+   // ==================== Email Confirmation ====================
+
+   export async function resendConfirmationEmail(email: string) {
+     const normalizedEmail = email.trim().toLowerCase();
+     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+     const { error } = await supabase.auth.resend({
+       type: "signup",
+       email: normalizedEmail,
+       options: { emailRedirectTo: `${baseUrl}/auth/confirm` },
+     });
+     if (error) return { ok: false as const, error: error.message };
+     return { ok: true as const };
+   }
+
    // ==================== Password Reset ====================
 
    export async function requestPasswordReset(email: string, redirectUrl?: string) {
@@ -345,40 +378,72 @@
      userId: string,
      fields: { name?: string; bio?: string; avatar_url?: string }
    ): Promise<{ ok: true; user: User } | { ok: false; error: string }> {
-     // Save bio to localStorage (bio column may not exist in DB yet)
-     if (fields.bio !== undefined && typeof window !== "undefined") {
-       localStorage.setItem(`bp_bio_${userId}`, fields.bio);
-     }
-     // Only send DB-safe fields to Supabase
      const dbFields: Record<string, string> = {};
-     if (fields.name) dbFields.name = fields.name;
-     if (fields.avatar_url) dbFields.avatar_url = fields.avatar_url;
+     if (fields.name !== undefined) dbFields.name = fields.name;
+     if (fields.bio !== undefined) dbFields.bio = fields.bio;
+     if (fields.avatar_url !== undefined) dbFields.avatar_url = fields.avatar_url;
      if (Object.keys(dbFields).length === 0) {
-       // Nothing to update in DB, just sync session
        const session = getSessionUser();
-       if (session && session.id === userId) {
-         setSessionUser({ ...session, bio: fields.bio });
-       }
        return { ok: true, user: (session || { id: userId }) as User };
      }
-     const { data, error } = await supabase
+     let { data, error } = await supabase
        .from("users")
        .update(dbFields)
        .eq("id", userId)
        .select()
        .single();
+     // If bio column doesn't exist in DB, retry without it and store bio in localStorage
+     if (error && dbFields.bio !== undefined && error.message.includes("bio")) {
+       const { bio, ...safeBioFields } = dbFields;
+       if (typeof window !== "undefined") {
+         localStorage.setItem(`bp_bio_${userId}`, bio);
+       }
+       if (Object.keys(safeBioFields).length === 0) {
+         const session = getSessionUser();
+         if (session && session.id === userId) {
+           setSessionUser({ ...session, bio });
+         }
+         return { ok: true, user: (session || { id: userId }) as User };
+       }
+       const retry = await supabase
+         .from("users")
+         .update(safeBioFields)
+         .eq("id", userId)
+         .select()
+         .single();
+       data = retry.data;
+       error = retry.error;
+       if (!error && data) {
+         data.bio = bio;
+       }
+     }
      if (error) return { ok: false, error: error.message };
      // Sync localStorage session with updated user data
      const session = getSessionUser();
      if (session && session.id === userId) {
-       setSessionUser({ ...session, ...data, bio: fields.bio });
+       setSessionUser({ ...session, ...data });
      }
-     return { ok: true, user: { ...data, bio: fields.bio } as User };
+     // Also sync name to Supabase Auth user_metadata for login fallback consistency
+     if (fields.name) {
+       supabase.auth.updateUser({ data: { name: fields.name } }).catch(() => {});
+     }
+     return { ok: true, user: data as User };
    }
 
-   export function getUserBio(userId: string): string | null {
-     if (typeof window === "undefined") return null;
-     return localStorage.getItem(`bp_bio_${userId}`) || null;
+   export async function getUserProfile(username: string): Promise<{ id: string; name: string; username: string; avatar_url?: string; bio?: string } | null> {
+     // Use select("*") to avoid schema cache errors if bio column doesn't exist yet
+     const { data, error } = await supabase
+       .from("users")
+       .select("*")
+       .ilike("username", username)
+       .single();
+     if (error) return null;
+     // If bio wasn't in the DB, try localStorage fallback
+     if (data && !data.bio && typeof window !== "undefined") {
+       const localBio = localStorage.getItem(`bp_bio_${data.id}`);
+       if (localBio) data.bio = localBio;
+     }
+     return data;
    }
 
    // ==================== Search ====================
@@ -446,12 +511,75 @@
      const { data, error } = await supabase
        .from("insights")
        .select(`*, author:users(id, name, username, avatar_url)`)
+       .or("content_type.eq.community,content_type.is.null")
        .order("created_at", { ascending: false });
      if (error) {
        console.error("Error fetching insights:", error);
        return [];
      }
      return data || [];
+   }
+
+   // ==================== News (separate from Discover) ====================
+
+   export async function listNewsInsights(): Promise<Insight[]> {
+     const { data, error } = await supabase
+       .from("insights")
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .eq("content_type", "news")
+       .order("created_at", { ascending: false });
+     if (error) {
+       console.error("Error fetching news:", error);
+       return [];
+     }
+     return data || [];
+   }
+
+   export async function canUserPublishNews(): Promise<boolean> {
+     const user = getSessionUser();
+     if (!user) return false;
+     const { data, error } = await supabase
+       .from("users")
+       .select("can_publish_news")
+       .eq("id", user.id)
+       .single();
+     if (error || !data) return false;
+     return data.can_publish_news === true;
+   }
+
+   export async function createNewsInsight(input: {
+     title: string;
+     body: string;
+     cover_url?: string;
+     images?: string[];
+     tags?: string[];
+   }) {
+     const user = getSessionUser();
+     if (!user) return { ok: false as const, error: "Login required" };
+
+     // Backend permission check — verify can_publish_news from DB
+     const allowed = await canUserPublishNews();
+     if (!allowed) return { ok: false as const, error: "Permission denied: not authorized to publish news" };
+
+     const { data, error } = await supabase
+       .from("insights")
+       .insert({
+         title: input.title.trim(),
+         body: input.body.trim(),
+         cover_url: input.cover_url,
+         images: input.images,
+         tags: input.tags,
+         author_id: user.id,
+         content_type: "news",
+         heat: 0,
+       })
+       .select(`*, author:users(id, name, username, avatar_url)`)
+       .single();
+
+     if (error) {
+       return { ok: false as const, error: error.message };
+     }
+     return { ok: true as const, insight: data };
    }
    
    export async function getInsightById(id: string): Promise<Insight | null> {
@@ -1469,8 +1597,50 @@
      return allPlayers.filter(p => !activeIds.has(p.id));
    }
 
+   // Returns the Monday date string (YYYY-MM-DD) for the current week
+   function getWeekStart(): string {
+     const today = new Date();
+     const day = today.getDay(); // 0=Sun, 1=Mon, ...
+     const diff = day === 0 ? -6 : 1 - day;
+     const monday = new Date(today);
+     monday.setDate(today.getDate() + diff);
+     return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+   }
+
+   export function getPickupCount(leagueId: string, teamId: string): number {
+     if (!canUseStorage()) return 0;
+     const stored = localStorage.getItem(`bp_pickup_${leagueId}_${teamId}`);
+     if (!stored) return 0;
+     const counts = JSON.parse(stored) as Record<string, number>;
+     return counts[getWeekStart()] || 0;
+   }
+
+   export function syncPickupCountFromDB(teamId: string, leagueId: string, dbCounts: Record<string, number>): void {
+     if (!canUseStorage()) return;
+     localStorage.setItem(`bp_pickup_${leagueId}_${teamId}`, JSON.stringify(dbCounts));
+   }
+
+   function incrementPickupCount(leagueId: string, teamId: string): void {
+     if (!canUseStorage()) return;
+     const key = `bp_pickup_${leagueId}_${teamId}`;
+     const stored = localStorage.getItem(key);
+     const counts: Record<string, number> = stored ? JSON.parse(stored) : {};
+     const weekStart = getWeekStart();
+     counts[weekStart] = (counts[weekStart] || 0) + 1;
+     localStorage.setItem(key, JSON.stringify(counts));
+     supabase.from("fantasy_teams").update({ pickup_counts: counts }).eq("id", teamId).then(() => {});
+   }
+
+   export const WEEKLY_PICKUP_LIMIT = 7;
+
    export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
+
+     const pickupCount = getPickupCount(leagueId, teamId);
+     if (pickupCount >= WEEKLY_PICKUP_LIMIT) {
+       return { ok: false, error: "本周签约次数已达上限（每周最多7次）" };
+     }
+
      const roster = getTeamRoster(leagueId, teamId);
      const allPlayers = getPlayers();
      const player = allPlayers.find(p => p.id === playerId);
@@ -1528,6 +1698,7 @@
 
      roster.push(newPlayer);
      setTeamRoster(leagueId, teamId, roster);
+     incrementPickupCount(leagueId, teamId);
      return { ok: true };
    }
 

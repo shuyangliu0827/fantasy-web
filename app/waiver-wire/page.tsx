@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { getPlayers, Player, getSessionUser, addToWatchlist, removeFromWatchlist, getWatchlist } from "@/lib/store";
+import PlayerAvatar from "@/components/PlayerAvatar";
 
 type WaiverPlayer = Player & {
   addRate: number;
@@ -77,7 +78,7 @@ export default function WaiverWirePage() {
           <nav className="main-nav">
             <Link href="/">Home</Link>
             <Link href="/rankings">Rankings</Link>
-            <Link href="/draft-guide">Draft Guide</Link>
+            <Link href="/draft-guide">Fantasy News</Link>
             <Link href="/waiver-wire" className="active">Waiver Wire</Link>
             <Link href="/how-to-play">How to Play</Link>
           </nav>
@@ -127,7 +128,8 @@ export default function WaiverWirePage() {
             <div key={player.id} className="waiver-card">
               <div className="waiver-rank">{idx + 1}</div>
               
-              <div className="waiver-player">
+              <div className="waiver-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <PlayerAvatar name={player.name} size={32} />
                 <div className="waiver-player-main">
                   <div className="waiver-name">{player.name}</div>
                   <div className="waiver-meta">

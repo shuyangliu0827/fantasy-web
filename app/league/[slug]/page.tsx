@@ -1,7 +1,7 @@
 // app/league/[slug]/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
@@ -24,7 +24,16 @@ export default function LeaguePage() {
   const [teamName, setTeamName] = useState("");
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "history" | "draft" | "news" | "settings">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "chat" | "news" | "settings">("standings");
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [annTitle, setAnnTitle] = useState("");
+  const [annContent, setAnnContent] = useState("");
+  const [annPosting, setAnnPosting] = useState(false);
+  const [showAnnForm, setShowAnnForm] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -34,6 +43,108 @@ export default function LeaguePage() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "chat" || !myTeam || !league) return;
+
+    // Load existing messages
+    storeSupa
+      .from("league_chat_messages")
+      .select("*")
+      .eq("league_id", league.id)
+      .order("created_at", { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        setChatMessages(data || []);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      });
+
+    // Realtime subscription
+    const channel = storeSupa
+      .channel(`chat:${league.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "league_chat_messages",
+        filter: `league_id=eq.${league.id}`,
+      }, (payload) => {
+        setChatMessages((prev) => {
+          // Replace optimistic message if same user+content, otherwise append
+          const exists = prev.some((m) => m.id === payload.new.id);
+          if (exists) return prev;
+          const optIdx = prev.findIndex((m) => m.id.startsWith("opt-") && m.user_id === payload.new.user_id && m.message === payload.new.message);
+          if (optIdx !== -1) {
+            const next = [...prev];
+            next[optIdx] = payload.new;
+            return next;
+          }
+          return [...prev, payload.new];
+        });
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      })
+      .subscribe();
+
+    return () => { storeSupa.removeChannel(channel); };
+  }, [activeTab, myTeam, league]);
+
+  useEffect(() => {
+    if (activeTab !== "news" || !league) return;
+    storeSupa
+      .from("league_announcements")
+      .select("*")
+      .eq("league_id", league.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setAnnouncements(data || []));
+  }, [activeTab, league]);
+
+  async function postAnnouncement() {
+    if (!annContent.trim() || !league || !currentUser) return;
+    setAnnPosting(true);
+    const { data, error } = await storeSupa.from("league_announcements").insert({
+      league_id: league.id,
+      title: annTitle.trim() || null,
+      content: annContent.trim(),
+    }).select().single();
+    if (!error && data) {
+      setAnnouncements((prev) => [data, ...prev]);
+      setAnnTitle("");
+      setAnnContent("");
+      setShowAnnForm(false);
+    } else if (error) {
+      alert("发布失败：" + error.message);
+    }
+    setAnnPosting(false);
+  }
+
+  async function deleteAnnouncement(id: string) {
+    await storeSupa.from("league_announcements").delete().eq("id", id);
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || !myTeam || !league || !currentUser) return;
+    setChatSending(true);
+    const text = chatInput.trim();
+    setChatInput("");
+    const username = myTeam.name || currentUser.email?.split("@")[0] || "用户";
+    // Optimistic update — show message immediately
+    const optimistic = { id: `opt-${Date.now()}`, league_id: league.id, user_id: currentUser.id, username, message: text, created_at: new Date().toISOString() };
+    setChatMessages((prev) => [...prev, optimistic]);
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    const { error } = await storeSupa.from("league_chat_messages").insert({
+      league_id: league.id,
+      user_id: currentUser.id,
+      username,
+      message: text,
+    });
+    if (error) {
+      console.error("Chat insert error:", error);
+      alert("发送失败：" + error.message);
+      setChatMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setChatInput(text);
+    }
+    setChatSending(false);
+  }
 
   async function init() {
     try {
@@ -200,7 +311,7 @@ export default function LeaguePage() {
     const TABS: { key: string; label: string; href?: string }[] = [
       { key: "standings", label: "积分榜" },
       { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
-      { key: "draft", label: "选秀记录" },
+      { key: "chat", label: "聊天室" },
       { key: "news", label: "联赛公告" },
       { key: "settings", label: "联赛设置" },
     ];
@@ -327,14 +438,15 @@ export default function LeaguePage() {
 
         {/* ── Tab bar ── */}
         <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
             {TABS.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
                 style={{
-                  padding: "16px 20px", background: "none", border: "none", cursor: "pointer",
-                  fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                  padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
+                  fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,
+                  whiteSpace: "nowrap", flexShrink: 0,
                   color: activeTab === tab.key ? "#1e3a8a" : "#6b7280",
                   borderBottom: activeTab === tab.key ? "2.5px solid #1e3a8a" : "2.5px solid transparent",
                   transition: "all 0.15s",
@@ -352,14 +464,15 @@ export default function LeaguePage() {
           {/* ── Standings table ── */}
           {activeTab === "standings" && (
             <div style={{ flex: 1 }}>
-              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14 }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>积分榜</h2>
                   <Link href={`/league/${leagueId}/standings`} style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 600, textDecoration: "none" }}>
                     查看完整排名 →
                   </Link>
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
                       <th style={thStyle}>次名</th>
@@ -435,6 +548,7 @@ export default function LeaguePage() {
                     })}
                   </tbody>
                 </table>
+                </div>
                 {sortedTeams.length === 0 && (
                   <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>
                     暂无队伍数据
@@ -444,8 +558,124 @@ export default function LeaguePage() {
             </div>
           )}
 
+          {/* Chat tab */}
+          {activeTab === "chat" && (
+            <div style={{ flex: 1 }}>
+              {!myTeam ? (
+                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>仅联赛成员可查看聊天室</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>加入联赛后即可参与讨论</p>
+                </div>
+              ) : (
+                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, display: "flex", flexDirection: "column", height: 520 }}>
+                  {/* Header */}
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", fontWeight: 700, fontSize: 15, color: "#1e3a8a" }}>
+                    聊天室
+                  </div>
+                  {/* Messages */}
+                  <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {chatMessages.length === 0 && (
+                      <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, marginTop: 40 }}>暂无消息，来打个招呼吧！</div>
+                    )}
+                    {chatMessages.map((msg) => {
+                      const isMe = msg.user_id === currentUser?.id;
+                      return (
+                        <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: isMe ? "#1e3a8a" : "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: isMe ? "#fff" : "#374151", flexShrink: 0, textAlign: "center", padding: "0 2px", overflow: "hidden", lineHeight: 1.2 }}>
+                            {msg.username || "?"}
+                          </div>
+                          <div style={{ maxWidth: "65%" }}>
+                            {!isMe && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>{msg.username}</div>}
+                            <div style={{ background: isMe ? "#1e3a8a" : "#f3f4f6", color: isMe ? "#fff" : "#111827", borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px", padding: "8px 12px", fontSize: 14, lineHeight: 1.5 }}>
+                              {msg.message}
+                            </div>
+                            <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 3, textAlign: isMe ? "right" : "left" }}>
+                              {new Date(msg.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatBottomRef} />
+                  </div>
+                  {/* Input */}
+                  <div style={{ padding: "12px 16px", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8 }}>
+                    <input
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                      placeholder="输入消息..."
+                      style={{ flex: 1, border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, outline: "none", fontFamily: FONT }}
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      disabled={chatSending || !chatInput.trim()}
+                      style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: chatSending || !chatInput.trim() ? "not-allowed" : "pointer", opacity: chatSending || !chatInput.trim() ? 0.5 : 1 }}
+                    >
+                      发送
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Announcements tab */}
+          {activeTab === "news" && (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+              {currentUser?.id === league?.commissioner_id && (
+                <div>
+                  {!showAnnForm ? (
+                    <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                      + 发布公告
+                    </button>
+                  ) : (
+                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>发布新公告</div>
+                      <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="标题（选填）" style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
+                      <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder="公告内容..." rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
+                          {annPosting ? "发布中..." : "发布"}
+                        </button>
+                        <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {announcements.length === 0 ? (
+                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>暂无公告</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>联赛房主可在此发布公告</p>
+                </div>
+              ) : (
+                announcements.map((ann) => (
+                  <div key={ann.id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: 20 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1 }}>
+                        {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
+                        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
+                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+                          {new Date(ann.created_at).toLocaleString("zh-CN")}
+                        </div>
+                      </div>
+                      {currentUser?.id === league?.commissioner_id && (
+                        <button onClick={() => deleteAnnouncement(ann.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, marginLeft: 12, padding: 4 }}>×</button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Other tabs placeholder */}
-          {activeTab !== "standings" && (
+          {activeTab !== "standings" && activeTab !== "chat" && activeTab !== "news" && (
             <div style={{ flex: 1 }}>
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>🏗️</div>
@@ -687,14 +917,15 @@ export default function LeaguePage() {
 
       {/* ── Tab bar ── */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 64, zIndex: 10 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 12px" : "0 32px", display: "flex", gap: 0, overflowX: "auto", scrollbarWidth: "none", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
           {PRE_DRAFT_TABS.map(tab => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
               style={{
-                padding: "16px 20px", background: "none", border: "none", cursor: "pointer",
-                fontSize: 14, fontWeight: 600, fontFamily: FONT,
+                padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
+                fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,
+                whiteSpace: "nowrap", flexShrink: 0,
                 color: activeTab === tab.key ? "#1e3a8a" : "#6b7280",
                 borderBottom: activeTab === tab.key ? "2.5px solid #1e3a8a" : "2.5px solid transparent",
                 transition: "all 0.15s",
@@ -774,19 +1005,54 @@ export default function LeaguePage() {
 
         {/* ── Announcement tab ── */}
         {activeTab === "news" && (
-          <div style={{ flex: 1 }}>
-            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: "24px" }}>
-              <h2 style={{ margin: "0 0 12px", fontSize: 17, fontWeight: 700, color: "#111827" }}>📢 联赛公告</h2>
-              <p style={{ margin: 0, color: "#374151", lineHeight: 1.8, fontSize: 14 }}>
-                {league.description || "欢迎来到联赛！准备好开始你的 Fantasy 篮球之旅了吗？"}
-              </p>
-              <div style={{ marginTop: 16, padding: "14px 16px", background: "#f9fafb", borderRadius: 10, fontSize: 13, color: "#6b7280", lineHeight: 1.7 }}>
-                <div style={{ fontWeight: 600, color: "#374151", marginBottom: 6 }}>选秀规则</div>
-                <div>· 赛制：{league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}</div>
-                <div>· 最大队伍数：{league.max_teams}</div>
-                <div>· 当前状态：{statusLabel}，选秀尚未开始</div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+            {currentUser?.id === league?.commissioner_id && (
+              <div>
+                {!showAnnForm ? (
+                  <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                    + 发布公告
+                  </button>
+                ) : (
+                  <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>发布新公告</div>
+                    <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="标题（选填）" style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
+                    <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder="公告内容..." rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
+                        {annPosting ? "发布中..." : "发布"}
+                      </button>
+                      <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+            {announcements.length === 0 ? (
+              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>暂无公告</p>
+                <p style={{ fontSize: 13, margin: 0 }}>联赛房主可在此发布公告</p>
+              </div>
+            ) : (
+              announcements.map((ann) => (
+                <div key={ann.id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: 20 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div style={{ flex: 1 }}>
+                      {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
+                      <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+                        {new Date(ann.created_at).toLocaleString("zh-CN")}
+                      </div>
+                    </div>
+                    {currentUser?.id === league?.commissioner_id && (
+                      <button onClick={() => deleteAnnouncement(ann.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, marginLeft: 12, padding: 4 }}>×</button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -885,6 +1151,7 @@ const thStyle: React.CSSProperties = {
   textAlign: "center",
   borderBottom: "1px solid #e5e7eb",
   letterSpacing: "0.05em",
+  whiteSpace: "nowrap",
 };
 
 const tdStyle: React.CSSProperties = {

@@ -10,7 +10,7 @@ const NAV = [
   { href: "/rankings",    zh: "球员排名", en: "Rankings" },
   { href: "/league",      zh: "公开联赛", en: "Leagues" },
   { href: "/compare",     zh: "球员对比", en: "Compare" },
-  { href: "/draft-guide", zh: "选秀指南", en: "Draft Guide" },
+  { href: "/draft-guide", zh: "Fantasy新闻", en: "Fantasy News" },
   { href: "/cheat-sheet", zh: "备忘单",  en: "Cheat Sheet" },
   { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
 ];
@@ -164,7 +164,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                   display: "flex", alignItems: "center", gap: 6,
                 }}>
                   {avatarNode}
-                  {user.name}
+                  {user.name || user.username}
                 </Link>
                 <button onClick={handleLogout} style={{
                   padding: "8px 14px", fontSize: 14, color: "#64748b",
@@ -270,7 +270,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 <Link href={`/u/${user.username}`} onClick={() => setMenuOpen(false)}
                   style={{ padding: "8px 4px", fontSize: 14, color: "#374151", textDecoration: "none", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
                   {avatarNode}
-                  {user.name}
+                  {user.name || user.username}
                 </Link>
                 <button onClick={() => { handleLogout(); setMenuOpen(false); }}
                   style={{ padding: "8px 14px", fontSize: 14, color: "#64748b", border: "none", background: "transparent", cursor: "pointer" }}>

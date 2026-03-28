@@ -6,6 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
+import PlayerAvatar from "@/components/PlayerAvatar";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
@@ -16,6 +17,9 @@ import {
   addFreeAgent,
   dropPlayer,
   getCurrentRoster,
+  getPickupCount,
+  syncPickupCountFromDB,
+  WEEKLY_PICKUP_LIMIT,
   League,
   Player,
   RosterPlayer,
@@ -38,6 +42,7 @@ export default function FreeAgentsPage() {
   const [sortBy, setSortBy] = useState<"ppg" | "rpg" | "apg" | "rank">("ppg");
   const [showAddModal, setShowAddModal] = useState<Player | null>(null);
   const [dropPlayerId, setDropPlayerId] = useState<string | null>(null);
+  const [pickupCount, setPickupCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
@@ -62,6 +67,16 @@ export default function FreeAgentsPage() {
         setMyTeam(myT);
         // Filter to only active (non-released) players so count and drop UI are correct.
         setMyRoster(getCurrentRoster(await fetchTeamRosterFromDB(leagueData.id, myT.id)));
+        // Sync pickup counts from DB then read local count
+        const { data: teamRow } = await supabase
+          .from("fantasy_teams")
+          .select("pickup_counts")
+          .eq("id", myT.id)
+          .single();
+        if (teamRow?.pickup_counts) {
+          syncPickupCountFromDB(myT.id, leagueData.id, teamRow.pickup_counts);
+        }
+        setPickupCount(getPickupCount(leagueData.id, myT.id));
       }
     }
 
@@ -99,6 +114,7 @@ export default function FreeAgentsPage() {
     // Refresh data — filter to active players so count and UI stay correct
     setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
     setFreeAgents(getUndraftedPlayers(league.id));
+    setPickupCount(getPickupCount(league.id, myTeam.id));
     setShowAddModal(null);
     setDropPlayerId(null);
   }
@@ -173,6 +189,20 @@ export default function FreeAgentsPage() {
             <p>{t("签约自由球员或放弃球员", "Add free agents or drop players from your roster")}</p>
           </div>
 
+          {myTeam && (
+            <div className={`pickup-limit-bar ${pickupCount >= WEEKLY_PICKUP_LIMIT ? "limit-reached" : ""}`}>
+              <span className="pickup-label">
+                {t("本周签约次数", "Weekly pickups")}：
+                <strong>{pickupCount}/{WEEKLY_PICKUP_LIMIT}</strong>
+              </span>
+              {pickupCount >= WEEKLY_PICKUP_LIMIT && (
+                <span className="pickup-warning">
+                  {t("本周签约次数已达上限，下周一重置", "Weekly limit reached. Resets on Monday.")}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* My Roster Summary */}
           {myTeam && myRoster.length > 0 && (
             <div className="my-roster-section">
@@ -226,6 +256,7 @@ export default function FreeAgentsPage() {
 
           {/* Free Agent List */}
           <div className="fa-table">
+            <div className="fa-scroll-wrapper">
             <div className="fa-header">
               <div className="col-rank">#</div>
               <div className="col-player">{t("球员", "Player")}</div>
@@ -242,7 +273,8 @@ export default function FreeAgentsPage() {
             {paginatedAgents.map((player) => (
               <div key={player.id} className="fa-row">
                 <div className="col-rank">{player.rank}</div>
-                <div className="col-player">
+                <div className="col-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <PlayerAvatar name={player.name} size={32} />
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
                     <span className="player-meta">{player.team} · {player.position}{player.injury ? ` · ${player.injury}` : ""}</span>
@@ -255,13 +287,20 @@ export default function FreeAgentsPage() {
                 <div className="col-stat">{player.bpg.toFixed(1)}</div>
                 <div className="col-action">
                   {myTeam && (
-                    <button className="add-btn" onClick={() => handleAddPlayer(player)}>
-                      + {t("签约", "Add")}
-                    </button>
+                    pickupCount >= WEEKLY_PICKUP_LIMIT ? (
+                      <span className="add-btn-disabled" title={t("本周签约次数已达上限", "Weekly pickup limit reached")}>
+                        {t("已达上限", "Limit")}
+                      </span>
+                    ) : (
+                      <button className="add-btn" onClick={() => handleAddPlayer(player)}>
+                        + {t("签约", "Add")}
+                      </button>
+                    )
                   )}
                 </div>
               </div>
             ))}
+            </div>
           </div>
           {totalPages > 1 && (
             <div className="pagination">
@@ -415,15 +454,23 @@ const styles = `
     border-radius: 6px; color: #111827; font-size: 13px;
   }
 
-  .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+  .fa-table { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+  .fa-scroll-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .fa-scroll-wrapper::-webkit-scrollbar { display: none; }
   .fa-header {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
     padding: 12px 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
     font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase;
+    min-width: 560px; white-space: nowrap;
   }
   .fa-row {
     display: grid; grid-template-columns: 50px 1fr 55px 55px 55px 55px 55px 80px;
     padding: 12px 16px; border-bottom: 1px solid #f3f4f6; align-items: center;
+    min-width: 560px;
   }
   .fa-row:last-child { border-bottom: none; }
   .fa-row:hover { background: rgba(245, 158, 11, 0.03); }
@@ -434,9 +481,25 @@ const styles = `
   .player-meta { font-size: 12px; color: #6b7280; }
   .col-stat { font-size: 13px; color: #374151; text-align: center; }
   .col-action { text-align: center; }
+  .pickup-limit-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 16px; margin-bottom: 16px;
+    background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+    font-size: 14px; color: #1e3a8a;
+  }
+  .pickup-limit-bar.limit-reached {
+    background: #fef2f2; border-color: #fecaca; color: #991b1b;
+  }
+  .pickup-label strong { font-weight: 700; }
+  .pickup-warning { font-size: 13px; color: #dc2626; }
   .add-btn {
     padding: 6px 14px; background: #ecfdf5; border: 1px solid #6ee7b7;
     border-radius: 6px; color: #059669; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .add-btn-disabled {
+    padding: 6px 14px; background: #f3f4f6; border: 1px solid #d1d5db;
+    border-radius: 6px; color: #9ca3af; font-size: 12px; font-weight: 600;
+    cursor: not-allowed; display: inline-block;
   }
   .add-btn:hover { background: #d1fae5; }
   .empty-row { padding: 40px; text-align: center; color: #6b7280; font-size: 14px; }
@@ -504,10 +567,18 @@ const styles = `
 
   @media (max-width: 768px) {
     .fa-header, .fa-row {
-      grid-template-columns: 40px 1fr 45px 45px 45px 45px 45px 65px;
       padding: 10px 8px;
     }
-    .filters { flex-direction: column; }
-    .search-input { min-width: auto; }
+    .filters { flex-direction: column; align-items: stretch; }
+    .search-input { min-width: auto; width: 100%; }
+    .filter-group {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .filter-group::-webkit-scrollbar { display: none; }
+    .sort-select { width: 100%; }
+    .page-content { padding: 16px 8px 48px; }
   }
 `;
