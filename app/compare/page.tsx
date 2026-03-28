@@ -31,7 +31,7 @@ function buildDimensions(result: CompareResult) {
   const [a, b] = result.players;
 
   const production: StatRow[] = [
-    { key: "fptsPerGame",    label: "FPTS/G",   labelZh: "奇幻分/场",  values: [a.fptsPerGame, b.fptsPerGame],   format: "decimal1", higherIsBetter: true,  max: 60  },
+    { key: "fptsPerGame",    label: "FPTS/G",   labelZh: "FPTS/场",  values: [a.fptsPerGame, b.fptsPerGame],   format: "decimal1", higherIsBetter: true,  max: 60  },
     { key: "ppg",            label: "PTS/G",    labelZh: "得分/场",    values: [a.ppg, b.ppg],                   format: "decimal1", higherIsBetter: true,  max: 40  },
     { key: "rpg",            label: "REB/G",    labelZh: "篮板/场",    values: [a.rpg, b.rpg],                   format: "decimal1", higherIsBetter: true,  max: 18  },
     { key: "apg",            label: "AST/G",    labelZh: "助攻/场",    values: [a.apg, b.apg],                   format: "decimal1", higherIsBetter: true,  max: 14  },
@@ -44,7 +44,7 @@ function buildDimensions(result: CompareResult) {
   ];
 
   const form: StatRow[] = [
-    { key: "last5FptsAvg", label: "Last 5 FPTS/G",  labelZh: "近5场奇幻分",  values: [a.last5FptsAvg, b.last5FptsAvg], format: "decimal1", higherIsBetter: true,  max: 60 },
+    { key: "last5FptsAvg", label: "Last 5 FPTS/G",  labelZh: "近5场FPTS",  values: [a.last5FptsAvg, b.last5FptsAvg], format: "decimal1", higherIsBetter: true,  max: 60 },
     { key: "trendDelta",   label: "Trend Δ",         labelZh: "状态变化",      values: [a.trendDelta,   b.trendDelta],   format: "decimal1", higherIsBetter: true         },
   ];
 
@@ -209,39 +209,43 @@ export default function ComparePage() {
         <ModeSwitch mode={mode} onChange={setMode} />
 
         {/* ── Player Selection Row ── */}
-        <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: isMobile ? "wrap" : "nowrap", alignItems: "flex-start" }}>
-          <PlayerSelectCard
-            player={activeResult?.players[0] ?? null}
-            color={PLAYER_COLORS[0]}
-            onRemove={() => handleRemovePlayer(0)}
-            onAddClick={() => setShowSearch(0)}
-            isMobile={isMobile}
-            isLoading={isLoading}
-          />
+        <div style={{ display: "flex", gap: isMobile ? 8 : 12, marginBottom: 20, alignItems: "flex-start" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PlayerSelectCard
+              player={activeResult?.players[0] ?? null}
+              color={PLAYER_COLORS[0]}
+              onRemove={() => handleRemovePlayer(0)}
+              onAddClick={() => setShowSearch(0)}
+              isMobile={isMobile}
+              isLoading={isLoading}
+            />
+          </div>
 
           {/* VS divider */}
           <div style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: isMobile ? "100%" : 40,
-            minHeight: isMobile ? 32 : 180,
+            width: isMobile ? 28 : 40,
+            minHeight: 120,
             fontWeight: 800,
-            fontSize: 16,
+            fontSize: isMobile ? 13 : 16,
             color: COLORS.textMuted,
             flexShrink: 0,
           }}>
             VS
           </div>
 
-          <PlayerSelectCard
-            player={activeResult?.players[1] ?? null}
-            color={PLAYER_COLORS[1]}
-            onRemove={() => handleRemovePlayer(1)}
-            onAddClick={() => setShowSearch(1)}
-            isMobile={isMobile}
-            isLoading={isLoading}
-          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <PlayerSelectCard
+              player={activeResult?.players[1] ?? null}
+              color={PLAYER_COLORS[1]}
+              onRemove={() => handleRemovePlayer(1)}
+              onAddClick={() => setShowSearch(1)}
+              isMobile={isMobile}
+              isLoading={isLoading}
+            />
+          </div>
         </div>
 
         {/* ── Timeframe Selector ── */}

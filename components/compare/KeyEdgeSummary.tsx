@@ -50,22 +50,22 @@ export default function KeyEdgeSummary({ edges, playerAId, isMobile }: KeyEdgeSu
             <div key={i} style={{
               display: "flex",
               alignItems: "center",
-              gap: isMobile ? 8 : 12,
-              padding: "8px 10px",
+              gap: isMobile ? 6 : 12,
+              padding: isMobile ? "6px 8px" : "8px 10px",
               borderRadius: 8,
               background: COLORS.bg,
             }}>
               {/* Category */}
-              <div style={{ width: isMobile ? 72 : 90, flexShrink: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.textSecondary }}>
+              <div style={{ width: isMobile ? 60 : 90, flexShrink: 0 }}>
+                <div style={{ fontSize: isMobile ? 10 : 11, fontWeight: 700, color: COLORS.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {t(edge.categoryZh, edge.category)}
                 </div>
               </div>
 
               {/* Winner bar */}
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4 }}>
                 <div style={{
-                  flex: 1, height: 6, background: COLORS.border, borderRadius: 3, overflow: "hidden",
+                  flex: 1, height: 5, background: COLORS.border, borderRadius: 3, overflow: "hidden",
                   position: "relative",
                 }}>
                   <div style={{
@@ -81,18 +81,18 @@ export default function KeyEdgeSummary({ edges, playerAId, isMobile }: KeyEdgeSu
               </div>
 
               {/* Winner name + value */}
-              <div style={{ flexShrink: 0, textAlign: "right" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: winnerColor }}>
+              <div style={{ flexShrink: 0, textAlign: "right", display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: 700, color: winnerColor, whiteSpace: "nowrap" }}>
                   {edge.winnerName.split(" ").pop()}
                 </span>
                 <span style={{
-                  marginLeft: 6,
-                  fontSize: 11,
+                  fontSize: isMobile ? 10 : 11,
                   fontWeight: 700,
                   background: sig.bg,
                   color: sig.text,
-                  padding: "2px 7px",
+                  padding: "2px 5px",
                   borderRadius: 999,
+                  whiteSpace: "nowrap",
                 }}>
                   {edge.label}
                 </span>

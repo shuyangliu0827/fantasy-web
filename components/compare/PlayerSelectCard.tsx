@@ -48,8 +48,8 @@ export default function PlayerSelectCard({
           border: `2px dashed ${COLORS.borderStrong}`,
           borderRadius: 16,
           padding: 20,
-          width: isMobile ? "100%" : 230,
-          minHeight: 180,
+          width: "100%",
+          minHeight: isMobile ? 140 : 180,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -73,8 +73,8 @@ export default function PlayerSelectCard({
       background: COLORS.card,
       border: `2.5px solid ${color}`,
       borderRadius: 16,
-      padding: 20,
-      width: isMobile ? "100%" : 230,
+      padding: isMobile ? "14px 14px" : "20px",
+      width: "100%",
       position: "relative",
       boxShadow: "0 2px 8px rgba(0,0,0,0.07)",
       opacity: isLoading ? 0.75 : 1,
@@ -84,22 +84,22 @@ export default function PlayerSelectCard({
       <button onClick={onRemove} style={{ position: "absolute", top: 10, right: 10, background: "none", border: "none", color: COLORS.textMuted, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 4 }}>✕</button>
 
       {/* Header: avatar + fpts score */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-        <PlayerAvatar name={player.playerName} size={48} />
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 30, fontWeight: 800, color, lineHeight: 1 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <PlayerAvatar name={player.playerName} size={44} />
+        <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color, lineHeight: 1 }}>
             {player.fptsPerGame.toFixed(1)}
           </div>
           <div style={{ fontSize: 10, color: COLORS.textMuted, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
             <TrendArrow trend={player.recentTrend} />
-            <span>{t("奇幻分/场", "FPTS/G")}</span>
+            <span>FPTS/G</span>
           </div>
         </div>
       </div>
 
       {/* Name / team */}
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: COLORS.textPrimary, margin: "0 0 3px 0", fontFamily: FONT, paddingRight: 20 }}>{player.playerName}</h3>
-      <p style={{ fontSize: 12, color: COLORS.textSecondary, margin: "0 0 10px 0", fontFamily: FONT }}>
+      <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.textPrimary, margin: "0 0 2px 0", fontFamily: FONT, paddingRight: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.playerName}</h3>
+      <p style={{ fontSize: 12, color: COLORS.textSecondary, margin: "0 0 8px 0", fontFamily: FONT }}>
         {player.team} · {player.position}
       </p>
 
@@ -114,14 +114,14 @@ export default function PlayerSelectCard({
       </div>
 
       {/* Quick stat row */}
-      <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${COLORS.border}`, paddingTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${COLORS.border}`, paddingTop: 8, gap: 4 }}>
         {[
           { val: player.ppg, lbl: "PTS" },
           { val: player.rpg, lbl: "REB" },
           { val: player.apg, lbl: "AST" },
         ].map(({ val, lbl }) => (
-          <div key={lbl} style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.textPrimary, fontFamily: FONT }}>{val}</div>
+          <div key={lbl} style={{ textAlign: "center", flex: 1 }}>
+            <div style={{ fontSize: isMobile ? 13 : 15, fontWeight: 700, color: COLORS.textPrimary, fontFamily: FONT }}>{val}</div>
             <div style={{ fontSize: 10, color: COLORS.textMuted }}>{lbl}</div>
           </div>
         ))}

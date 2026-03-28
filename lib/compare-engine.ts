@@ -121,7 +121,7 @@ const EDGE_DIMENSIONS: Array<{
   threshold: number;
   higherIsBetter: boolean;
 }> = [
-  { key: 'fptsPerGame',      label: 'FPTS/G',        labelZh: '场均奇幻分',  threshold: 0.5,  higherIsBetter: true  },
+  { key: 'fptsPerGame',      label: 'FPTS/G',        labelZh: '场均FPTS',   threshold: 0.5,  higherIsBetter: true  },
   { key: 'consistencyScore', label: 'Consistency',   labelZh: '稳定性',      threshold: 5,    higherIsBetter: true  },
   { key: 'playRate',         label: 'Availability',  labelZh: '出场率',      threshold: 0.05, higherIsBetter: true  },
   { key: 'fg3mPg',           label: '3PM/G',         labelZh: '三分/场',     threshold: 0.3,  higherIsBetter: true  },
@@ -213,15 +213,15 @@ export function generateQuickDecision(players: CompareStats[]): QuickDecision {
   if (fptsDiff >= 3.0) {
     confidence = 'high';
     reason = `${winner.playerName} averages ${fptsDiff.toFixed(1)} more fantasy points per game — a clear production advantage.`;
-    reasonZh = `${winner.playerName} 场均多得 ${fptsDiff.toFixed(1)} 奇幻分，生产力优势明显。`;
+    reasonZh = `${winner.playerName} 场均多得 ${fptsDiff.toFixed(1)} fpts，生产力优势明显。`;
   } else if (fptsDiff >= 1.0) {
     confidence = 'medium';
     if (winner.consistencyScore > loser.consistencyScore + 5) {
       reason = `${winner.playerName} leads in both production (+${fptsDiff.toFixed(1)} FPTS/G) and consistency (${winner.consistencyScore} vs ${loser.consistencyScore}).`;
-      reasonZh = `${winner.playerName} 在产出（+${fptsDiff.toFixed(1)} 奇幻分/场）和稳定性（${winner.consistencyScore} vs ${loser.consistencyScore}）上均占优势。`;
+      reasonZh = `${winner.playerName} 在产出（+${fptsDiff.toFixed(1)} fpts/场）和稳定性（${winner.consistencyScore} vs ${loser.consistencyScore}）上均占优势。`;
     } else {
       reason = `${winner.playerName} has a modest production edge (+${fptsDiff.toFixed(1)} FPTS/G). Stats are otherwise comparable.`;
-      reasonZh = `${winner.playerName} 产出略胜一筹（+${fptsDiff.toFixed(1)} 奇幻分/场），其他数据较为接近。`;
+      reasonZh = `${winner.playerName} 产出略胜一筹（+${fptsDiff.toFixed(1)} fpts/场），其他数据较为接近。`;
     }
   } else {
     // Very close — use consistency as tiebreaker
@@ -230,7 +230,7 @@ export function generateQuickDecision(players: CompareStats[]): QuickDecision {
     const consistLoser  = consistWinner.playerId === a.playerId ? b : a;
     if (a.consistencyScore !== b.consistencyScore) {
       reason = `Production is nearly identical (${Math.abs(fptsDiff).toFixed(1)} FPTS/G difference). ${consistWinner.playerName} has the edge in consistency (${consistWinner.consistencyScore} vs ${consistLoser.consistencyScore}).`;
-      reasonZh = `两人产出几乎持平（差距 ${Math.abs(fptsDiff).toFixed(1)} 奇幻分/场）。${consistWinner.playerName} 在稳定性上更胜一筹（${consistWinner.consistencyScore} vs ${consistLoser.consistencyScore}）。`;
+      reasonZh = `两人产出几乎持平（差距 ${Math.abs(fptsDiff).toFixed(1)} fpts/场）。${consistWinner.playerName} 在稳定性上更胜一筹（${consistWinner.consistencyScore} vs ${consistLoser.consistencyScore}）。`;
       return {
         recommendedPlayerId: consistWinner.playerId,
         recommendedPlayerName: consistWinner.playerName,
@@ -327,17 +327,17 @@ export function generateScenarioRecommendations(
 
     if (view === 'draft') {
       richEn = `${winner.playerName} offers a higher ceiling (${winner.ceiling} FPTS) — a better bet for season-long upside in drafts.`;
-      richZh = `${winner.playerName} 上限更高（${winner.ceiling} 奇幻分），选秀中具备更大的赛季潜力。`;
+      richZh = `${winner.playerName} 上限更高（${winner.ceiling} fpts），选秀中具备更大的赛季潜力。`;
     } else if (view === 'stability') {
       richEn = `${winner.playerName} is the safer pick with a consistency score of ${winner.consistencyScore} and floor of ${winner.floor} FPTS.`;
-      richZh = `${winner.playerName} 更安全稳定，稳定性评分 ${winner.consistencyScore}，下限 ${winner.floor} 奇幻分。`;
+      richZh = `${winner.playerName} 更安全稳定，稳定性评分 ${winner.consistencyScore}，下限 ${winner.floor} fpts。`;
     } else if (view === 'shortterm') {
       const trend = winner.recentTrend === 'up' ? 'hot right now' : winner.recentTrend === 'down' ? 'the safer recent play' : 'consistent recently';
       richEn = `${winner.playerName} is ${trend} (last 5 avg: ${winner.last5FptsAvg} FPTS) — better short-term value.`;
-      richZh = `${winner.playerName} 近期状态${winner.recentTrend === 'up' ? '上升' : winner.recentTrend === 'down' ? '较稳' : '平稳'}（近5场均 ${winner.last5FptsAvg} 奇幻分），短期价值更高。`;
+      richZh = `${winner.playerName} 近期状态${winner.recentTrend === 'up' ? '上升' : winner.recentTrend === 'down' ? '较稳' : '平稳'}（近5场均 ${winner.last5FptsAvg} fpts），短期价值更高。`;
     } else if (view === 'trade') {
       richEn = `${winner.playerName} brings better long-term trade value: ${winner.fptsPerGame} FPTS/G with ${winner.gp} games played and ${(winner.playRate * 100).toFixed(0)}% availability.`;
-      richZh = `${winner.playerName} 长期交易价值更高：场均 ${winner.fptsPerGame} 奇幻分，${winner.gp} 场出场率 ${(winner.playRate * 100).toFixed(0)}%。`;
+      richZh = `${winner.playerName} 长期交易价值更高：场均 ${winner.fptsPerGame} fpts，${winner.gp} 场出场率 ${(winner.playRate * 100).toFixed(0)}%。`;
     }
 
     result[view] = {
@@ -424,7 +424,7 @@ export function generateRiskNotes(players: CompareStats[]): RiskNote[] {
         playerName: player.playerName,
         type: 'consistency_warning',
         message: `High variance player: floor ${player.floor} FPTS, ceiling ${player.ceiling} FPTS. Boom-or-bust risk.`,
-        messageZh: `高波动球员：下限 ${player.floor} 奇幻分，上限 ${player.ceiling} 奇幻分，爆发或哑火风险并存。`,
+        messageZh: `高波动球员：下限 ${player.floor} fpts，上限 ${player.ceiling} fpts，爆发或哑火风险并存。`,
         severity: 'info',
       });
     }

@@ -92,8 +92,8 @@ export default function StatDimensionGroup({
           {/* Player name header */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "100px 1fr 60px 1fr 60px" : "130px 1fr 70px 1fr 70px",
-            gap: 6,
+            gridTemplateColumns: isMobile ? "76px 1fr 32px 1fr 44px" : "130px 1fr 70px 1fr 70px",
+            gap: isMobile ? 4 : 6,
             alignItems: "center",
             marginBottom: 8,
           }}>
@@ -120,46 +120,48 @@ export default function StatDimensionGroup({
             return (
               <div key={stat.key} style={{
                 display: "grid",
-                gridTemplateColumns: isMobile ? "100px 1fr 60px 1fr 60px" : "130px 1fr 70px 1fr 70px",
-                gap: 6,
+                gridTemplateColumns: isMobile ? "76px 1fr 32px 1fr 44px" : "130px 1fr 70px 1fr 70px",
+                gap: isMobile ? 4 : 6,
                 alignItems: "center",
-                marginBottom: 10,
+                marginBottom: isMobile ? 8 : 10,
               }}>
                 {/* Label */}
-                <div style={{ fontSize: 12, color: COLORS.textSecondary, fontFamily: FONT, display: "flex", alignItems: "center", gap: 3 }}>
-                  {t(stat.labelZh, stat.label)}
-                  {stat.isMocked && <span style={{ fontSize: 10, color: COLORS.textMuted }}>(est.)</span>}
+                <div style={{ fontSize: isMobile ? 11 : 12, color: COLORS.textSecondary, fontFamily: FONT, display: "flex", alignItems: "center", gap: 2, overflow: "hidden" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t(stat.labelZh, stat.label)}
+                  </span>
+                  {stat.isMocked && <span style={{ fontSize: 10, color: COLORS.textMuted, flexShrink: 0 }}>(est.)</span>}
                 </div>
 
-                {/* Player A bar (right-aligned) */}
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {/* Player A: value + bar */}
+                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                   {aWins && <WinnerDot isWinner color={PLAYER_COLORS[0]} />}
-                  <div style={{ flex: 1, height: 6, background: COLORS.bg, borderRadius: 3, overflow: "hidden", display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ flex: 1, height: 6, background: COLORS.bg, borderRadius: 3, overflow: "hidden", display: "flex", justifyContent: "flex-end", minWidth: 0 }}>
                     <div style={{ width: `${pctA}%`, height: "100%", background: aWins ? PLAYER_COLORS[0] : COLORS.borderStrong, borderRadius: 3, transition: "width 0.4s" }} />
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: aWins ? 700 : 500, color: aWins ? PLAYER_COLORS[0] : COLORS.textSecondary, minWidth: 36, textAlign: "right" }}>
+                  <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: aWins ? 700 : 500, color: aWins ? PLAYER_COLORS[0] : COLORS.textSecondary, minWidth: isMobile ? 28 : 36, textAlign: "right", flexShrink: 0 }}>
                     {formatVal(vA, stat.format)}
                   </span>
                 </div>
 
-                {/* Center: higher/lower label */}
+                {/* Center: direction indicator */}
                 <div style={{ textAlign: "center", fontSize: 10, color: COLORS.textMuted }}>
                   {stat.higherIsBetter ? "↑" : "↓"}
                 </div>
 
-                {/* Player B bar (left-aligned) */}
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 12, fontWeight: bWins ? 700 : 500, color: bWins ? PLAYER_COLORS[1] : COLORS.textSecondary, minWidth: 36 }}>
+                {/* Player B: value + bar */}
+                <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: bWins ? 700 : 500, color: bWins ? PLAYER_COLORS[1] : COLORS.textSecondary, minWidth: isMobile ? 28 : 36, flexShrink: 0 }}>
                     {formatVal(vB, stat.format)}
                   </span>
-                  <div style={{ flex: 1, height: 6, background: COLORS.bg, borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ flex: 1, height: 6, background: COLORS.bg, borderRadius: 3, overflow: "hidden", minWidth: 0 }}>
                     <div style={{ width: `${pctB}%`, height: "100%", background: bWins ? PLAYER_COLORS[1] : COLORS.borderStrong, borderRadius: 3, transition: "width 0.4s" }} />
                   </div>
                   {bWins && <WinnerDot isWinner color={PLAYER_COLORS[1]} />}
                 </div>
 
                 {/* Diff */}
-                <div style={{ fontSize: 11, color: COLORS.textMuted, textAlign: "right" }}>
+                <div style={{ fontSize: isMobile ? 10 : 11, color: COLORS.textMuted, textAlign: "right", flexShrink: 0 }}>
                   {Math.abs(vA - vB) > 0 ? (aWins ? "+" : "-") + Math.abs(vA - vB).toFixed(1) : "—"}
                 </div>
               </div>
