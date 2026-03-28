@@ -5,7 +5,9 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 import { getCurrentSeasonLabel } from "@/lib/season";
-import HomeHeroShowcase from "@/components/HomeHeroShowcase";
+import HeroSection from "@/components/HeroSection";
+import DraftWinsSection from "@/components/DraftWinsSection";
+import { HERO_PLAYERS, type HeroPlayer } from "@/lib/heroPlayers";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
@@ -66,14 +68,16 @@ export default function HomePage() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
-  const [cta1Hovered, setCta1Hovered] = useState(false);
-  const [cta2Hovered, setCta2Hovered] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
 
   useEffect(() => {
     const u = getSessionUser();
     if (u) setUser({ name: u.name, username: u.username });
+
+    // Pick random player on client to avoid hydration mismatch
+    setHeroPlayer(HERO_PLAYERS[Math.floor(Math.random() * HERO_PLAYERS.length)]);
 
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
@@ -311,194 +315,11 @@ export default function HomePage() {
         )}
       </header>
 
-      {/* Premium Hero Showcase */}
-      <HomeHeroShowcase />
+      {/* Section 1: Dark cinematic hero */}
+      {heroPlayer && <HeroSection player={heroPlayer} />}
 
-      {/* Hero */}
-      <section style={{ background: "#fff", padding: isMobile ? "36px 12px 36px" : "88px 24px 72px" }}>
-        <div style={{
-          maxWidth: 1200, margin: "0 auto",
-          display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: "center", gap: isMobile ? 24 : 48,
-        }}>
-
-          {/* Left: copy */}
-          <div style={{ flex: "0 0 52%", minWidth: 0 }}>
-
-            {/* Badge */}
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              padding: "6px 14px",
-              background: "#eff6ff",
-              borderRadius: 999,
-              marginBottom: 28,
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb" }}>
-                {t(`${getCurrentSeasonLabel()} NBA赛季 · 数据实时更新`, `${getCurrentSeasonLabel()} NBA Season · Live Data`)}
-              </span>
-            </div>
-
-            {/* Heading */}
-            <h1 style={{ margin: 0, lineHeight: 1.12 }}>
-              <div style={{ fontSize: isMobile ? 36 : 58, fontWeight: 800, color: "#0f172a", letterSpacing: isMobile ? "-1px" : "-2px" }}>
-                {t("用数据赢得", "Win Your Draft")}
-              </div>
-              <div style={{ fontSize: isMobile ? 36 : 58, fontWeight: 800, color: "#2563eb", letterSpacing: isMobile ? "-1px" : "-2px", fontStyle: "italic" }}>
-                {t("每一场选秀", "With Data")}
-              </div>
-            </h1>
-
-            {/* Description */}
-            <p style={{ margin: "22px 0 36px", fontSize: 16, lineHeight: 1.75, color: "#64748b", maxWidth: 430 }}>
-              {t(
-                "中国首个专业范特西篮球决策平台。AI排名、实时数据、深度分析，让你每一轮都不踩雷。",
-                "China's first professional fantasy basketball platform. AI rankings, live data, deep analysis — so you nail every pick."
-              )}
-            </p>
-
-            {/* CTAs */}
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <Link
-                href="/auth/signup"
-                onMouseEnter={() => setCta1Hovered(true)}
-                onMouseLeave={() => setCta1Hovered(false)}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 8,
-                  padding: "14px 30px",
-                  background: cta1Hovered ? "#1e40af" : "#1e3a8a",
-                  color: "#fff",
-                  borderRadius: 10,
-                  fontSize: 16,
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  transition: "background 0.15s",
-                  boxShadow: "0 4px 16px rgba(30,58,138,0.25)",
-                }}
-              >
-                {t("免费开始", "Get Started")} →
-              </Link>
-              <Link
-                href="/how-to-play"
-                onMouseEnter={() => setCta2Hovered(true)}
-                onMouseLeave={() => setCta2Hovered(false)}
-                style={{
-                  display: "inline-flex", alignItems: "center",
-                  padding: "14px 30px",
-                  border: `2px solid ${cta2Hovered ? "#cbd5e1" : "#e2e8f0"}`,
-                  color: "#374151",
-                  borderRadius: 10,
-                  fontSize: 16,
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  background: cta2Hovered ? "#f8fafc" : "#fff",
-                  transition: "all 0.15s",
-                }}
-              >
-                {t("查看选秀指南", "Draft Guide")}
-              </Link>
-            </div>
-          </div>
-
-          {/* Right: floating player cards */}
-          {!isMobile && (
-            <div style={{ flex: 1, position: "relative", height: 400, minWidth: 0, width: "100%", overflow: "hidden" }}>
-
-            {/* Giannis card — dark navy */}
-            <div style={{
-              position: "absolute",
-              top: isMobile ? 18 : 10, right: isMobile ? 4 : 30,
-              width: isMobile ? 130 : 190, height: isMobile ? 176 : 255,
-              background: "linear-gradient(145deg, #1e3a8a 0%, #1e40af 100%)",
-              borderRadius: 20,
-              transform: "rotate(7deg)",
-              boxShadow: "0 24px 60px rgba(30,58,138,0.28)",
-              padding: isMobile ? "12px 12px 14px" : "20px 20px 24px",
-              color: "#fff",
-              zIndex: 1,
-              overflow: "hidden",
-            }}>
-              <div style={{ fontSize: isMobile ? 46 : 72, fontWeight: 900, color: "rgba(255,255,255,0.12)", position: "absolute", top: -8, right: 8, lineHeight: 1, userSelect: "none" }}>34</div>
-              <div style={{ position: "absolute", bottom: isMobile ? 12 : 24, left: isMobile ? 12 : 20 }}>
-                <div style={{ fontSize: isMobile ? 10 : 13, fontWeight: 700, marginBottom: 2 }}>G. Antetokounmpo</div>
-                <div style={{ fontSize: isMobile ? 9 : 11, color: "rgba(255,255,255,0.55)" }}>MIL · 雄鹿</div>
-              </div>
-            </div>
-
-            {/* Curry card — amber */}
-            <div style={{
-              position: "absolute",
-              bottom: isMobile ? 16 : 20, left: isMobile ? 2 : 10,
-              width: isMobile ? 126 : 185, height: isMobile ? 164 : 240,
-              background: "linear-gradient(145deg, #d97706 0%, #f59e0b 100%)",
-              borderRadius: 20,
-              transform: "rotate(-7deg)",
-              boxShadow: "0 20px 56px rgba(245,158,11,0.32)",
-              padding: isMobile ? "10px 10px 12px" : "18px 18px 22px",
-              zIndex: 1,
-              overflow: "hidden",
-            }}>
-              <div style={{
-                display: "inline-block", padding: "3px 9px",
-                background: "rgba(255,255,255,0.28)",
-                borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#fff", marginBottom: isMobile ? 6 : 10,
-              }}>PG</div>
-              <div style={{ fontSize: isMobile ? 12 : 16, fontWeight: 700, color: "#fff", marginBottom: 2 }}>S. Curry</div>
-              <div style={{ fontSize: isMobile ? 9 : 12, color: "rgba(255,255,255,0.65)", marginBottom: isMobile ? 10 : 22 }}>GSW · 勇士</div>
-              <div style={{ display: "flex", gap: isMobile ? 8 : 16 }}>
-                {[["26.4", "分"], ["4.5", "篮"], ["6.1", "助"]].map(([val, label]) => (
-                  <div key={label} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: isMobile ? 12 : 17, fontWeight: 800, color: "#fff" }}>{val}</div>
-                    <div style={{ fontSize: isMobile ? 8 : 10, color: "rgba(255,255,255,0.65)" }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* LeBron card — white, front */}
-            <div style={{
-              position: "absolute",
-              top: isMobile ? 24 : 50, left: isMobile ? 60 : 100,
-              width: isMobile ? 168 : 235, height: isMobile ? 220 : 305,
-              background: "#fff",
-              borderRadius: 22,
-              boxShadow: "0 28px 80px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.06)",
-              padding: isMobile ? "14px 14px" : "22px 24px",
-              zIndex: 3,
-              overflow: "hidden",
-            }}>
-              <div style={{
-                display: "inline-block", padding: "4px 10px",
-                background: "#eff6ff",
-                borderRadius: 6, fontSize: isMobile ? 9 : 11, fontWeight: 700, color: "#2563eb", marginBottom: isMobile ? 8 : 14,
-              }}>SF</div>
-              <div style={{ fontSize: isMobile ? 54 : 80, fontWeight: 900, color: "#f1f5f9", position: "absolute", top: -4, right: 10, lineHeight: 1, userSelect: "none" }}>23</div>
-              <div style={{ fontSize: isMobile ? 14 : 19, fontWeight: 700, color: "#0f172a", marginBottom: 3 }}>LeBron James</div>
-              <div style={{ fontSize: isMobile ? 10 : 13, color: "#94a3b8", marginBottom: isMobile ? 10 : 22 }}>LAL · 湖人</div>
-              <div style={{ height: 1, background: "#f1f5f9", marginBottom: isMobile ? 10 : 18 }} />
-              <div style={{ display: "flex", gap: 0 }}>
-                {[["25.2", "分"], ["7.3", "篮"], ["8.1", "助"]].map(([val, label], i) => (
-                  <div key={label} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid #f1f5f9" : "none", paddingBottom: 4 }}>
-                    <div style={{ fontSize: isMobile ? 15 : 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.5px" }}>{val}</div>
-                    <div style={{ fontSize: isMobile ? 9 : 11, color: "#94a3b8", marginTop: 2 }}>{label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Amber dot accent */}
-            <div style={{
-              position: "absolute",
-              bottom: isMobile ? 24 : 45, right: isMobile ? 4 : 18,
-              width: isMobile ? 32 : 48, height: isMobile ? 32 : 48,
-              background: "#f59e0b",
-              borderRadius: "50%",
-              boxShadow: "0 4px 20px rgba(245,158,11,0.35)",
-              zIndex: 4,
-            }} />
-            </div>
-          )}
-        </div>
-      </section>
+      {/* Section 2: Draft wins — product explainer */}
+      {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
       {/* Stats bar */}
       <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
