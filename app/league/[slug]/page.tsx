@@ -63,7 +63,18 @@ export default function LeaguePage() {
         table: "league_chat_messages",
         filter: `league_id=eq.${league.id}`,
       }, (payload) => {
-        setChatMessages((prev) => [...prev, payload.new]);
+        setChatMessages((prev) => {
+          // Replace optimistic message if same user+content, otherwise append
+          const exists = prev.some((m) => m.id === payload.new.id);
+          if (exists) return prev;
+          const optIdx = prev.findIndex((m) => m.id.startsWith("opt-") && m.user_id === payload.new.user_id && m.message === payload.new.message);
+          if (optIdx !== -1) {
+            const next = [...prev];
+            next[optIdx] = payload.new;
+            return next;
+          }
+          return [...prev, payload.new];
+        });
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       })
       .subscribe();
@@ -76,12 +87,23 @@ export default function LeaguePage() {
     setChatSending(true);
     const text = chatInput.trim();
     setChatInput("");
-    await storeSupa.from("league_chat_messages").insert({
+    const username = myTeam.name || currentUser.email?.split("@")[0] || "用户";
+    // Optimistic update — show message immediately
+    const optimistic = { id: `opt-${Date.now()}`, league_id: league.id, user_id: currentUser.id, username, message: text, created_at: new Date().toISOString() };
+    setChatMessages((prev) => [...prev, optimistic]);
+    setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    const { error } = await storeSupa.from("league_chat_messages").insert({
       league_id: league.id,
       user_id: currentUser.id,
-      username: myTeam.name || currentUser.email?.split("@")[0] || "用户",
+      username,
       message: text,
     });
+    if (error) {
+      console.error("Chat insert error:", error);
+      alert("发送失败：" + error.message);
+      setChatMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      setChatInput(text);
+    }
     setChatSending(false);
   }
 
