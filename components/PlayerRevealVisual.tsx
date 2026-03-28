@@ -13,6 +13,7 @@ export type HeroPlayer = {
   portraitImage: string;
   jerseyImage: string;
   accent: string;
+  accentLight: string;
 };
 
 interface PlayerRevealVisualProps {
@@ -29,6 +30,7 @@ export default function PlayerRevealVisual({ player, isMobile }: PlayerRevealVis
   const [mobileReveal, setMobileReveal] = useState(0);
   const mobileRafRef = useRef<number>(0);
   const mobileDirection = useRef(1);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   // Smooth animation loop for desktop
   const animate = useCallback(() => {
@@ -89,6 +91,15 @@ export default function PlayerRevealVisual({ player, isMobile }: PlayerRevealVis
 
   const mobileOpacity = isMobile ? 0.15 + mobileReveal * 0.35 : undefined;
 
+  const imgStyle: React.CSSProperties = {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "center top",
+    borderRadius: 28,
+  };
+
   return (
     <div
       ref={containerRef}
@@ -106,6 +117,7 @@ export default function PlayerRevealVisual({ player, isMobile }: PlayerRevealVis
         cursor: isMobile ? "default" : "crosshair",
         overflow: "hidden",
         borderRadius: 28,
+        background: `linear-gradient(145deg, #e8ecf4 0%, #f0f2f7 50%, #e4e8f0 100%)`,
       }}
     >
       {/* Premium frame border */}
@@ -135,19 +147,36 @@ export default function PlayerRevealVisual({ player, isMobile }: PlayerRevealVis
         }}
       />
 
-      {/* Base layer: portrait */}
+      {/* Base layer: portrait (clean, neutral) */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${player.portraitImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
           borderRadius: 28,
+          overflow: "hidden",
           transform: isHovering ? "scale(1.03)" : "scale(1)",
           transition: "transform 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-      />
+      >
+        {/* Neutral light background for portrait */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `linear-gradient(180deg, #f5f7fb 0%, #e8ecf4 60%, #dde2ed 100%)`,
+          }}
+        />
+        <img
+          src={player.portraitImage}
+          alt={player.name}
+          onLoad={() => setImgLoaded(true)}
+          style={{
+            ...imgStyle,
+            opacity: imgLoaded ? 1 : 0,
+            transition: "opacity 0.5s ease",
+          }}
+        />
+      </div>
 
       {/* Subtle gradient overlay on portrait */}
       <div
@@ -155,38 +184,77 @@ export default function PlayerRevealVisual({ player, isMobile }: PlayerRevealVis
           position: "absolute",
           inset: 0,
           borderRadius: 28,
-          background: `linear-gradient(180deg, transparent 40%, rgba(15, 23, 42, 0.12) 100%)`,
+          background: `linear-gradient(180deg, transparent 40%, rgba(15, 23, 42, 0.08) 100%)`,
           zIndex: 2,
           pointerEvents: "none",
         }}
       />
 
-      {/* Reveal layer: jersey image */}
+      {/* Reveal layer: jersey/team identity image with team color treatment */}
       <div
         data-reveal-layer
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${player.jerseyImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
           borderRadius: 28,
+          overflow: "hidden",
           zIndex: 3,
-          maskImage: isMobile ? undefined : "radial-gradient(circle 0% at 50% 50%, black 0%, black 60%, transparent 100%)",
-          WebkitMaskImage: isMobile ? undefined : "radial-gradient(circle 0% at 50% 50%, black 0%, black 60%, transparent 100%)",
+          maskImage: isMobile
+            ? undefined
+            : "radial-gradient(circle 0% at 50% 50%, black 0%, black 60%, transparent 100%)",
+          WebkitMaskImage: isMobile
+            ? undefined
+            : "radial-gradient(circle 0% at 50% 50%, black 0%, black 60%, transparent 100%)",
           opacity: isMobile ? mobileOpacity : 1,
           transition: isMobile ? "opacity 0.05s linear" : undefined,
           transform: isHovering ? "scale(1.02)" : "scale(1)",
         }}
-      />
+      >
+        {/* Team-colored background behind jersey image */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `linear-gradient(160deg, ${player.accent} 0%, ${player.accentLight} 50%, ${player.accent} 100%)`,
+          }}
+        />
+        <img
+          src={player.jerseyImage}
+          alt={`${player.name} jersey`}
+          style={{
+            ...imgStyle,
+            opacity: imgLoaded ? 1 : 0,
+            filter: "contrast(1.08) brightness(1.05)",
+          }}
+        />
+        {/* Team color overlay for visual distinction */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 28,
+            background: `linear-gradient(160deg, ${player.accent}55 0%, ${player.accentLight}33 40%, transparent 70%)`,
+            mixBlendMode: "multiply",
+          }}
+        />
+        {/* Edge glow on reveal layer */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: 28,
+            boxShadow: `inset 0 0 80px ${player.accent}22`,
+          }}
+        />
+      </div>
 
-      {/* Jersey layer gradient overlay */}
+      {/* Bottom gradient overlay */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           borderRadius: 28,
-          background: `linear-gradient(180deg, transparent 50%, rgba(15, 23, 42, 0.2) 100%)`,
+          background: `linear-gradient(180deg, transparent 55%, rgba(15, 23, 42, 0.15) 100%)`,
           zIndex: 4,
           pointerEvents: "none",
         }}

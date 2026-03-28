@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import PlayerRevealVisual, { type HeroPlayer } from "./PlayerRevealVisual";
 
+const NBA_HEADSHOT = (id: number) =>
+  `https://cdn.nba.com/headshots/nba/latest/1040x760/${id}.png`;
+
 const HERO_PLAYERS: HeroPlayer[] = [
   {
     id: "lebron",
@@ -14,9 +17,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "湖人",
     number: "23",
     position: "SF",
-    portraitImage: "/players/lebron-portrait.png",
-    jerseyImage: "/players/lebron-jersey.png",
+    portraitImage: NBA_HEADSHOT(2544),
+    jerseyImage: NBA_HEADSHOT(2544),
     accent: "#552583",
+    accentLight: "#7B48A8",
   },
   {
     id: "jokic",
@@ -26,9 +30,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "掘金",
     number: "15",
     position: "C",
-    portraitImage: "/players/jokic-portrait.png",
-    jerseyImage: "/players/jokic-jersey.png",
+    portraitImage: NBA_HEADSHOT(203999),
+    jerseyImage: NBA_HEADSHOT(203999),
     accent: "#0E2240",
+    accentLight: "#1D4477",
   },
   {
     id: "curry",
@@ -38,9 +43,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "勇士",
     number: "30",
     position: "PG",
-    portraitImage: "/players/curry-portrait.png",
-    jerseyImage: "/players/curry-jersey.png",
+    portraitImage: NBA_HEADSHOT(201939),
+    jerseyImage: NBA_HEADSHOT(201939),
     accent: "#1D428A",
+    accentLight: "#FFC72C",
   },
   {
     id: "giannis",
@@ -50,9 +56,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "雄鹿",
     number: "34",
     position: "PF",
-    portraitImage: "/players/giannis-portrait.png",
-    jerseyImage: "/players/giannis-jersey.png",
+    portraitImage: NBA_HEADSHOT(203507),
+    jerseyImage: NBA_HEADSHOT(203507),
     accent: "#00471B",
+    accentLight: "#007A33",
   },
   {
     id: "luka",
@@ -62,9 +69,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "独行侠",
     number: "77",
     position: "PG",
-    portraitImage: "/players/luka-portrait.png",
-    jerseyImage: "/players/luka-jersey.png",
+    portraitImage: NBA_HEADSHOT(1629029),
+    jerseyImage: NBA_HEADSHOT(1629029),
     accent: "#00538C",
+    accentLight: "#0078C0",
   },
   {
     id: "shai",
@@ -74,9 +82,10 @@ const HERO_PLAYERS: HeroPlayer[] = [
     teamZh: "雷霆",
     number: "2",
     position: "SG",
-    portraitImage: "/players/sga-portrait.png",
-    jerseyImage: "/players/sga-jersey.png",
+    portraitImage: NBA_HEADSHOT(1628983),
+    jerseyImage: NBA_HEADSHOT(1628983),
     accent: "#007AC1",
+    accentLight: "#EF6100",
   },
 ];
 
