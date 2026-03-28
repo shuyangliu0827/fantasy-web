@@ -149,23 +149,57 @@ export default function BrandCurtain() {
         </svg>
       </div>
 
-      {/* ── "LOAD BLUEPRINT FANTASY" ────────────────────────────── */}
+      {/* ── Text block ──────────────────────────────────────────── */}
       <div
         style={{
-          position:      "relative",
-          zIndex:        1,
-          marginTop:     36,
-          fontFamily:    "'Barlow Condensed', sans-serif",
-          fontWeight:    700,
-          fontStyle:     "italic",
-          fontSize:      "clamp(12px, 1.8vw, 15px)",
-          color:         "rgba(191,219,254,0.72)",
-          letterSpacing: "0.32em",
-          textTransform: "uppercase",
-          userSelect:    "none",
+          position:   "relative",
+          zIndex:     1,
+          marginTop:  32,
+          textAlign:  "center",
+          userSelect: "none",
         }}
       >
-        Load Blueprint Fantasy
+        {/* BLUEPRINT FANTASY */}
+        <div
+          style={{
+            fontFamily:    "'Barlow Condensed', sans-serif",
+            fontWeight:    700,
+            fontStyle:     "italic",
+            fontSize:      "clamp(18px, 3vw, 26px)",
+            color:         "#ffffff",
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            lineHeight:    1,
+          }}
+        >
+          Blueprint Fantasy
+        </div>
+
+        {/* Divider */}
+        <div
+          style={{
+            width:        80,
+            height:       1,
+            background:   "rgba(255,255,255,0.35)",
+            margin:       "12px auto",
+            borderRadius: 1,
+          }}
+        />
+
+        {/* Load */}
+        <div
+          style={{
+            fontFamily:    "'Barlow Condensed', sans-serif",
+            fontWeight:    400,
+            fontStyle:     "italic",
+            fontSize:      "clamp(11px, 1.6vw, 13px)",
+            color:         "rgba(191,219,254,0.6)",
+            letterSpacing: "0.38em",
+            textTransform: "uppercase",
+          }}
+        >
+          Load
+        </div>
       </div>
     </div>
   );
