@@ -55,11 +55,6 @@ const FEATURES = [
   },
 ];
 
-const STATS = [
-  { num: "480+", labelZh: "NBA球员数据库", labelEn: "NBA Players Tracked", color: "#2563eb" },
-  { num: "12K", labelZh: "活跃用户", labelEn: "Active Users", color: "#2563eb" },
-  { num: "98%", labelZh: "数据准确率", labelEn: "Data Accuracy", color: "#059669" },
-];
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
@@ -322,28 +317,6 @@ export default function HomePage() {
       {/* Section 2: Draft wins — product explainer */}
       {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
-      {/* Stats bar */}
-      <section style={{ borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", background: "#fff" }}>
-        <div style={{
-          maxWidth: 1200, margin: "0 auto",
-          padding: isMobile ? "24px 12px" : "36px 24px",
-          display: "flex", flexDirection: isMobile ? "column" : "row",
-          alignItems: "center",
-          gap: 0,
-        }}>
-          {STATS.map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", flex: 1 }}>
-              <div>
-                <div style={{ fontSize: isMobile ? 30 : 38, fontWeight: 800, color: s.color, letterSpacing: "-1.5px", lineHeight: 1 }}>{s.num}</div>
-                <div style={{ fontSize: 14, color: "#64748b", marginTop: 5, fontWeight: 500 }}>{lang === "zh" ? s.labelZh : s.labelEn}</div>
-              </div>
-              {i < STATS.length - 1 && (
-                <div style={{ width: isMobile ? "100%" : 1, height: isMobile ? 1 : 44, background: "#e2e8f0", margin: isMobile ? "14px 0" : "0 48px", flexShrink: 0 }} />
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* Feature cards */}
       <section style={{ background: "#f8fafc", padding: isMobile ? "36px 12px 44px" : "64px 24px 80px" }}>
