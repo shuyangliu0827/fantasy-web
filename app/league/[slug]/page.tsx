@@ -1,7 +1,7 @@
 // app/league/[slug]/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
@@ -24,7 +24,11 @@ export default function LeaguePage() {
   const [teamName, setTeamName] = useState("");
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "history" | "draft" | "news" | "settings">("standings");
+  const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "chat" | "news" | "settings">("standings");
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -34,6 +38,52 @@ export default function LeaguePage() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "chat" || !myTeam || !league) return;
+
+    // Load existing messages
+    storeSupa
+      .from("league_chat_messages")
+      .select("*")
+      .eq("league_id", league.id)
+      .order("created_at", { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        setChatMessages(data || []);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      });
+
+    // Realtime subscription
+    const channel = storeSupa
+      .channel(`chat:${league.id}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "league_chat_messages",
+        filter: `league_id=eq.${league.id}`,
+      }, (payload) => {
+        setChatMessages((prev) => [...prev, payload.new]);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      })
+      .subscribe();
+
+    return () => { storeSupa.removeChannel(channel); };
+  }, [activeTab, myTeam, league]);
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || !myTeam || !league || !currentUser) return;
+    setChatSending(true);
+    const text = chatInput.trim();
+    setChatInput("");
+    await storeSupa.from("league_chat_messages").insert({
+      league_id: league.id,
+      user_id: currentUser.id,
+      username: myTeam.name || currentUser.email?.split("@")[0] || "用户",
+      message: text,
+    });
+    setChatSending(false);
+  }
 
   async function init() {
     try {
@@ -200,7 +250,7 @@ export default function LeaguePage() {
     const TABS: { key: string; label: string; href?: string }[] = [
       { key: "standings", label: "积分榜" },
       { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
-      { key: "draft", label: "选秀记录" },
+      { key: "chat", label: "聊天室" },
       { key: "news", label: "联赛公告" },
       { key: "settings", label: "联赛设置" },
     ];
@@ -447,8 +497,71 @@ export default function LeaguePage() {
             </div>
           )}
 
+          {/* Chat tab */}
+          {activeTab === "chat" && (
+            <div style={{ flex: 1 }}>
+              {!myTeam ? (
+                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>仅联赛成员可查看聊天室</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>加入联赛后即可参与讨论</p>
+                </div>
+              ) : (
+                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, display: "flex", flexDirection: "column", height: 520 }}>
+                  {/* Header */}
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", fontWeight: 700, fontSize: 15, color: "#1e3a8a" }}>
+                    聊天室
+                  </div>
+                  {/* Messages */}
+                  <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {chatMessages.length === 0 && (
+                      <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, marginTop: 40 }}>暂无消息，来打个招呼吧！</div>
+                    )}
+                    {chatMessages.map((msg) => {
+                      const isMe = msg.user_id === currentUser?.id;
+                      return (
+                        <div key={msg.id} style={{ display: "flex", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end", gap: 8 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: isMe ? "#1e3a8a" : "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: isMe ? "#fff" : "#374151", flexShrink: 0 }}>
+                            {msg.username?.[0]?.toUpperCase() || "?"}
+                          </div>
+                          <div style={{ maxWidth: "65%" }}>
+                            {!isMe && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>{msg.username}</div>}
+                            <div style={{ background: isMe ? "#1e3a8a" : "#f3f4f6", color: isMe ? "#fff" : "#111827", borderRadius: isMe ? "14px 14px 4px 14px" : "14px 14px 14px 4px", padding: "8px 12px", fontSize: 14, lineHeight: 1.5 }}>
+                              {msg.message}
+                            </div>
+                            <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 3, textAlign: isMe ? "right" : "left" }}>
+                              {new Date(msg.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div ref={chatBottomRef} />
+                  </div>
+                  {/* Input */}
+                  <div style={{ padding: "12px 16px", borderTop: "1px solid #e5e7eb", display: "flex", gap: 8 }}>
+                    <input
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                      placeholder="输入消息..."
+                      style={{ flex: 1, border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, outline: "none", fontFamily: FONT }}
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      disabled={chatSending || !chatInput.trim()}
+                      style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: chatSending || !chatInput.trim() ? "not-allowed" : "pointer", opacity: chatSending || !chatInput.trim() ? 0.5 : 1 }}
+                    >
+                      发送
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Other tabs placeholder */}
-          {activeTab !== "standings" && (
+          {activeTab !== "standings" && activeTab !== "chat" && (
             <div style={{ flex: 1 }}>
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>🏗️</div>
