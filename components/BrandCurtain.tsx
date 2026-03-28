@@ -13,21 +13,12 @@ const BG           = "linear-gradient(160deg, #0a1628 0%, #0f2252 52%, #0c1e42 1
 const CURTAIN_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 const FONT         = "'Barlow Condensed', sans-serif";
 
-// Module-level flag:
-//   • resets to false on every hard refresh (module re-initialises)
-//   • stays true across client-side SPA navigations
-// → curtain plays on refresh, skips on in-session nav back to home
-let hasPlayedThisSession = false;
-
 type Phase = "text-in" | "holding" | "exiting" | "done";
 
 export default function BrandCurtain() {
   const [phase, setPhase] = useState<Phase>("text-in");
 
   useEffect(() => {
-    if (hasPlayedThisSession) { setPhase("done"); return; }
-    hasPlayedThisSession = true;
-
     const t1 = setTimeout(() => setPhase("holding"),  TEXT_IN_DURATION);
     const t2 = setTimeout(() => setPhase("exiting"),  TOTAL_HOLD);
     const t3 = setTimeout(() => setPhase("done"),     TOTAL);
