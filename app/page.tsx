@@ -374,7 +374,7 @@ export default function HomePage() {
                 {t("免费开始", "Get Started")} →
               </Link>
               <Link
-                href="/how-to-play"
+                href="/fantasy-news"
                 onMouseEnter={() => setCta2Hovered(true)}
                 onMouseLeave={() => setCta2Hovered(false)}
                 style={{
