@@ -104,7 +104,7 @@ type LiveStats = {
 };
 
 export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Props) {
-  const [allPlayers] = useState<Player[]>(() => getPlayers());
+  const [allPlayers, setAllPlayers] = useState<Player[]>(() => getPlayers());
   const [picks, setPicks] = useState<DraftPick[]>([]);
   const [draftedPlayerIds, setDraftedPlayerIds] = useState<Set<string>>(new Set());
   const [draftComplete, setDraftComplete] = useState(false);
@@ -240,12 +240,34 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     fetch("/api/nba-stats")
       .then(r => r.json())
       .then(data => {
-        if (data.players) {
+        if (data.players && data.players.length > 0) {
           const map: Record<string, LiveStats> = {};
+          const apiPlayers: Player[] = [];
           for (const p of data.players) {
             map[p.name] = { gamesPlayed: p.gamesPlayed, min: p.averages.min, fgm: p.averages.fgm, fga: p.averages.fga, fg3m: p.averages.fg3m, ftm: p.averages.ftm, fta: p.averages.fta, reb: p.averages.reb, ast: p.averages.ast, stl: p.averages.stl, blk: p.averages.blk, tov: p.averages.tov, pts: p.averages.pts, fpts: p.fpts, fptsAvg: p.fptsAvg };
+            apiPlayers.push({
+              id: String(p.id),
+              name: p.name,
+              team: p.team ?? "N/A",
+              position: p.position ?? "N/A",
+              age: 0,
+              ppg: p.averages.pts ?? 0,
+              rpg: p.averages.reb ?? 0,
+              apg: p.averages.ast ?? 0,
+              spg: p.averages.stl ?? 0,
+              bpg: p.averages.blk ?? 0,
+              fg: p.averages.fg_pct ?? 0,
+              ft: p.averages.ft_pct ?? 0,
+              tov: p.averages.tov ?? 0,
+              gp: p.gamesPlayed ?? 0,
+              adp: p.rank,
+              rank: p.rank,
+              trend: "same",
+              ...(p.injury ? { injury: p.injury } : {}),
+            });
           }
           setStatsMap(map);
+          setAllPlayers(apiPlayers);
         }
       })
       .catch(() => {});
