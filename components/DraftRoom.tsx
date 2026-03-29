@@ -269,7 +269,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       for (const [teamId, roster] of Object.entries(rostersByTeam)) {
         supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
       }
-      supabase.from("leagues").update({ status: "active" }).eq("id", league.id).then(() => {});
+      supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
     } catch (e) {
       console.error("Failed to save draft results:", e);
     }
