@@ -4,6 +4,7 @@
 
 export const PLAYER_POSITIONS: Record<string, string> = {
   // === TOP STARS ===
+  "Stephen Curry": "PG/SG",
   "Nikola Jokic": "C",
   "Luka Doncic": "PG/SG",
   "Shai Gilgeous-Alexander": "PG/SG",
