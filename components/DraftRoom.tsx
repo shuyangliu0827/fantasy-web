@@ -378,18 +378,6 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [draftComplete, turnStartedAt]);
 
-  // Auto-pick the best available player when the turn clock expires.
-  // Only the client whose turn it is fires the pick — the isMyTurn guard in
-  // handlePlayerPick prevents every connected client from duplicating it.
-  useEffect(() => {
-    if (timer > 0 || draftComplete || !isMyTurn) return;
-    if (autoPickFiredRef.current === overallPick) return; // already fired for this turn
-    const firstAvailable = allPlayers.find(p => !draftedPlayerIds.has(p.id));
-    if (!firstAvailable) return;
-    autoPickFiredRef.current = overallPick;
-    handlePlayerPick(firstAvailable);
-  }, [timer, draftComplete, isMyTurn, overallPick, allPlayers, draftedPlayerIds, handlePlayerPick]);
-
   useEffect(() => {
     if (!draftComplete || picks.length === 0) return;
     try {
@@ -458,6 +446,18 @@ useEffect(() => {
     }
     setPicking(false);
   }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, picks, applyPicks]);
+
+  // Auto-pick the best available player when the turn clock expires.
+  // Only the client whose turn it is fires the pick — the isMyTurn guard in
+  // handlePlayerPick prevents every connected client from duplicating it.
+  useEffect(() => {
+    if (timer > 0 || draftComplete || !isMyTurn) return;
+    if (autoPickFiredRef.current === overallPick) return; // already fired for this turn
+    const firstAvailable = allPlayers.find(p => !draftedPlayerIds.has(p.id));
+    if (!firstAvailable) return;
+    autoPickFiredRef.current = overallPick;
+    handlePlayerPick(firstAvailable);
+  }, [timer, draftComplete, isMyTurn, overallPick, allPlayers, draftedPlayerIds, handlePlayerPick]);
 
   const timerColor = timer <= 10 ? "#dc2626" : timer <= 30 ? "#f59e0b" : "#15803d";
 
