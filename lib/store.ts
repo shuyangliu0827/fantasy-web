@@ -1611,8 +1611,10 @@
      // Fallback to localStorage (e.g. data was drafted before migration)
      const local = getTeamRoster(leagueId, teamId);
      if (local.length > 0) {
-       // Backfill Supabase with localStorage data
-       supabase.from("fantasy_teams").update({ roster_data: local }).eq("id", teamId).then(() => {});
+       // Backfill Supabase with localStorage data.
+       // Awaited so fetchUndraftedPlayersFromDB (called immediately after) reads
+       // the updated roster_data and correctly excludes these players from free agency.
+       await supabase.from("fantasy_teams").update({ roster_data: local }).eq("id", teamId);
      }
      return local;
    }

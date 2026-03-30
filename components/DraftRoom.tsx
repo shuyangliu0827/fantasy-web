@@ -400,10 +400,21 @@ useEffect(() => {
       for (const [teamId, roster] of Object.entries(rostersByTeam)) {
         supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
       }
-      supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
-      // Seed the ownership table from draft_picks_data so free-agent queries
-      // and atomic pickup checks work correctly from day one.
-      supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
+      // Write the complete, deduplicated picks list and league status together,
+      // then seed the ownership table only AFTER this write commits.
+      // This prevents upsert_draft_ownerships from reading a stale/incomplete
+      // draft_picks_data caused by the last pick's fire-and-forget write not yet
+      // landing in Supabase when the draft-complete effect fires.
+      supabase.from("leagues")
+        .update({
+          draft_picks_data: dedupedPicks.map(serializePick) as never,
+          status: "active",
+          draft_completed_at: new Date().toISOString(),
+        })
+        .eq("id", league.id)
+        .then(() => {
+          supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
+        });
     } catch (e) {
       console.error("Failed to save draft results:", e);
     }
