@@ -1884,10 +1884,12 @@ export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Pla
        return { ok: false, error: "本周签约次数已达上限（每周最多7次）" };
      }
 
-     const roster = getTeamRoster(leagueId, teamId);
-     const allPlayers = getPlayers();
-     const player = allPlayers.find(p => p.id === playerId);
-     if (!player) return { ok: false, error: "Player not found" };
+    const roster = getTeamRoster(leagueId, teamId);
+    // Use the same current-season player source as Free Agency list rendering
+    // so lookup IDs match what the user selected in the modal.
+    const allPlayers = await fetchCurrentSeasonPlayersFromDB();
+    const player = allPlayers.find(p => p.id === playerId);
+    if (!player) return { ok: false, error: "Player not found" };
 
      // Fast local pre-check (optimistic, may be stale across users)
      const rosters = getLeagueRosters(leagueId);
