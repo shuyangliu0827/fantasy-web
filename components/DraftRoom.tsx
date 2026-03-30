@@ -598,7 +598,7 @@ useEffect(() => {
           </div>
 
           {/* Player list header */}
-          <div style={{ display: "grid", gridTemplateColumns: "36px 180px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px", padding: "5px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 10, color: "#6b7280", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", minWidth: "max-content" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "36px 220px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px", padding: "5px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 10, color: "#6b7280", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", minWidth: "max-content" }}>
             <span>#</span><span>球员</span><span>位置</span>
             <span>GP</span><span>MIN</span><span>FGM</span><span>FGA</span>
             <span>FTM</span><span>FTA</span><span>3PM</span>
@@ -616,22 +616,24 @@ useEffect(() => {
                 <div
                   key={player.id}
                   onClick={() => isMyTurn && !picking && handlePlayerPick(player)}
-                  style={{ display: "grid", gridTemplateColumns: "36px 180px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px", padding: "7px 12px", background: idx % 2 === 0 ? "#fff" : "#f9fafb", cursor: isMyTurn ? "pointer" : "default", borderBottom: "1px solid #f3f4f6", transition: "background 0.12s", alignItems: "center", opacity: picking ? 0.6 : 1, minWidth: "max-content" }}
+                  style={{ display: "grid", gridTemplateColumns: "36px 220px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px", padding: "7px 12px", background: idx % 2 === 0 ? "#fff" : "#f9fafb", cursor: isMyTurn ? "pointer" : "default", borderBottom: "1px solid #f3f4f6", transition: "background 0.12s", alignItems: "center", opacity: picking ? 0.6 : 1, minWidth: "max-content" }}
                   onMouseEnter={e => { if (isMyTurn) (e.currentTarget as HTMLElement).style.background = "#eff6ff"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = idx % 2 === 0 ? "#fff" : "#f9fafb"; }}
                 >
                   <span style={{ color: "#9ca3af", fontWeight: 600, fontSize: 11 }}>#{player.rank}</span>
-                  <PlayerAvatar name={player.name} size={28} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {player.name}
-                      {player.injury && (
-                        <span style={{ marginLeft: 5, padding: "1px 5px", background: player.injury === "Out" ? "#fee2e2" : "#fef3c7", color: player.injury === "Out" ? "#dc2626" : "#92400e", borderRadius: 4, fontSize: 9, fontWeight: 700 }}>
-                          {player.injury}
-                        </span>
-                      )}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <div style={{ flexShrink: 0 }}><PlayerAvatar name={player.name} size={28} /></div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {player.name}
+                        {player.injury && (
+                          <span style={{ marginLeft: 5, padding: "1px 5px", background: player.injury === "Out" ? "#fee2e2" : "#fef3c7", color: player.injury === "Out" ? "#dc2626" : "#92400e", borderRadius: 4, fontSize: 9, fontWeight: 700 }}>
+                            {player.injury}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{player.team}</div>
                     </div>
-                    <div style={{ fontSize: 10, color: "#9ca3af" }}>{player.team}</div>
                   </div>
                   <span style={{ fontSize: 11, color: "#6b7280" }}>{player.position}</span>
                   <span style={{ fontSize: 11, color: "#9ca3af" }}>{s?.gamesPlayed ?? "—"}</span>
