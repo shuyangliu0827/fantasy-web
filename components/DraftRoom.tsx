@@ -24,7 +24,8 @@ type DraftPick = {
   timestamp: number;
 };
 
-// Serializable version for localStorage / broadcast
+// Serializable version for localStorage / broadcast / DB
+// Player fields are embedded so we can deserialize without looking up allPlayers
 type SerializedPick = {
   round: number;
   pickInRound: number;
@@ -32,6 +33,20 @@ type SerializedPick = {
   teamId: string;
   teamName: string;
   playerId: string;
+  playerName: string;
+  playerTeam: string;
+  playerPosition: string;
+  playerPpg: number;
+  playerRpg: number;
+  playerApg: number;
+  playerSpg: number;
+  playerBpg: number;
+  playerFg: number;
+  playerFt: number;
+  playerTov: number;
+  playerGp: number;
+  playerAdp: number;
+  playerRank: number;
   timestamp: number;
 };
 
@@ -65,28 +80,72 @@ function draftStorageKey(leagueId: string) {
   return `bp_draft_picks_${leagueId}`;
 }
 
+function serializePick(p: DraftPick): SerializedPick {
+  return {
+    round: p.round, pickInRound: p.pickInRound, overallPick: p.overallPick,
+    teamId: p.teamId, teamName: p.teamName,
+    playerId: p.player.id,
+    playerName: p.player.name,
+    playerTeam: p.player.team,
+    playerPosition: p.player.position,
+    playerPpg: p.player.ppg,
+    playerRpg: p.player.rpg,
+    playerApg: p.player.apg,
+    playerSpg: p.player.spg,
+    playerBpg: p.player.bpg,
+    playerFg: p.player.fg,
+    playerFt: p.player.ft,
+    playerTov: p.player.tov,
+    playerGp: p.player.gp ?? 0,
+    playerAdp: p.player.adp ?? 0,
+    playerRank: p.player.rank ?? 0,
+    timestamp: p.timestamp,
+  };
+}
+
+// Reconstruct a DraftPick from a SerializedPick without needing the allPlayers list.
+// Player stats are embedded in the serialized form so there is no race condition.
+function deserializePick(s: SerializedPick): DraftPick | null {
+  if (!s.playerName) return null; // guard against old localStorage entries
+  const player: Player = {
+    id: s.playerId,
+    name: s.playerName,
+    team: s.playerTeam,
+    position: s.playerPosition,
+    age: 0,
+    ppg: s.playerPpg,
+    rpg: s.playerRpg,
+    apg: s.playerApg,
+    spg: s.playerSpg,
+    bpg: s.playerBpg,
+    fg: s.playerFg,
+    ft: s.playerFt,
+    tov: s.playerTov,
+    gp: s.playerGp,
+    adp: s.playerAdp,
+    rank: s.playerRank,
+    trend: "same",
+  };
+  return { round: s.round, pickInRound: s.pickInRound, overallPick: s.overallPick, teamId: s.teamId, teamName: s.teamName, player, timestamp: s.timestamp };
+}
+
 function savePicks(leagueId: string, picks: DraftPick[]) {
   try {
-    const serialized: SerializedPick[] = picks.map(p => ({
-      round: p.round, pickInRound: p.pickInRound, overallPick: p.overallPick,
-      teamId: p.teamId, teamName: p.teamName, playerId: p.player.id, timestamp: p.timestamp,
-    }));
-    localStorage.setItem(draftStorageKey(leagueId), JSON.stringify(serialized));
+    localStorage.setItem(draftStorageKey(leagueId), JSON.stringify(picks.map(serializePick)));
   } catch (e) {
     console.error("Failed to save draft picks:", e);
   }
 }
 
-function loadStoredPicks(leagueId: string, allPlayers: Player[]): DraftPick[] {
+function loadStoredPicks(leagueId: string): DraftPick[] {
   try {
     const raw = localStorage.getItem(draftStorageKey(leagueId));
     if (!raw) return [];
     const serialized: SerializedPick[] = JSON.parse(raw);
     const picks: DraftPick[] = [];
     for (const s of serialized) {
-      const player = allPlayers.find(p => p.id === s.playerId);
-      if (!player) continue;
-      picks.push({ round: s.round, pickInRound: s.pickInRound, overallPick: s.overallPick, teamId: s.teamId, teamName: s.teamName, player, timestamp: s.timestamp });
+      const pick = deserializePick(s);
+      if (pick) picks.push(pick);
     }
     return picks.sort((a, b) => a.overallPick - b.overallPick);
   } catch {
@@ -172,9 +231,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
 
     for (const s of incoming) {
       if (existingOveralls.has(s.overallPick)) continue;
-      const player = allPlayers.find(p => p.id === s.playerId);
-      if (!player) continue;
-      newPicks.push({ round: s.round, pickInRound: s.pickInRound, overallPick: s.overallPick, teamId: s.teamId, teamName: s.teamName, player, timestamp: s.timestamp });
+      const pick = deserializePick(s);
+      if (!pick) continue;
+      newPicks.push(pick);
       hasNew = true;
     }
 
@@ -182,7 +241,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       newPicks.sort((a, b) => a.overallPick - b.overallPick);
       applyPicks(newPicks);
     }
-  }, [allPlayers, applyPicks]);
+  }, [applyPicks]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -192,9 +251,17 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   }, []);
 
   useEffect(() => {
-    const stored = loadStoredPicks(league.id, allPlayers);
+    // Load from localStorage immediately (fast, works offline)
+    const stored = loadStoredPicks(league.id);
     if (stored.length > 0) applyPicks(stored);
-    setLoading(false);
+
+    // Fetch from Supabase as authoritative source — survives disconnects and cross-user
+    supabase.from("leagues").select("draft_picks_data").eq("id", league.id).single()
+      .then(({ data }) => {
+        const dbPicks: SerializedPick[] = data?.draft_picks_data ?? [];
+        if (dbPicks.length > 0) mergePicks(dbPicks);
+      })
+      .finally(() => setLoading(false));
 
     const channel = supabase.channel(`draft-room-${league.id}`, {
       config: { broadcast: { self: false } },
@@ -205,9 +272,8 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
         const pick = payload.payload as SerializedPick;
         if (pick) {
           mergePicks([pick]);
-          const player = allPlayers.find(p => p.id === pick.playerId);
-          if (player) {
-            const dp: DraftPick = { round: pick.round, pickInRound: pick.pickInRound, overallPick: pick.overallPick, teamId: pick.teamId, teamName: pick.teamName, player, timestamp: pick.timestamp };
+          const dp = deserializePick(pick);
+          if (dp) {
             setShowPickBanner(dp);
             setTimeout(() => setShowPickBanner(null), 2500);
             setTimer(90);
@@ -217,8 +283,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       .on("broadcast", { event: "sync_request" }, () => {
         const current = picksRef.current;
         if (current.length > 0) {
-          const serialized: SerializedPick[] = current.map(p => ({ round: p.round, pickInRound: p.pickInRound, overallPick: p.overallPick, teamId: p.teamId, teamName: p.teamName, playerId: p.player.id, timestamp: p.timestamp }));
-          channel.send({ type: "broadcast", event: "sync_response", payload: { picks: serialized } });
+          channel.send({ type: "broadcast", event: "sync_response", payload: { picks: current.map(serializePick) } });
         }
       })
       .on("broadcast", { event: "sync_response" }, (payload) => {
@@ -314,10 +379,14 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       setShowPickBanner(newPick);
       setTimeout(() => setShowPickBanner(null), 2500);
 
-      const serialized: SerializedPick = {
-        round: currentRound, pickInRound: currentPickInRound, overallPick,
-        teamId: team.id, teamName: team.name, playerId: player.id, timestamp: newPick.timestamp,
-      };
+      const serialized = serializePick(newPick);
+
+      // Persist all picks to DB so other users can load them on mount/refresh
+      supabase.from("leagues")
+        .update({ draft_picks_data: updated.map(serializePick) })
+        .eq("id", league.id)
+        .then(() => {});
+
       if (channelRef.current) {
         channelRef.current.send({ type: "broadcast", event: "pick", payload: serialized });
       }
