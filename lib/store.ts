@@ -1697,25 +1697,54 @@
    export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
      const allPlayers = getPlayers();
 
-     // Primary: query the ownership table (fast, authoritative)
-     const { data: owned, error: ownErr } = await supabase
+     // ── Primary: ownership table ────────────────────────────────────────────
+     // Fetch ALL records for the league in one query (both owned and released).
+     // team_id IS NOT NULL → currently owned by a team
+     // team_id IS NULL     → explicitly dropped, back in free market
+     const { data: ownership, error: ownErr } = await supabase
        .from("league_player_ownerships")
-       .select("player_id")
-       .eq("league_id", leagueId)
-       .not("team_id", "is", null);
+       .select("player_id, team_id")
+       .eq("league_id", leagueId);
 
-     if (!ownErr && owned && owned.length > 0) {
-       const ownedIds = new Set(owned.map((r: { player_id: string }) => r.player_id));
-       // Update localStorage cache so sync-dependent functions stay warm
-       const rosters = getLeagueRosters(leagueId);
-       const localOwnedIds = new Set<string>();
-       for (const tr of Object.values(rosters)) {
-         for (const p of getCurrentRoster(tr)) localOwnedIds.add(p.id);
+     if (!ownErr && ownership !== null) {
+       const ownedByTable = new Set<string>();    // actively owned
+       const releasedByTable = new Set<string>(); // explicitly dropped (team_id = NULL)
+
+       for (const r of ownership as { player_id: string; team_id: string | null }[]) {
+         if (r.team_id !== null) ownedByTable.add(r.player_id);
+         else releasedByTable.add(r.player_id);
        }
-       return allPlayers.filter(p => !ownedIds.has(p.id));
+
+       // ── Supplement: catch unseeded draft picks ─────────────────────────
+       // If upsert_draft_ownerships never ran (e.g. RPC failed after draft),
+       // drafted players have no ownership row.  Scan roster_data to catch them,
+       // but let explicit releases in releasedByTable override any stale roster_data.
+       const { data: teamsData } = await supabase
+         .from("fantasy_teams")
+         .select("id, roster_data")
+         .eq("league_id", leagueId);
+
+       const unseededOwned = new Set<string>();
+       if (teamsData) {
+         for (const t of teamsData) {
+           const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
+           for (const p of getCurrentRoster(r)) {
+             // Only count if the ownership table has no record for this player at all
+             if (!ownedByTable.has(p.id) && !releasedByTable.has(p.id)) {
+               unseededOwned.add(p.id);
+             }
+           }
+         }
+         // Trigger background backfill so future calls use ownership table directly
+         if (unseededOwned.size > 0) {
+           supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
+         }
+       }
+
+       return allPlayers.filter(p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id));
      }
 
-     // Fallback: scan all teams' roster_data from Supabase
+     // ── Fallback: ownership table unavailable (migration not yet applied) ──
      const { data: teams, error: teamErr } = await supabase
        .from("fantasy_teams")
        .select("roster_data")
@@ -1726,14 +1755,6 @@
        for (const t of teams) {
          const roster = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
          for (const p of getCurrentRoster(roster)) activeIds.add(p.id);
-       }
-       // Update localStorage cache
-       if (canUseStorage()) {
-         const all = getLeagueRosters(leagueId);
-         for (const t of teams) {
-           // We don't have team ids here; just refresh what we have
-           void t;
-         }
        }
        return allPlayers.filter(p => !activeIds.has(p.id));
      }
@@ -1808,12 +1829,15 @@
 
      // ── Authoritative DB-level atomic claim ─────────────────────────────────
      // This prevents two users from picking the same player concurrently.
-     const { data: rpcResult } = await supabase.rpc("claim_free_agent", {
+     const { data: rpcResult, error: rpcError } = await supabase.rpc("claim_free_agent", {
        p_league_id:      leagueId,
        p_team_id:        teamId,
        p_player_id:      playerId,
        p_drop_player_id: dropPlayerId ?? null,
      });
+     if (rpcError) {
+       return { ok: false, error: "签约失败，请重试" };
+     }
      if (rpcResult && !rpcResult.ok) {
        return { ok: false, error: rpcResult.error ?? "签约失败" };
      }
@@ -1875,12 +1899,14 @@
      if (idx === -1) return { ok: false, error: "Player not on roster" };
 
      // Update ownership table first (authoritative; also validates team ownership)
-     const { data: rpcResult } = await supabase.rpc("release_player", {
+     const { data: rpcResult, error: rpcError } = await supabase.rpc("release_player", {
        p_league_id: leagueId,
        p_team_id:   teamId,
        p_player_id: playerId,
      });
-     // If RPC exists but reports an error, abort (the ownership table will be the gate)
+     if (rpcError) {
+       return { ok: false, error: "放弃球员失败，请重试" };
+     }
      if (rpcResult && !rpcResult.ok) {
        return { ok: false, error: rpcResult.error ?? "放弃球员失败" };
      }
