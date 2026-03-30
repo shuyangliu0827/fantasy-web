@@ -1107,6 +1107,70 @@
      return result;
    }
 
+   // 随机重排所有队伍的选秀顺位（任何人加入时调用，或盟主主动触发）
+   export async function reshuffleDraftOrder(leagueId: string) {
+     const { data: teams } = await supabase
+       .from("fantasy_teams")
+       .select("id")
+       .eq("league_id", leagueId);
+
+     if (!teams || teams.length === 0) return { ok: true as const };
+
+     // Fisher-Yates shuffle
+     const positions = teams.map((_: unknown, i: number) => i + 1);
+     for (let i = positions.length - 1; i > 0; i--) {
+       const j = Math.floor(Math.random() * (i + 1));
+       [positions[i], positions[j]] = [positions[j], positions[i]];
+     }
+
+     await Promise.all(
+       teams.map((team: { id: string }, i: number) =>
+         supabase
+           .from("fantasy_teams")
+           .update({ draft_position: positions[i] })
+           .eq("id", team.id)
+       )
+     );
+     return { ok: true as const };
+   }
+
+   // 盟主手动批量更新选秀顺位
+   export async function updateTeamDraftPositions(
+     leagueId: string,
+     updates: { teamId: string; position: number }[]
+   ) {
+     const user = getSessionUser();
+     if (!user) return { ok: false as const, error: "Login required" };
+
+     // 仅盟主有权限
+     const { data: leagueRow } = await supabase
+       .from("leagues")
+       .select("commissioner_id, status")
+       .eq("id", leagueId)
+       .single();
+     if (!leagueRow) return { ok: false as const, error: "League not found" };
+     if (leagueRow.commissioner_id !== user.id) return { ok: false as const, error: "仅盟主可修改选秀顺位" };
+     if (leagueRow.status !== "draft_pending") return { ok: false as const, error: "选秀已开始，顺位已锁定" };
+
+     // 校验：顺位必须是 1..N，不能重复
+     const n = updates.length;
+     const positions = updates.map((u) => u.position);
+     const allValid = positions.every((p) => Number.isInteger(p) && p >= 1 && p <= n);
+     if (!allValid) return { ok: false as const, error: `顺位必须在 1 到 ${n} 之间` };
+     if (new Set(positions).size !== n) return { ok: false as const, error: "顺位不能重复" };
+
+     await Promise.all(
+       updates.map((u) =>
+         supabase
+           .from("fantasy_teams")
+           .update({ draft_position: u.position })
+           .eq("id", u.teamId)
+           .eq("league_id", leagueId)
+       )
+     );
+     return { ok: true as const };
+   }
+
    // 退出联赛
    export async function leaveLeague(leagueId: string) {
      const user = getSessionUser();
