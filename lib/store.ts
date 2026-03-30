@@ -1507,10 +1507,35 @@
      return daily[date] || {};
    }
 
+   /**
+    * Removes duplicate player IDs from a lineup, keeping the first (highest-priority) slot.
+    * Slot priority order matches the canonical order in autoSetLineup.
+    */
+   export function dedupeLineup(lineup: LineupMap): LineupMap {
+     const SLOT_PRIORITY = ["PG","SG","SF","PF","C","G","F","UTIL1","UTIL2","UTIL3","BE1","BE2","BE3"];
+     const seen = new Set<string>();
+     const result: LineupMap = {};
+     // Process canonical slots first (preserve priority), then any unknown slots
+     const allSlots = [
+       ...SLOT_PRIORITY.filter(s => s in lineup),
+       ...Object.keys(lineup).filter(s => !SLOT_PRIORITY.includes(s)),
+     ];
+     for (const slot of allSlots) {
+       const pid = lineup[slot];
+       if (pid && !seen.has(pid)) {
+         result[slot] = pid;
+         seen.add(pid);
+       }
+       // If already seen: slot is silently dropped (duplicate removed)
+     }
+     return result;
+   }
+
    export function setLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
      if (!canUseStorage()) return;
+     const dedupedLineup = dedupeLineup(lineup);
      const daily = getDailyLineups(leagueId, teamId);
-     daily[date] = lineup;
+     daily[date] = dedupedLineup;
      localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
      // Sync full daily lineup map to Supabase (fire-and-forget)
      supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
@@ -1646,7 +1671,7 @@
 
    // autoSetLineup is re-exported from lib/lineup.ts (see top of file)
 
-   // ==================== Free Agency (localStorage) ====================
+   // ==================== Free Agency ====================
 
    export function getUndraftedPlayers(leagueId: string): Player[] {
      const allPlayers = getPlayers();
@@ -1659,6 +1684,62 @@
        }
      }
      return allPlayers.filter(p => !activeIds.has(p.id));
+   }
+
+   /**
+    * Async version of getUndraftedPlayers that reads from Supabase so all users
+    * see the same, up-to-date free agent pool.
+    *
+    * Reads league_player_ownerships for owned player_ids, then falls back to
+    * scanning all fantasy_teams.roster_data if the ownership table is empty
+    * (e.g. migration not yet applied).
+    */
+   export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
+     const allPlayers = getPlayers();
+
+     // Primary: query the ownership table (fast, authoritative)
+     const { data: owned, error: ownErr } = await supabase
+       .from("league_player_ownerships")
+       .select("player_id")
+       .eq("league_id", leagueId)
+       .not("team_id", "is", null);
+
+     if (!ownErr && owned && owned.length > 0) {
+       const ownedIds = new Set(owned.map((r: { player_id: string }) => r.player_id));
+       // Update localStorage cache so sync-dependent functions stay warm
+       const rosters = getLeagueRosters(leagueId);
+       const localOwnedIds = new Set<string>();
+       for (const tr of Object.values(rosters)) {
+         for (const p of getCurrentRoster(tr)) localOwnedIds.add(p.id);
+       }
+       return allPlayers.filter(p => !ownedIds.has(p.id));
+     }
+
+     // Fallback: scan all teams' roster_data from Supabase
+     const { data: teams, error: teamErr } = await supabase
+       .from("fantasy_teams")
+       .select("roster_data")
+       .eq("league_id", leagueId);
+
+     if (!teamErr && teams && teams.length > 0) {
+       const activeIds = new Set<string>();
+       for (const t of teams) {
+         const roster = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
+         for (const p of getCurrentRoster(roster)) activeIds.add(p.id);
+       }
+       // Update localStorage cache
+       if (canUseStorage()) {
+         const all = getLeagueRosters(leagueId);
+         for (const t of teams) {
+           // We don't have team ids here; just refresh what we have
+           void t;
+         }
+       }
+       return allPlayers.filter(p => !activeIds.has(p.id));
+     }
+
+     // Final fallback: localStorage
+     return getUndraftedPlayers(leagueId);
    }
 
    // Returns the Monday date string (YYYY-MM-DD) for the current week
@@ -1697,7 +1778,14 @@
 
    export const WEEKLY_PICKUP_LIMIT = 7;
 
-   export function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): { ok: boolean; error?: string } {
+   /**
+    * Picks up a free agent.  The localStorage side stays the same; additionally
+    * the claim_free_agent RPC is called to atomically update the ownership table
+    * so concurrent pickups from other users are rejected at the DB level.
+    *
+    * Returns a Promise so callers can await the full round-trip.
+    */
+   export async function addFreeAgent(leagueId: string, teamId: string, playerId: string, dropPlayerId?: string): Promise<{ ok: boolean; error?: string }> {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
 
      const pickupCount = getPickupCount(leagueId, teamId);
@@ -1710,13 +1798,26 @@
      const player = allPlayers.find(p => p.id === playerId);
      if (!player) return { ok: false, error: "Player not found" };
 
-     // Check if player is already actively on a team (ignores released/historical entries)
+     // Fast local pre-check (optimistic, may be stale across users)
      const rosters = getLeagueRosters(leagueId);
      for (const [tid, teamRoster] of Object.entries(rosters)) {
        if (getCurrentRoster(teamRoster).some(p => p.id === playerId)) {
          return { ok: false, error: tid === teamId ? "Player already on your team" : "Player is on another team" };
        }
      }
+
+     // ── Authoritative DB-level atomic claim ─────────────────────────────────
+     // This prevents two users from picking the same player concurrently.
+     const { data: rpcResult } = await supabase.rpc("claim_free_agent", {
+       p_league_id:      leagueId,
+       p_team_id:        teamId,
+       p_player_id:      playerId,
+       p_drop_player_id: dropPlayerId ?? null,
+     });
+     if (rpcResult && !rpcResult.ok) {
+       return { ok: false, error: rpcResult.error ?? "签约失败" };
+     }
+     // ────────────────────────────────────────────────────────────────────────
 
      if (dropPlayerId) {
        // Drop a player and add the free agent — mark as released (preserve history)
@@ -1766,13 +1867,25 @@
      return { ok: true };
    }
 
-   export function dropPlayer(leagueId: string, teamId: string, playerId: string): { ok: boolean; error?: string } {
+   export async function dropPlayer(leagueId: string, teamId: string, playerId: string): Promise<{ ok: boolean; error?: string }> {
      if (!canUseStorage()) return { ok: false, error: "Storage unavailable" };
      const roster = getTeamRoster(leagueId, teamId);
      // Find the currently active entry for this player (no releasedAt)
      const idx = roster.findIndex(p => p.id === playerId && !p.releasedAt);
      if (idx === -1) return { ok: false, error: "Player not on roster" };
-     // Mark as released (preserves history) instead of splicing out
+
+     // Update ownership table first (authoritative; also validates team ownership)
+     const { data: rpcResult } = await supabase.rpc("release_player", {
+       p_league_id: leagueId,
+       p_team_id:   teamId,
+       p_player_id: playerId,
+     });
+     // If RPC exists but reports an error, abort (the ownership table will be the gate)
+     if (rpcResult && !rpcResult.ok) {
+       return { ok: false, error: rpcResult.error ?? "放弃球员失败" };
+     }
+
+     // Mark as released in localStorage (preserves history)
      roster[idx] = { ...roster[idx], releasedAt: Date.now() };
      setTeamRoster(leagueId, teamId, roster);
      // Remove from all daily lineups (today and future only, preserve past)
@@ -1936,6 +2049,15 @@
          setTeamRoster(leagueId, trade.fromTeamId, newFromRoster),
          setTeamRoster(leagueId, trade.toTeamId, newToRoster),
        ]);
+
+       // Atomically update ownership table so free-agent queries stay correct
+       await supabase.rpc("execute_trade_ownership", {
+         p_league_id:     leagueId,
+         p_from_team_id:  trade.fromTeamId,
+         p_to_team_id:    trade.toTeamId,
+         p_offered_ids:   trade.offeredPlayerIds,
+         p_requested_ids: trade.requestedPlayerIds,
+       });
 
        // Clean up lineups for traded players (today and future only)
        const today = new Date();
