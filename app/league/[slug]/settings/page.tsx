@@ -11,6 +11,8 @@ import {
   getLeagueBySlug,
   updateLeagueBranding,
   updateLeagueRules,
+  reshuffleDraftOrder,
+  updateTeamDraftPositions,
   League,
   supabase,
 } from "@/lib/store";
@@ -40,6 +42,8 @@ const ESPN_FORMULA_ROWS: { stat: string; label_zh: string; label_en: string; val
   { stat: "blk",  label_zh: "盖帽",     label_en: "Blocks",          value: ESPN_DEFAULT_WEIGHTS.blk  },
   { stat: "tov",  label_zh: "失误",     label_en: "Turnovers",       value: ESPN_DEFAULT_WEIGHTS.tov  },
 ];
+
+type DraftTeam = { id: string; name: string; user_id: string; draft_position: number };
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -71,6 +75,12 @@ export default function SettingsPage() {
   const [visibility, setVisibility]         = useState<"public" | "private">("public");
   const [savingRules, setSavingRules]       = useState(false);
 
+  // ── Draft order state
+  const [draftTeams, setDraftTeams]                 = useState<DraftTeam[]>([]);
+  const [draftPositionInputs, setDraftPositionInputs] = useState<Record<string, number>>({});
+  const [savingDraftOrder, setSavingDraftOrder]     = useState(false);
+  const [reshuffling, setReshuffling]               = useState(false);
+
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
@@ -94,6 +104,19 @@ export default function SettingsPage() {
       setDraftType(leagueData.draft_type || "snake");
       setMaxTeams(leagueData.max_teams || 10);
       setVisibility(leagueData.visibility || "public");
+
+      // 加载 fantasy_teams 用于选秀顺位管理
+      const { data: teams } = await supabase
+        .from("fantasy_teams")
+        .select("id, name, user_id, draft_position")
+        .eq("league_id", leagueData.id)
+        .order("draft_position", { ascending: true });
+      if (teams) {
+        setDraftTeams(teams as DraftTeam[]);
+        const inputs: Record<string, number> = {};
+        for (const t of teams) inputs[t.id] = t.draft_position ?? 0;
+        setDraftPositionInputs(inputs);
+      }
     }
     setLoading(false);
   }
@@ -172,6 +195,68 @@ export default function SettingsPage() {
       alert(t(`保存失败: ${result.error}`, `Save failed: ${result.error}`));
     }
     setSavingRules(false);
+  }
+
+  // ── 重新随机分配顺位
+  async function handleReshuffle() {
+    if (!league) return;
+    if (!confirm(t("确定重新随机分配所有人的选秀顺位吗？", "Randomly reassign all draft positions?"))) return;
+    setReshuffling(true);
+    const result = await reshuffleDraftOrder(league.id);
+    if (result.ok) {
+      const { data: teams } = await supabase
+        .from("fantasy_teams")
+        .select("id, name, user_id, draft_position")
+        .eq("league_id", league.id)
+        .order("draft_position", { ascending: true });
+      if (teams) {
+        setDraftTeams(teams as DraftTeam[]);
+        const inputs: Record<string, number> = {};
+        for (const t of teams) inputs[t.id] = t.draft_position ?? 0;
+        setDraftPositionInputs(inputs);
+      }
+      alert(t("顺位已随机重排！", "Draft order reshuffled!"));
+    } else {
+      alert(t("操作失败", "Failed"));
+    }
+    setReshuffling(false);
+  }
+
+  // ── 保存盟主手动调整的顺位
+  async function handleSaveDraftOrder() {
+    if (!league) return;
+    const n = draftTeams.length;
+    if (n === 0) return;
+
+    const updates = draftTeams.map((t) => ({
+      teamId: t.id,
+      position: draftPositionInputs[t.id] ?? t.draft_position,
+    }));
+
+    // 前端校验
+    const positions = updates.map((u) => u.position);
+    if (positions.some((p) => !Number.isInteger(p) || p < 1 || p > n)) {
+      alert(t(`顺位必须在 1 到 ${n} 之间`, `Positions must be between 1 and ${n}`));
+      return;
+    }
+    if (new Set(positions).size !== n) {
+      alert(t("顺位不能重复，请检查后重新保存", "Duplicate positions detected, please fix and save again"));
+      return;
+    }
+
+    setSavingDraftOrder(true);
+    const result = await updateTeamDraftPositions(league.id, updates);
+    if (result.ok) {
+      // 重新排列本地显示顺序
+      const sorted = [...draftTeams].sort(
+        (a, b) => (draftPositionInputs[a.id] ?? a.draft_position) - (draftPositionInputs[b.id] ?? b.draft_position)
+      );
+      setDraftTeams(sorted);
+      alert(t("选秀顺位已保存！", "Draft order saved!"));
+    } else {
+      alert(t(`保存失败: ${result.error}`, `Save failed: ${result.error}`));
+    }
+    setSavingDraftOrder(false);
   }
 
   // ── Delete league
@@ -493,7 +578,83 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* ── Section 3: Danger Zone ── */}
+          {/* ── Section 3: Draft Order ── */}
+          <div className="settings-section">
+            <h2>{t("选秀顺位", "Draft Order")}</h2>
+
+            {rulesLocked ? (
+              <div className="rules-locked-banner">
+                <span className="lock-icon">🔒</span>
+                <div>
+                  <div className="lock-title">{t("顺位已锁定", "Draft Order Locked")}</div>
+                  <div className="lock-desc">
+                    {t("选秀开始后，顺位将锁定，无法再修改。", "Draft order is locked once the draft starts.")}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="section-hint">
+                {t(
+                  "可手动调整每位成员的选秀顺位，或点击【重新随机分配】重新洗牌。选秀开始后顺位将自动锁定。",
+                  "Manually adjust each member's draft position, or click Reshuffle to randomize. Locks when draft starts."
+                )}
+              </p>
+            )}
+
+            {draftTeams.length === 0 ? (
+              <p className="section-hint">{t("暂无成员，等待队员加入后顺位将自动分配。", "No members yet. Positions will be assigned when members join.")}</p>
+            ) : (
+              <>
+                <div className="draft-order-list">
+                  {[...draftTeams]
+                    .sort((a, b) => (draftPositionInputs[a.id] ?? a.draft_position) - (draftPositionInputs[b.id] ?? b.draft_position))
+                    .map((team) => (
+                      <div key={team.id} className="draft-order-row">
+                        <span className="draft-order-name">{team.name}</span>
+                        <div className="draft-order-input-wrap">
+                          <span className="draft-order-hash">#</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={draftTeams.length}
+                            value={draftPositionInputs[team.id] ?? team.draft_position}
+                            disabled={rulesLocked}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val)) {
+                                setDraftPositionInputs((prev) => ({ ...prev, [team.id]: val }));
+                              }
+                            }}
+                            className="draft-order-input"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                </div>
+
+                {!rulesLocked && (
+                  <div className="actions-bar draft-order-actions">
+                    <button
+                      className="reshuffle-btn"
+                      onClick={handleReshuffle}
+                      disabled={reshuffling || savingDraftOrder}
+                    >
+                      {reshuffling ? t("随机中...", "Shuffling...") : t("重新随机分配", "Reshuffle")}
+                    </button>
+                    <button
+                      className="save-btn"
+                      onClick={handleSaveDraftOrder}
+                      disabled={savingDraftOrder || reshuffling}
+                    >
+                      {savingDraftOrder ? t("保存中...", "Saving...") : t("保存顺位", "Save Order")}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Section 4: Danger Zone ── */}
           <div className="danger-zone">
             <h2>⚠ {t("危险区域", "Danger Zone")}</h2>
             <p>{t("删除联赛将永久移除所有相关数据，此操作不可恢复。", "Deleting the league permanently removes all data. This cannot be undone.")}</p>
@@ -640,6 +801,30 @@ const styles = `
   }
   .error-container h2 { color: #111827; margin-bottom: 16px; }
   .back-link { color: #1e3a8a; }
+
+  /* Draft order */
+  .draft-order-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+  .draft-order-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
+  }
+  .draft-order-name { font-size: 14px; font-weight: 500; color: #374151; flex: 1; }
+  .draft-order-input-wrap { display: flex; align-items: center; gap: 4px; }
+  .draft-order-hash { font-size: 14px; font-weight: 700; color: #6b7280; }
+  .draft-order-input {
+    width: 56px; padding: 6px 8px; text-align: center;
+    border: 1px solid #e5e7eb; border-radius: 6px; font-size: 14px; font-weight: 600;
+    color: #1e3a8a; background: #fff;
+  }
+  .draft-order-input:focus { outline: none; border-color: #1e3a8a; }
+  .draft-order-input:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
+  .draft-order-actions { justify-content: flex-end; gap: 10px; margin-top: 4px; }
+  .reshuffle-btn {
+    padding: 12px 22px; background: #fff; border: 1px solid #1e3a8a;
+    border-radius: 8px; color: #1e3a8a; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .reshuffle-btn:hover { background: #eff6ff; }
+  .reshuffle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
   @media (max-width: 600px) {
     .scoring-type-grid { grid-template-columns: 1fr; }
