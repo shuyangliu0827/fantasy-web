@@ -15,6 +15,7 @@ import {
   leaveLeague,
   League,
   LeagueMember,
+  supabase,
 } from "@/lib/store";
 
 export default function MembersPage() {
@@ -26,6 +27,7 @@ export default function MembersPage() {
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
+  const [draftPositions, setDraftPositions] = useState<Record<string, number>>({});
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -44,6 +46,18 @@ export default function MembersPage() {
       setMembers(membersData);
       const memberStatus = await isLeagueMember(leagueData.id);
       setIsMember(memberStatus);
+      // 加载 fantasy_teams 以获取 draft_position
+      const { data: teams } = await supabase
+        .from("fantasy_teams")
+        .select("user_id, draft_position")
+        .eq("league_id", leagueData.id);
+      if (teams) {
+        const map: Record<string, number> = {};
+        for (const t of teams) {
+          if (t.draft_position != null) map[t.user_id] = t.draft_position;
+        }
+        setDraftPositions(map);
+      }
     }
     setLoading(false);
   }
@@ -168,15 +182,22 @@ export default function MembersPage() {
             </div>
           )}
 
-          {/* 成员列表 */}
+          {/* 成员列表：按选秀顺位排序 */}
           <div className="members-grid">
-            {members.map((member, index) => {
+            {[...members]
+              .sort((a, b) => {
+                const pa = draftPositions[a.user_id] ?? 999;
+                const pb = draftPositions[b.user_id] ?? 999;
+                return pa - pb;
+              })
+              .map((member) => {
               const name = getMemberName(member);
               const isCurrentUser = user && member.user_id === user.id;
+              const draftPos = draftPositions[member.user_id];
 
               return (
                 <div key={member.id} className={`member-card ${isCurrentUser ? "current-user" : ""}`}>
-                  <div className="member-rank">#{index + 1}</div>
+                  <div className="member-rank">{draftPos != null ? `#${draftPos}` : "—"}</div>
                   <div className="member-avatar">{name[0]?.toUpperCase()}</div>
                   <div className="member-info">
                     <div className="member-name">

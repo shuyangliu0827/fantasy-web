@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
-import { getLeagueBySlug, getSessionUser, supabase as storeSupa } from "@/lib/store";
+import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa } from "@/lib/store";
 
 import DraftRoom from "@/components/DraftRoom";
 
@@ -218,6 +218,8 @@ export default function LeaguePage() {
         .single();
       if (error) throw error;
       await storeSupa.from("league_members").upsert({ league_id: leagueData.id, user_id: user.id, role: "member" }, { onConflict: "league_id,user_id" });
+      // 每次有新成员加入就随机重排顺位，确保顺位不与加入顺序挂钩
+      await reshuffleDraftOrder(leagueData.id);
       setMyTeam(team);
       setShowJoinModal(false);
       setTeamName("");
