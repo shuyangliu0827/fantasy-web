@@ -184,6 +184,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     }
   }, [allPlayers, applyPicks]);
 
+  const mergePicksRef = useRef(mergePicks);
+  useEffect(() => { mergePicksRef.current = mergePicks; }, [mergePicks]);
+
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     handleResize();
@@ -204,7 +207,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       .on("broadcast", { event: "pick" }, (payload) => {
         const pick = payload.payload as SerializedPick;
         if (pick) {
-          mergePicks([pick]);
+          mergePicksRef.current([pick]);
           const player = allPlayers.find(p => p.id === pick.playerId);
           if (player) {
             const dp: DraftPick = { round: pick.round, pickInRound: pick.pickInRound, overallPick: pick.overallPick, teamId: pick.teamId, teamName: pick.teamName, player, timestamp: pick.timestamp };
@@ -223,7 +226,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       })
       .on("broadcast", { event: "sync_response" }, (payload) => {
         const data = payload.payload as { picks: SerializedPick[] };
-        if (data?.picks?.length) mergePicks(data.picks);
+        if (data?.picks?.length) mergePicksRef.current(data.picks);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -235,6 +238,15 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     return () => { supabase.removeChannel(channel); channelRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league.id]);
+
+  // Retry localStorage restore whenever allPlayers updates (e.g. after API loads with different IDs)
+  useEffect(() => {
+    const stored = loadStoredPicks(league.id, allPlayers);
+    if (stored.length > picksRef.current.length) {
+      applyPicks(stored);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPlayers]);
 
   useEffect(() => {
     fetch("/api/nba-stats")
