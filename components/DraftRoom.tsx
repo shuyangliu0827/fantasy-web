@@ -178,6 +178,11 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   const [statsMap, setStatsMap] = useState<Record<string, LiveStats>>({});
   const [isMobile, setIsMobile] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
+  // Unix-ms timestamp of when the current turn's 90-second clock started.
+  // Shared via DB + broadcast so all clients compute the same remaining time.
+  const [turnStartedAt, setTurnStartedAt] = useState<number>(0);
+  // Guards against firing auto-pick more than once per turn on this client.
+  const autoPickFiredRef = useRef<number>(-1);
 
   const numTeams = teams.length;
   const totalPicksNeeded = numTeams * TOTAL_ROUNDS;
@@ -212,6 +217,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
 
   const picksRef = useRef(picks);
   useEffect(() => { picksRef.current = picks; }, [picks]);
+
+  const turnStartedAtRef = useRef<number>(0);
+  useEffect(() => { turnStartedAtRef.current = turnStartedAt; }, [turnStartedAt]);
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
@@ -259,12 +267,28 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
     if (stored.length > 0) applyPicks(stored);
 
     // Fetch from Supabase as authoritative source — survives disconnects and cross-user
-    supabase.from("leagues").select("draft_picks_data").eq("id", league.id).single()
+    supabase.from("leagues").select("draft_picks_data, draft_turn_started_at").eq("id", league.id).single()
       .then(({ data }) => {
         const dbPicks: SerializedPick[] = data?.draft_picks_data ?? [];
         if (dbPicks.length > 0) mergePicks(dbPicks);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tsa = (data as any)?.draft_turn_started_at as number | null | undefined;
+        if (tsa && tsa > 0) {
+          setTurnStartedAt(tsa);
+        } else {
+          // First user into an un-started room sets the clock.
+          // .eq("draft_turn_started_at", 0) is a WHERE guard — only one writer wins.
+          const now = Date.now();
+          setTurnStartedAt(now);
+          supabase.from("leagues")
+            .update({ draft_turn_started_at: now } as never)
+            .eq("id", league.id)
+            .eq("draft_turn_started_at" as never, 0)
+            .then(() => {});
+        }
         setLoading(false);
       }, () => {
+        setTurnStartedAt(Date.now());
         setLoading(false);
       });
 
@@ -274,26 +298,26 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
 
     channel
       .on("broadcast", { event: "pick" }, (payload) => {
-        const pick = payload.payload as SerializedPick;
+        const pick = payload.payload as SerializedPick & { _tsa?: number };
         if (pick) {
           mergePicks([pick]);
           const dp = deserializePick(pick);
           if (dp) {
             setShowPickBanner(dp);
             setTimeout(() => setShowPickBanner(null), 2500);
-            setTimer(90);
+            // Use the broadcaster's turn-start timestamp so all clients share the same clock
+            setTurnStartedAt(pick._tsa ?? Date.now());
           }
         }
       })
       .on("broadcast", { event: "sync_request" }, () => {
-        const current = picksRef.current;
-        if (current.length > 0) {
-          channel.send({ type: "broadcast", event: "sync_response", payload: { picks: current.map(serializePick) } });
-        }
+        // Always respond — even with 0 picks — so late-joiners get the current timer
+        channel.send({ type: "broadcast", event: "sync_response", payload: { picks: picksRef.current.map(serializePick), turnStartedAt: turnStartedAtRef.current } });
       })
       .on("broadcast", { event: "sync_response" }, (payload) => {
-        const data = payload.payload as { picks: SerializedPick[] };
+        const data = payload.payload as { picks: SerializedPick[]; turnStartedAt?: number };
         if (data?.picks?.length) mergePicksRef.current(data.picks);
+        if (data?.turnStartedAt && data.turnStartedAt > 0) setTurnStartedAt(data.turnStartedAt);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -344,10 +368,27 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-    if (draftComplete) return;
-    const interval = setInterval(() => { setTimer(prev => (prev <= 1 ? 90 : prev - 1)); }, 1000);
+    if (draftComplete || turnStartedAt === 0) return;
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - turnStartedAt) / 1000);
+      setTimer(Math.max(0, 90 - elapsed));
+    };
+    tick(); // run immediately so the display is correct before the first interval fires
+    const interval = setInterval(tick, 500);
     return () => clearInterval(interval);
-  }, [draftComplete]);
+  }, [draftComplete, turnStartedAt]);
+
+  // Auto-pick the best available player when the turn clock expires.
+  // Only the client whose turn it is fires the pick — the isMyTurn guard in
+  // handlePlayerPick prevents every connected client from duplicating it.
+  useEffect(() => {
+    if (timer > 0 || draftComplete || !isMyTurn) return;
+    if (autoPickFiredRef.current === overallPick) return; // already fired for this turn
+    const firstAvailable = allPlayers.find(p => !draftedPlayerIds.has(p.id));
+    if (!firstAvailable) return;
+    autoPickFiredRef.current = overallPick;
+    handlePlayerPick(firstAvailable);
+  }, [timer, draftComplete, isMyTurn, overallPick, allPlayers, draftedPlayerIds, handlePlayerPick]);
 
   useEffect(() => {
     if (!draftComplete || picks.length === 0) return;
@@ -393,20 +434,23 @@ useEffect(() => {
       };
       const updated = [...picks, newPick];
       applyPicks(updated);
-      setTimer(90);
+      // Stamp when this new turn started — drives timer reset on all clients
+      const newTurnStartedAt = Date.now();
+      setTurnStartedAt(newTurnStartedAt);
       setShowPickBanner(newPick);
       setTimeout(() => setShowPickBanner(null), 2500);
 
       const serialized = serializePick(newPick);
 
-      // Persist all picks to DB so other users can load them on mount/refresh
+      // Persist picks + new turn timestamp to DB (survives refresh for all clients)
       supabase.from("leagues")
-        .update({ draft_picks_data: updated.map(serializePick) })
+        .update({ draft_picks_data: updated.map(serializePick), draft_turn_started_at: newTurnStartedAt } as never)
         .eq("id", league.id)
         .then(() => {});
 
       if (channelRef.current) {
-        channelRef.current.send({ type: "broadcast", event: "pick", payload: serialized });
+        // Include _tsa so other clients' timers reset to the same origin point
+        channelRef.current.send({ type: "broadcast", event: "pick", payload: { ...serialized, _tsa: newTurnStartedAt } });
       }
     } catch (err) {
       console.error("Pick error:", err);
