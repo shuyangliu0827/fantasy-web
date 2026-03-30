@@ -1279,7 +1279,7 @@ const styles = `
   .slot-badge.unassigned { background: #fef2f2; color: #dc2626; }
 
   .col-player { padding: 0 8px; min-width: 0; }
-  .player-info { display: flex; flex-direction: column; gap: 1px; }
+  .player-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .player-name {
     font-size: 13px;
     font-weight: 500;
