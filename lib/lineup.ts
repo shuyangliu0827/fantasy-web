@@ -27,13 +27,40 @@ export const SLOT_ELIGIBLE: Record<string, string[]> = {
 };
 
 /**
+ * Expands generic NBA API positions to specific fantasy positions.
+ * The NBA API sometimes returns "G", "F", "G-F", "F-C", etc.
+ * Fantasy slots only recognize PG, SG, SF, PF, C.
+ */
+const GENERIC_POSITION_MAP: Record<string, string[]> = {
+  "G":   ["PG", "SG"],
+  "F":   ["SF", "PF"],
+  "C":   ["C"],
+  "G-F": ["PG", "SG", "SF", "PF"],
+  "F-G": ["PG", "SG", "SF", "PF"],
+  "F-C": ["SF", "PF", "C"],
+  "C-F": ["PF", "C"],
+};
+
+/**
  * Returns true if a player with the given position string is eligible for slot.
- * Position may be multi-value (e.g. "PG/SG", "PF/C").
+ * Position may be multi-value (e.g. "PG/SG", "PF/C") or a generic API value
+ * like "G" or "F" which is normalized to specific fantasy positions.
  */
 export function isEligibleForSlot(playerPosition: string, slot: string): boolean {
   const eligible = SLOT_ELIGIBLE[slot];
   if (!eligible) return false;
-  const positions = playerPosition.split("/").map(p => p.trim());
+
+  // Expand each token: if it's a generic position, replace with specific ones
+  const positions: string[] = [];
+  for (const token of playerPosition.split("/").map(p => p.trim())) {
+    const expanded = GENERIC_POSITION_MAP[token];
+    if (expanded) {
+      positions.push(...expanded);
+    } else {
+      positions.push(token);
+    }
+  }
+
   return positions.some(p => eligible.includes(p));
 }
 
