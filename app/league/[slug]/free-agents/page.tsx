@@ -11,7 +11,7 @@ import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
-  getUndraftedPlayers,
+  fetchUndraftedPlayersFromDB,
   getTeamRoster,
   fetchTeamRosterFromDB,
   addFreeAgent,
@@ -80,7 +80,8 @@ export default function FreeAgentsPage() {
       }
     }
 
-    setFreeAgents(getUndraftedPlayers(leagueData.id));
+    // Read from DB so all users see the same, up-to-date free agent pool
+    setFreeAgents(await fetchUndraftedPlayersFromDB(leagueData.id));
     setLoading(false);
   }
 
@@ -99,36 +100,36 @@ export default function FreeAgentsPage() {
     }
   }
 
-  function confirmAdd() {
+  async function confirmAdd() {
     if (!league || !myTeam || !showAddModal) return;
     const needDrop = myRoster.length >= 13;
     if (needDrop && !dropPlayerId) {
       alert(t("阵容已满，请选择要放弃的球员", "Roster is full, select a player to drop"));
       return;
     }
-    const result = addFreeAgent(league.id, myTeam.id, showAddModal.id, dropPlayerId || undefined);
+    const result = await addFreeAgent(league.id, myTeam.id, showAddModal.id, dropPlayerId || undefined);
     if (!result.ok) {
       alert(result.error);
       return;
     }
-    // Refresh data — filter to active players so count and UI stay correct
+    // Refresh data — read from DB so the list is authoritative for all users
     setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
-    setFreeAgents(getUndraftedPlayers(league.id));
+    setFreeAgents(await fetchUndraftedPlayersFromDB(league.id));
     setPickupCount(getPickupCount(league.id, myTeam.id));
     setShowAddModal(null);
     setDropPlayerId(null);
   }
 
-  function handleDropPlayer(playerId: string) {
+  async function handleDropPlayer(playerId: string) {
     if (!league || !myTeam) return;
     if (!confirm(t("确定要放弃该球员吗？", "Are you sure you want to drop this player?"))) return;
-    const result = dropPlayer(league.id, myTeam.id, playerId);
+    const result = await dropPlayer(league.id, myTeam.id, playerId);
     if (!result.ok) {
       alert(result.error);
       return;
     }
     setMyRoster(getCurrentRoster(getTeamRoster(league.id, myTeam.id)));
-    setFreeAgents(getUndraftedPlayers(league.id));
+    setFreeAgents(await fetchUndraftedPlayersFromDB(league.id));
   }
 
   const isOwner = user && league && league.commissioner_id === user.id;

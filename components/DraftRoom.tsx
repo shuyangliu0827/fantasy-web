@@ -349,8 +349,18 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   useEffect(() => {
     if (!draftComplete || picks.length === 0) return;
     try {
+      // Deduplicate: a player can only appear once across all teams.
+      // If the same player_id was somehow picked twice (e.g. due to a broadcast race),
+      // keep only the first occurrence (lower overallPick).
+      const seenPlayerIds = new Set<string>();
+      const dedupedPicks = picks.filter(pick => {
+        if (seenPlayerIds.has(pick.player.id)) return false;
+        seenPlayerIds.add(pick.player.id);
+        return true;
+      });
+
       const rostersByTeam: Record<string, { id: string; name: string; team: string; position: string; ppg: number; rpg: number; apg: number; spg: number; bpg: number; fg: number; ft: number; tov: number; round: number }[]> = {};
-      for (const pick of picks) {
+      for (const pick of dedupedPicks) {
         if (!rostersByTeam[pick.teamId]) rostersByTeam[pick.teamId] = [];
         rostersByTeam[pick.teamId].push({ id: pick.player.id, name: pick.player.name, team: pick.player.team, position: pick.player.position, ppg: pick.player.ppg, rpg: pick.player.rpg, apg: pick.player.apg, spg: pick.player.spg, bpg: pick.player.bpg, fg: pick.player.fg, ft: pick.player.ft, tov: pick.player.tov, round: pick.round });
       }
@@ -359,6 +369,9 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
         supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
       }
       supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
+      // Seed the ownership table from draft_picks_data so free-agent queries
+      // and atomic pickup checks work correctly from day one.
+      supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
     } catch (e) {
       console.error("Failed to save draft results:", e);
     }
