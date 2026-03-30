@@ -1211,12 +1211,67 @@
      return pos ? { ...p, position: pos } : p;
    });
    
-   export function getPlayers(): Player[] {
-     if (!canUseStorage()) return DEFAULT_PLAYERS;
-     const custom = safeParse<Player[]>(localStorage.getItem(KEYS.playerRankings), []);
-     if (custom.length > 0) return custom;
-     return DEFAULT_PLAYERS;
-   }
+export function getPlayers(): Player[] {
+  if (!canUseStorage()) return DEFAULT_PLAYERS;
+  const custom = safeParse<Player[]>(localStorage.getItem(KEYS.playerRankings), []);
+  if (custom.length > 0) return custom;
+  return DEFAULT_PLAYERS;
+}
+
+type PlayerStatsCacheRow = {
+  player_id: number;
+  name: string;
+  team: string;
+  position: string;
+  games_played: number | null;
+  pts_avg: number | null;
+  reb_avg: number | null;
+  ast_avg: number | null;
+  stl_avg: number | null;
+  blk_avg: number | null;
+  fg_pct: number | null;
+  ft_pct: number | null;
+  tov_avg: number | null;
+  rank: number | null;
+  injury: string | null;
+};
+
+function rowToPlayer(row: PlayerStatsCacheRow): Player {
+  const fallbackPos = PLAYER_POSITIONS[row.name];
+  return {
+    id: String(row.player_id),
+    name: row.name,
+    team: row.team || "N/A",
+    position: fallbackPos || row.position || "N/A",
+    age: 0,
+    ppg: Number(row.pts_avg ?? 0),
+    rpg: Number(row.reb_avg ?? 0),
+    apg: Number(row.ast_avg ?? 0),
+    spg: Number(row.stl_avg ?? 0),
+    bpg: Number(row.blk_avg ?? 0),
+    fg: Number(row.fg_pct ?? 0),
+    ft: Number(row.ft_pct ?? 0),
+    tov: Number(row.tov_avg ?? 0),
+    gp: Number(row.games_played ?? 0),
+    adp: Number(row.rank ?? 0),
+    rank: Number(row.rank ?? 0),
+    trend: "same",
+    ...(row.injury ? { injury: row.injury } : {}),
+  };
+}
+
+async function fetchCurrentSeasonPlayersFromDB(): Promise<Player[]> {
+  const { data, error } = await supabase
+    .from("player_stats_cache")
+    .select("player_id, name, team, position, games_played, pts_avg, reb_avg, ast_avg, stl_avg, blk_avg, fg_pct, ft_pct, tov_avg, rank, injury")
+    .order("rank", { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    return getPlayers();
+  }
+
+  return (data as PlayerStatsCacheRow[]).map(rowToPlayer);
+}
    
    export function getPlayerById(id: string): Player | undefined {
      return getPlayers().find((p) => p.id === id);
@@ -1697,7 +1752,7 @@
     * (e.g. migration not yet applied).
     */
 export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
-  const allPlayers = getPlayers();
+  const allPlayers = await fetchCurrentSeasonPlayersFromDB();
   const normalizeName = (name: string) => name.trim().toLowerCase();
 
      // ── Primary: ownership table ────────────────────────────────────────────
