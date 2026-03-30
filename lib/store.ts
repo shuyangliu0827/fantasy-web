@@ -1717,8 +1717,8 @@
 
        // ── Supplement: catch unseeded draft picks ─────────────────────────
        // If upsert_draft_ownerships never ran (e.g. RPC failed after draft),
-       // drafted players have no ownership row.  Scan roster_data to catch them,
-       // but let explicit releases in releasedByTable override any stale roster_data.
+       // drafted players have no ownership row.  Scan roster_data to catch them.
+       // roster_data active entries override a stale team_id = NULL in the ownership table.
        const { data: teamsData } = await supabase
          .from("fantasy_teams")
          .select("id, roster_data")
@@ -1726,17 +1726,25 @@
 
        const unseededOwned = new Set<string>();
        if (teamsData) {
+         let hasUnseededPicks = false;
          for (const t of teamsData) {
            const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
            for (const p of getCurrentRoster(r)) {
-             // Only count if the ownership table has no record for this player at all
-             if (!ownedByTable.has(p.id) && !releasedByTable.has(p.id)) {
+             if (!ownedByTable.has(p.id)) {
+               // Player is active in roster_data but not owned per the ownership table.
+               // Treat as owned regardless of releasedByTable — if roster_data still shows
+               // the player as active (no releasedAt), the ownership table entry is stale
+               // and should not override the roster_data truth.
                unseededOwned.add(p.id);
+               // Only trigger the draft-ownership backfill for players with NO row at all
+               // in the ownership table. Players in releasedByTable have a row; backfilling
+               // from draft_picks_data would incorrectly reassign them to their draft team.
+               if (!releasedByTable.has(p.id)) hasUnseededPicks = true;
              }
            }
          }
          // Trigger background backfill so future calls use ownership table directly
-         if (unseededOwned.size > 0) {
+         if (hasUnseededPicks) {
            supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
          }
        }
@@ -1913,7 +1921,7 @@
 
      // Mark as released in localStorage (preserves history)
      roster[idx] = { ...roster[idx], releasedAt: Date.now() };
-     setTeamRoster(leagueId, teamId, roster);
+     await setTeamRoster(leagueId, teamId, roster);
      // Remove from all daily lineups (today and future only, preserve past)
      const daily = getDailyLineups(leagueId, teamId);
      const today = new Date();
