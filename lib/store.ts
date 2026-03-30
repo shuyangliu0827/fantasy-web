@@ -9,7 +9,7 @@
    import { getCurrentSeasonLabel } from "./season";
    export { supabase };
    import { ALL_PLAYERS } from "./players-data";
-   import { PLAYER_POSITIONS } from "./player-positions";
+   import { normalizeFantasyPosition } from "./position-normalization";
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
    export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
@@ -1206,15 +1206,17 @@
    
    // ==================== Players (localStorage) ====================
    
-   const DEFAULT_PLAYERS: Player[] = (ALL_PLAYERS as Player[]).map(p => {
-     const pos = PLAYER_POSITIONS[p.name];
-     return pos ? { ...p, position: pos } : p;
-   });
+   const DEFAULT_PLAYERS: Player[] = (ALL_PLAYERS as Player[]).map((p) => ({
+     ...p,
+     position: normalizeFantasyPosition(p.position, p.name),
+   }));
    
 export function getPlayers(): Player[] {
   if (!canUseStorage()) return DEFAULT_PLAYERS;
   const custom = safeParse<Player[]>(localStorage.getItem(KEYS.playerRankings), []);
-  if (custom.length > 0) return custom;
+  if (custom.length > 0) {
+    return custom.map((p) => ({ ...p, position: normalizeFantasyPosition(p.position, p.name) }));
+  }
   return DEFAULT_PLAYERS;
 }
 
@@ -1237,12 +1239,11 @@ type PlayerStatsCacheRow = {
 };
 
 function rowToPlayer(row: PlayerStatsCacheRow): Player {
-  const fallbackPos = PLAYER_POSITIONS[row.name];
   return {
     id: String(row.player_id),
     name: row.name,
     team: row.team || "N/A",
-    position: fallbackPos || row.position || "N/A",
+    position: normalizeFantasyPosition(row.position || "N/A", row.name),
     age: 0,
     ppg: Number(row.pts_avg ?? 0),
     rpg: Number(row.reb_avg ?? 0),
@@ -1654,7 +1655,10 @@ async function fetchCurrentSeasonPlayersFromDB(): Promise<Player[]> {
        .eq("id", teamId)
        .single();
      if (!error && data?.roster_data && Array.isArray(data.roster_data) && data.roster_data.length > 0) {
-       const roster = data.roster_data as RosterPlayer[];
+       const roster = (data.roster_data as RosterPlayer[]).map((player) => ({
+         ...player,
+         position: normalizeFantasyPosition(player.position, player.name),
+       }));
        // Update localStorage cache
        if (canUseStorage()) {
          const all = getLeagueRosters(leagueId);
@@ -1664,7 +1668,10 @@ async function fetchCurrentSeasonPlayersFromDB(): Promise<Player[]> {
        return roster;
      }
      // Fallback to localStorage (e.g. data was drafted before migration)
-     const local = getTeamRoster(leagueId, teamId);
+     const local = getTeamRoster(leagueId, teamId).map((player) => ({
+       ...player,
+       position: normalizeFantasyPosition(player.position, player.name),
+     }));
      if (local.length > 0) {
        // Backfill Supabase with localStorage data.
        // Awaited so fetchUndraftedPlayersFromDB (called immediately after) reads
@@ -1711,12 +1718,28 @@ async function fetchCurrentSeasonPlayersFromDB(): Promise<Player[]> {
        .from("fantasy_teams")
        .select("id, roster_data")
        .eq("league_id", leagueId);
-     if (error || !data) return getLeagueRosters(leagueId);
+     if (error || !data) {
+       const localRosters = getLeagueRosters(leagueId);
+       const normalized: Record<string, RosterPlayer[]> = {};
+       for (const [teamId, roster] of Object.entries(localRosters)) {
+         normalized[teamId] = roster.map((player) => ({
+           ...player,
+           position: normalizeFantasyPosition(player.position, player.name),
+         }));
+       }
+       return normalized;
+     }
      const result: Record<string, RosterPlayer[]> = {};
      for (const team of data) {
        const roster = (team.roster_data && Array.isArray(team.roster_data) && team.roster_data.length > 0)
-         ? team.roster_data as RosterPlayer[]
-         : getTeamRoster(leagueId, team.id);
+         ? (team.roster_data as RosterPlayer[]).map((player) => ({
+             ...player,
+             position: normalizeFantasyPosition(player.position, player.name),
+           }))
+         : getTeamRoster(leagueId, team.id).map((player) => ({
+             ...player,
+             position: normalizeFantasyPosition(player.position, player.name),
+           }));
        result[team.id] = roster;
      }
      // Update localStorage cache
