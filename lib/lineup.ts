@@ -17,7 +17,7 @@ export const SLOT_ELIGIBLE: Record<string, string[]> = {
   PF:    ["PF"],
   C:     ["C"],
   G:     ["PG", "SG"],
-  F:     ["SF", "PF"],
+  F:     ["SF", "PF", "C"],
   UTIL1: ["PG", "SG", "SF", "PF", "C"],
   UTIL2: ["PG", "SG", "SF", "PF", "C"],
   UTIL3: ["PG", "SG", "SF", "PF", "C"],
