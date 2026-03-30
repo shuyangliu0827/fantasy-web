@@ -1696,8 +1696,9 @@
     * scanning all fantasy_teams.roster_data if the ownership table is empty
     * (e.g. migration not yet applied).
     */
-   export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
-     const allPlayers = getPlayers();
+export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
+  const allPlayers = getPlayers();
+  const normalizeName = (name: string) => name.trim().toLowerCase();
 
      // ── Primary: ownership table ────────────────────────────────────────────
      // Fetch ALL records for the league in one query (both owned and released).
@@ -1726,13 +1727,15 @@
          .select("id, roster_data")
          .eq("league_id", leagueId);
 
-       const unseededOwned = new Set<string>();
-       if (teamsData) {
-         let hasUnseededPicks = false;
-         for (const t of teamsData) {
-           const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
-           for (const p of getCurrentRoster(r)) {
-             if (!ownedByTable.has(p.id)) {
+      const unseededOwned = new Set<string>();
+      const activeRosterNames = new Set<string>();
+      if (teamsData) {
+        let hasUnseededPicks = false;
+        for (const t of teamsData) {
+          const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
+          for (const p of getCurrentRoster(r)) {
+            activeRosterNames.add(normalizeName(p.name));
+            if (!ownedByTable.has(p.id)) {
                // Player is active in roster_data but not owned per the ownership table.
                // Treat as owned regardless of releasedByTable — if roster_data still shows
                // the player as active (no releasedAt), the ownership table entry is stale
@@ -1746,13 +1749,15 @@
            }
          }
          // Trigger background backfill so future calls use ownership table directly
-         if (hasUnseededPicks) {
-           supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
-         }
-       }
+        if (hasUnseededPicks) {
+          supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
+        }
+      }
 
-       return allPlayers.filter(p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id));
-     }
+      return allPlayers.filter(
+        p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id) && !activeRosterNames.has(normalizeName(p.name))
+      );
+    }
 
      // ── Fallback: ownership table unavailable (migration not yet applied) ──
      const { data: teams, error: teamErr } = await supabase
