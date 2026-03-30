@@ -260,8 +260,10 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
       .then(({ data }) => {
         const dbPicks: SerializedPick[] = data?.draft_picks_data ?? [];
         if (dbPicks.length > 0) mergePicks(dbPicks);
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      }, () => {
+        setLoading(false);
+      });
 
     const channel = supabase.channel(`draft-room-${league.id}`, {
       config: { broadcast: { self: false } },
