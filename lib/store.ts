@@ -1211,12 +1211,67 @@
      return pos ? { ...p, position: pos } : p;
    });
    
-   export function getPlayers(): Player[] {
-     if (!canUseStorage()) return DEFAULT_PLAYERS;
-     const custom = safeParse<Player[]>(localStorage.getItem(KEYS.playerRankings), []);
-     if (custom.length > 0) return custom;
-     return DEFAULT_PLAYERS;
-   }
+export function getPlayers(): Player[] {
+  if (!canUseStorage()) return DEFAULT_PLAYERS;
+  const custom = safeParse<Player[]>(localStorage.getItem(KEYS.playerRankings), []);
+  if (custom.length > 0) return custom;
+  return DEFAULT_PLAYERS;
+}
+
+type PlayerStatsCacheRow = {
+  player_id: number;
+  name: string;
+  team: string;
+  position: string;
+  games_played: number | null;
+  pts_avg: number | null;
+  reb_avg: number | null;
+  ast_avg: number | null;
+  stl_avg: number | null;
+  blk_avg: number | null;
+  fg_pct: number | null;
+  ft_pct: number | null;
+  tov_avg: number | null;
+  rank: number | null;
+  injury: string | null;
+};
+
+function rowToPlayer(row: PlayerStatsCacheRow): Player {
+  const fallbackPos = PLAYER_POSITIONS[row.name];
+  return {
+    id: String(row.player_id),
+    name: row.name,
+    team: row.team || "N/A",
+    position: fallbackPos || row.position || "N/A",
+    age: 0,
+    ppg: Number(row.pts_avg ?? 0),
+    rpg: Number(row.reb_avg ?? 0),
+    apg: Number(row.ast_avg ?? 0),
+    spg: Number(row.stl_avg ?? 0),
+    bpg: Number(row.blk_avg ?? 0),
+    fg: Number(row.fg_pct ?? 0),
+    ft: Number(row.ft_pct ?? 0),
+    tov: Number(row.tov_avg ?? 0),
+    gp: Number(row.games_played ?? 0),
+    adp: Number(row.rank ?? 0),
+    rank: Number(row.rank ?? 0),
+    trend: "same",
+    ...(row.injury ? { injury: row.injury } : {}),
+  };
+}
+
+async function fetchCurrentSeasonPlayersFromDB(): Promise<Player[]> {
+  const { data, error } = await supabase
+    .from("player_stats_cache")
+    .select("player_id, name, team, position, games_played, pts_avg, reb_avg, ast_avg, stl_avg, blk_avg, fg_pct, ft_pct, tov_avg, rank, injury")
+    .order("rank", { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    return getPlayers();
+  }
+
+  return (data as PlayerStatsCacheRow[]).map(rowToPlayer);
+}
    
    export function getPlayerById(id: string): Player | undefined {
      return getPlayers().find((p) => p.id === id);
@@ -1696,8 +1751,9 @@
     * scanning all fantasy_teams.roster_data if the ownership table is empty
     * (e.g. migration not yet applied).
     */
-   export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
-     const allPlayers = getPlayers();
+export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
+  const allPlayers = await fetchCurrentSeasonPlayersFromDB();
+  const normalizeName = (name: string) => name.trim().toLowerCase();
 
      // ── Primary: ownership table ────────────────────────────────────────────
      // Fetch ALL records for the league in one query (both owned and released).
@@ -1726,13 +1782,15 @@
          .select("id, roster_data")
          .eq("league_id", leagueId);
 
-       const unseededOwned = new Set<string>();
-       if (teamsData) {
-         let hasUnseededPicks = false;
-         for (const t of teamsData) {
-           const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
-           for (const p of getCurrentRoster(r)) {
-             if (!ownedByTable.has(p.id)) {
+      const unseededOwned = new Set<string>();
+      const activeRosterNames = new Set<string>();
+      if (teamsData) {
+        let hasUnseededPicks = false;
+        for (const t of teamsData) {
+          const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
+          for (const p of getCurrentRoster(r)) {
+            activeRosterNames.add(normalizeName(p.name));
+            if (!ownedByTable.has(p.id)) {
                // Player is active in roster_data but not owned per the ownership table.
                // Treat as owned regardless of releasedByTable — if roster_data still shows
                // the player as active (no releasedAt), the ownership table entry is stale
@@ -1746,13 +1804,15 @@
            }
          }
          // Trigger background backfill so future calls use ownership table directly
-         if (hasUnseededPicks) {
-           supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
-         }
-       }
+        if (hasUnseededPicks) {
+          supabase.rpc("upsert_draft_ownerships", { p_league_id: leagueId }).then(() => {});
+        }
+      }
 
-       return allPlayers.filter(p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id));
-     }
+      return allPlayers.filter(
+        p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id) && !activeRosterNames.has(normalizeName(p.name))
+      );
+    }
 
      // ── Fallback: ownership table unavailable (migration not yet applied) ──
      const { data: teams, error: teamErr } = await supabase
@@ -1824,10 +1884,12 @@
        return { ok: false, error: "本周签约次数已达上限（每周最多7次）" };
      }
 
-     const roster = getTeamRoster(leagueId, teamId);
-     const allPlayers = getPlayers();
-     const player = allPlayers.find(p => p.id === playerId);
-     if (!player) return { ok: false, error: "Player not found" };
+    const roster = getTeamRoster(leagueId, teamId);
+    // Use the same current-season player source as Free Agency list rendering
+    // so lookup IDs match what the user selected in the modal.
+    const allPlayers = await fetchCurrentSeasonPlayersFromDB();
+    const player = allPlayers.find(p => p.id === playerId);
+    if (!player) return { ok: false, error: "Player not found" };
 
      // Fast local pre-check (optimistic, may be stale across users)
      const rosters = getLeagueRosters(leagueId);
