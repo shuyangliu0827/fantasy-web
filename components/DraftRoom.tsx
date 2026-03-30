@@ -279,10 +279,6 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
           mergePicks([pick]);
           const dp = deserializePick(pick);
           if (dp) {
-          mergePicksRef.current([pick]);
-          const player = allPlayers.find(p => p.id === pick.playerId);
-          if (player) {
-            const dp: DraftPick = { round: pick.round, pickInRound: pick.pickInRound, overallPick: pick.overallPick, teamId: pick.teamId, teamName: pick.teamName, player, timestamp: pick.timestamp };
             setShowPickBanner(dp);
             setTimeout(() => setShowPickBanner(null), 2500);
             setTimer(90);
@@ -310,16 +306,7 @@ export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Pr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league.id]);
 
-  // Retry localStorage restore whenever allPlayers updates (e.g. after API loads with different IDs)
-  useEffect(() => {
-    const stored = loadStoredPicks(league.id, allPlayers);
-    if (stored.length > picksRef.current.length) {
-      applyPicks(stored);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allPlayers]);
-
-  useEffect(() => {
+useEffect(() => {
     fetch("/api/nba-stats")
       .then(r => r.json())
       .then(data => {
