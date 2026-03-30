@@ -400,17 +400,14 @@ useEffect(() => {
       for (const [teamId, roster] of Object.entries(rostersByTeam)) {
         supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
       }
-      // Write the complete, deduplicated picks list and league status together,
-      // then seed the ownership table only AFTER this write commits.
-      // This prevents upsert_draft_ownerships from reading a stale/incomplete
-      // draft_picks_data caused by the last pick's fire-and-forget write not yet
-      // landing in Supabase when the draft-complete effect fires.
+      // Status update is a small, fast write — must commit quickly so onDraftComplete
+      // (called when user clicks "返回联赛") finds status = "active" and unmounts DraftRoom.
+      supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
+      // Write the complete deduplicated picks from state, then seed the ownership table
+      // only AFTER that write commits. Keeps draft_picks_data separate from the status
+      // update so the status lands quickly while this larger write finishes in the background.
       supabase.from("leagues")
-        .update({
-          draft_picks_data: dedupedPicks.map(serializePick) as never,
-          status: "active",
-          draft_completed_at: new Date().toISOString(),
-        })
+        .update({ draft_picks_data: dedupedPicks.map(serializePick) } as never)
         .eq("id", league.id)
         .then(() => {
           supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
