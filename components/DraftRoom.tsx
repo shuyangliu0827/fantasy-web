@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getPlayers, Player, getSessionUser } from "@/lib/store";
+import { normalizeFantasyPosition } from "@/lib/position-normalization";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { supabase } from "@/lib/supabase";
 
@@ -343,7 +344,7 @@ useEffect(() => {
               id: String(p.id),
               name: p.name,
               team: p.team ?? "N/A",
-              position: p.position ?? "N/A",
+              position: normalizeFantasyPosition(p.position ?? "N/A", p.name),
               age: 0,
               ppg: p.averages.pts ?? 0,
               rpg: p.averages.reb ?? 0,
