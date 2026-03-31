@@ -11,7 +11,9 @@ const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
 import { getCurrentSeasonYear } from "@/lib/season";
 import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
-const CURRENT_SEASON = getCurrentSeasonYear();
+// IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
+// kept alive across season boundaries on long-running edge function instances. Always
+// call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
 
 // Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
@@ -105,6 +107,7 @@ async function fetchAPI(endpoint: string, params?: Record<string, string>) {
 async function refreshAndPersist() {
   if (isRefreshing) return;
   isRefreshing = true;
+  const CURRENT_SEASON = getCurrentSeasonYear();
   console.log("[nba-stats] Starting fallback refresh (full season stats)...");
 
   try {

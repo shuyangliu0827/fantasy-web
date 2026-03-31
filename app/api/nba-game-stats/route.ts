@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { filterValidStats } from "@/lib/canonical-pipeline";
-import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
+import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/scoring-config";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY  = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
@@ -65,14 +65,21 @@ async function fetchFromBDL(date: string): Promise<DateStatsMap> {
         if (minNum === 0 && stat.pts === 0) continue;
 
         const playerId = String(stat.player.id);
-        const fpts =
-          (stat.pts       || 0) * FANTASY_WEIGHTS.pts  +
-          (stat.reb       || 0) * FANTASY_WEIGHTS.reb  +
-          (stat.ast       || 0) * FANTASY_WEIGHTS.ast  +
-          (stat.stl       || 0) * FANTASY_WEIGHTS.stl  +
-          (stat.blk       || 0) * FANTASY_WEIGHTS.blk  +
-          (stat.fg3m      || 0) * FANTASY_WEIGHTS.fg3m +
-          (stat.turnover  || 0) * FANTASY_WEIGHTS.tov;
+        // All 11 ESPN scoring terms — uses calcFantasyPoints from scoring-config
+        // so this formula stays in sync with the league scoring engine.
+        const fpts = calcFantasyPoints({
+          pts:  stat.pts      || 0,
+          fgm:  stat.fgm      || 0,
+          fga:  stat.fga      || 0,
+          fg3m: stat.fg3m     || 0,
+          ftm:  stat.ftm      || 0,
+          fta:  stat.fta      || 0,
+          reb:  stat.reb      || 0,
+          ast:  stat.ast      || 0,
+          stl:  stat.stl      || 0,
+          blk:  stat.blk      || 0,
+          tov:  stat.turnover || 0,
+        }, FANTASY_WEIGHTS);
 
         map[playerId] = {
           min:  Math.round(minNum * 10) / 10,

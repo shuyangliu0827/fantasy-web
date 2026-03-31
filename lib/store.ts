@@ -13,6 +13,8 @@
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
    export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
+   import { getTodayStr, formatDateStr, addUtcDays } from "./week-utils";
+   import { resolveBdlIds } from "./player-identity";
    
    // ==================== Types ====================
    
@@ -87,6 +89,7 @@
      rank: number;
      trend: "up" | "down" | "same";
      injury?: string;
+     bdl_id?: number;
    };
    
    export type DraftPick = {
@@ -1434,6 +1437,7 @@
      acquiredVia?: "draft" | "free_agent" | "trade";
      acquiredAt?: number;  // Unix ms when this player joined this team
      releasedAt?: number;  // Unix ms when dropped/traded away; undefined = still active
+     bdl_id?: number;      // BallDontLie integer ID — links to player_day_stats and player_stats_cache
    };
 
    // Fantasy basketball lineup slots
@@ -1531,21 +1535,19 @@
      return result;
    }
 
-   export function setLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
+   export async function setLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap): Promise<void> {
      if (!canUseStorage()) return;
      const dedupedLineup = dedupeLineup(lineup);
      const daily = getDailyLineups(leagueId, teamId);
      daily[date] = dedupedLineup;
      localStorage.setItem(`bp_league_lineup_${leagueId}_${teamId}`, JSON.stringify(daily));
-     // Sync full daily lineup map to Supabase (fire-and-forget)
-     supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId).then(() => {});
+     // Sync full daily lineup map to Supabase (awaited so callers can surface errors)
+     await supabase.from("fantasy_teams").update({ lineup_data: daily }).eq("id", teamId);
    }
 
    export function setTeamLineup(leagueId: string, teamId: string, lineup: LineupMap) {
      // Legacy compat: saves as today's lineup
-     const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-     setLineupForDate(leagueId, teamId, todayStr, lineup);
+     setLineupForDate(leagueId, teamId, getTodayStr(), lineup);
    }
 
    // ── Per-week lineup history ──────────────────────────────────────────────
@@ -1587,8 +1589,8 @@
     * Writes to lineup_data (same column fetchTeamLineupFromDB reads), so
     * editing one date never touches another date's lineup.
     */
-   export function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap) {
-     setLineupForDate(leagueId, teamId, date, lineup);
+   export async function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap): Promise<void> {
+     await setLineupForDate(leagueId, teamId, date, lineup);
    }
 
    // Fetch roster from Supabase (shared across users), falls back to localStorage
@@ -1605,6 +1607,23 @@
          const all = getLeagueRosters(leagueId);
          all[teamId] = roster;
          localStorage.setItem(`bp_league_rosters_${leagueId}`, JSON.stringify(all));
+       }
+       // Background: hydrate bdl_id for any active players that are missing it
+       const missing = getCurrentRoster(roster).filter(p => !p.bdl_id).map(p => p.name);
+       if (missing.length > 0) {
+         resolveBdlIds(missing).then(nameMap => {
+           if (nameMap.size === 0) return;
+           let changed = false;
+           for (const p of roster) {
+             if (!p.bdl_id && nameMap.has(p.name)) {
+               p.bdl_id = nameMap.get(p.name);
+               changed = true;
+             }
+           }
+           if (changed) {
+             supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
+           }
+         }).catch(() => {});
        }
        return roster;
      }
@@ -1776,11 +1795,9 @@
    // Returns the Monday date string (YYYY-MM-DD) for the current week
    function getWeekStart(): string {
      const today = new Date();
-     const day = today.getDay(); // 0=Sun, 1=Mon, ...
+     const day = today.getUTCDay(); // 0=Sun, 1=Mon, ...
      const diff = day === 0 ? -6 : 1 - day;
-     const monday = new Date(today);
-     monday.setDate(today.getDate() + diff);
-     return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+     return formatDateStr(addUtcDays(today, diff));
    }
 
    export function getPickupCount(leagueId: string, teamId: string): number {
@@ -1860,8 +1877,7 @@
        roster[dropIdx] = { ...roster[dropIdx], releasedAt: Date.now() };
        // Remove dropped player from all daily lineups (today and future)
        const daily = getDailyLineups(leagueId, teamId);
-       const today = new Date();
-       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       const todayStr = getTodayStr();
        for (const [date, lineup] of Object.entries(daily)) {
          if (date >= todayStr) {
            for (const [slot, pid] of Object.entries(lineup)) {
@@ -1893,6 +1909,7 @@
        round: 0,
        acquiredVia: "free_agent",
        acquiredAt: Date.now(),
+       bdl_id: player.bdl_id,
      };
 
      roster.push(newPlayer);
@@ -1926,8 +1943,7 @@
      await setTeamRoster(leagueId, teamId, roster);
      // Remove from all daily lineups (today and future only, preserve past)
      const daily = getDailyLineups(leagueId, teamId);
-     const today = new Date();
-     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+     const todayStr = getTodayStr();
      let changed = false;
      for (const [date, lineup] of Object.entries(daily)) {
        if (date >= todayStr) {
@@ -2068,16 +2084,25 @@
          return { ok: false, error: "Requested players not found on roster. The roster data may not have synced yet — please try again." };
        }
 
-       // Remove from original rosters
-       const newFromRoster = fromRoster.filter(p => !trade.offeredPlayerIds.includes(p.id));
-       const newToRoster = toRoster.filter(p => !trade.requestedPlayerIds.includes(p.id));
+       // Mark traded players as released on their original roster (preserves history)
+       const now = Date.now();
+       const newFromRoster = fromRoster.map(p =>
+         trade.offeredPlayerIds.includes(p.id) && !p.releasedAt
+           ? { ...p, releasedAt: now }
+           : p
+       );
+       const newToRoster = toRoster.map(p =>
+         trade.requestedPlayerIds.includes(p.id) && !p.releasedAt
+           ? { ...p, releasedAt: now }
+           : p
+       );
 
        // Add to new rosters with updated acquisition info
        for (const p of offeredPlayers) {
-         newToRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+         newToRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now });
        }
        for (const p of requestedPlayers) {
-         newFromRoster.push({ ...p, acquiredVia: "trade", acquiredAt: Date.now() });
+         newFromRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now });
        }
 
        // Await both roster saves to Supabase before updating trade status
@@ -2096,8 +2121,7 @@
        });
 
        // Clean up lineups for traded players (today and future only)
-       const today = new Date();
-       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+       const todayStr = getTodayStr();
        for (const tId of [trade.fromTeamId, trade.toTeamId]) {
          const daily = await fetchTeamLineupFromDB(leagueId, tId);
          const roster = tId === trade.fromTeamId ? newFromRoster : newToRoster;

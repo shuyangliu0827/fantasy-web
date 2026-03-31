@@ -26,6 +26,7 @@ import {
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
+import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr } from "@/lib/week-utils";
 
 // ── Types ──
 
@@ -95,27 +96,12 @@ const DAY_NAMES_ZH = ["日", "一", "二", "三", "四", "五", "六"];
 
 // ── Helpers ──
 
-function formatDateStr(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function getWeekDates(start: Date): Date[] {
   const dates: Date[] = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    dates.push(d);
+    dates.push(addUtcDays(start, i));
   }
   return dates;
-}
-
-function getTodayStart(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
 }
 
 // ── Component ──
@@ -138,8 +124,8 @@ export default function RosterPage() {
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; user_id: string }[]>([]);
 
   // New state for schedule & stats
-  const [weekStart, setWeekStart] = useState<Date>(getTodayStart());
-  const [selectedDate, setSelectedDate] = useState<string>(formatDateStr(new Date()));
+  const [weekStart, setWeekStart] = useState<Date>(normalizeUtcDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
   const [teamGames, setTeamGames] = useState<TeamGamesMap>({});
   const [playerStats, setPlayerStats] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
@@ -282,7 +268,7 @@ export default function RosterPage() {
     if (!league || !myTeam) return;
     setLineup(newLineup);
     setDailyLineups(prev => ({ ...prev, [selectedDate]: newLineup }));
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup);
+    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch(console.error);
   }
 
   function getPlayerInSlot(slot: string): RosterPlayer | undefined {
@@ -439,15 +425,13 @@ export default function RosterPage() {
   // ── Date navigation ──
 
   const weekDates = getWeekDates(weekStart);
-  const todayStr = formatDateStr(new Date());
+  const todayStr = getTodayStr();
 
   function shiftWeek(direction: number) {
-    const next = new Date(weekStart);
-    next.setDate(weekStart.getDate() + direction * 7);
+    const next = addUtcDays(weekStart, direction * 7);
     // Don't navigate before the league's start date
     if (leagueMinDate && direction < 0) {
-      const minWeekStart = new Date(leagueMinDate);
-      minWeekStart.setHours(0, 0, 0, 0);
+      const minWeekStart = normalizeUtcDate(new Date(leagueMinDate));
       if (next < minWeekStart) return;
     }
     setWeekStart(next);
@@ -568,10 +552,15 @@ export default function RosterPage() {
 
   // Get game-day box score stats for a player (if they played on the selected date)
   function getGameDayStatsForPlayer(player: RosterPlayer): PlayerGameStats | null {
+    // Fast path: use stored BDL ID if available (O(1))
+    if (player.bdl_id) {
+      const byBdlId = gameDayStats[String(player.bdl_id)];
+      if (byBdlId) return byBdlId;
+    }
     // Try direct roster ID match
     const direct = gameDayStats[player.id];
     if (direct) return direct;
-    // Use stats cache to find BDL ID (handles "p1" → numeric BDL ID mapping via name match)
+    // Fallback: match via season stats cache name→id (handles pre-hydration rosters)
     const cached = getStatsForPlayer(player);
     if (cached) {
       const byBdlId = gameDayStats[String(cached.id)];
@@ -822,7 +811,7 @@ export default function RosterPage() {
                 const isToday = ds === todayStr;
                 const isSelected = ds === selectedDate;
                 const isBeforeLeagueStart = leagueMinDate ? ds < leagueMinDate : false;
-                const dayName = lang === "zh" ? DAY_NAMES_ZH[d.getDay()] : DAY_NAMES_EN[d.getDay()];
+                const dayName = lang === "zh" ? DAY_NAMES_ZH[d.getUTCDay()] : DAY_NAMES_EN[d.getUTCDay()];
                 return (
                   <button
                     key={ds}
@@ -831,7 +820,7 @@ export default function RosterPage() {
                     onClick={() => !isBeforeLeagueStart && setSelectedDate(ds)}
                   >
                     <span className="date-day">{dayName}</span>
-                    <span className="date-num">{d.getMonth() + 1}/{d.getDate()}</span>
+                    <span className="date-num">{d.getUTCMonth() + 1}/{d.getUTCDate()}</span>
                     {isToday && <span className="today-dot" />}
                   </button>
                 );
