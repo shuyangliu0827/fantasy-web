@@ -5,6 +5,8 @@ import { getPlayers, Player, getSessionUser } from "@/lib/store";
 import { normalizeFantasyPosition } from "@/lib/position-normalization";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { supabase } from "@/lib/supabase";
+import { useLang } from "@/lib/lang";
+import { getPlayerNameZh, getTeamNameZh, POSITION_ZH } from "@/lib/translations";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
@@ -164,6 +166,11 @@ type LiveStats = {
 };
 
 export default function DraftRoom({ league, teams, myTeam, onDraftComplete }: Props) {
+  const { lang, setLang, t } = useLang();
+  const pn = (name: string) => lang === "zh" ? getPlayerNameZh(name) : name;
+  const tn = (abbr: string) => lang === "zh" ? getTeamNameZh(abbr) : abbr;
+  const pos = (p: string) => lang === "zh" ? (POSITION_ZH[p] || p) : p;
+
   const [allPlayers, setAllPlayers] = useState<Player[]>(() => getPlayers());
   const [picks, setPicks] = useState<DraftPick[]>([]);
   const [draftedPlayerIds, setDraftedPlayerIds] = useState<Set<string>>(new Set());
@@ -451,7 +458,7 @@ useEffect(() => {
       }
     } catch (err) {
       console.error("Pick error:", err);
-      alert("选择失败");
+      alert(lang === "zh" ? "选择失败" : "Pick failed");
     }
     setPicking(false);
   }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, picks, applyPicks]);
@@ -475,7 +482,7 @@ useEffect(() => {
       <div style={{ minHeight: "100vh", background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🏀</div>
-          <p style={{ color: "#6b7280", fontSize: 15 }}>加载选秀数据...</p>
+          <p style={{ color: "#6b7280", fontSize: 15 }}>{t("加载选秀数据...", "Loading draft data...")}</p>
         </div>
       </div>
     );
@@ -491,7 +498,7 @@ useEffect(() => {
           <div>
             <div style={{ fontWeight: 700, fontSize: 15, color: "#fff" }}>{league.name}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-              {league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"} · {numTeams} 支队伍 · {TOTAL_ROUNDS} 轮
+              {league.draft_type === "snake" ? t("蛇形选秀", "Snake Draft") : t("线性选秀", "Linear Draft")} · {numTeams} {t("支队伍", "Teams")} · {TOTAL_ROUNDS} {t("轮", "Rounds")}
             </div>
           </div>
         </div>
@@ -500,15 +507,15 @@ useEffect(() => {
           {!draftComplete && (
             <>
               <div style={{ background: "rgba(255,255,255,0.12)", padding: "5px 14px", borderRadius: 8, textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>轮次</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{t("轮次", "Round")}</div>
                 <div style={{ fontWeight: 800, fontSize: 17, color: "#f59e0b" }}>{currentRound}/{TOTAL_ROUNDS}</div>
               </div>
               <div style={{ background: "rgba(255,255,255,0.12)", padding: "5px 14px", borderRadius: 8, textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>顺位</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{t("顺位", "Pick")}</div>
                 <div style={{ fontWeight: 800, fontSize: 17, color: "#f59e0b" }}>#{overallPick}</div>
               </div>
               <div style={{ background: "rgba(255,255,255,0.12)", padding: "5px 14px", borderRadius: 8, textAlign: "center", minWidth: 64 }}>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>倒计时</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.5px" }}>{t("倒计时", "Timer")}</div>
                 <div style={{ fontWeight: 800, fontSize: 17, color: timerColor, fontVariantNumeric: "tabular-nums" }}>
                   {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, "0")}
                 </div>
@@ -519,7 +526,7 @@ useEffect(() => {
           {!draftComplete && currentTeam && (
             <div style={{ background: isMyTurn ? "#15803d" : "rgba(255,255,255,0.12)", padding: "7px 16px", borderRadius: 8, textAlign: "center" }}>
               <div style={{ fontSize: 9, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                {isMyTurn ? "轮到你了!" : "正在选秀"}
+                {isMyTurn ? t("轮到你了!", "Your Turn!") : t("正在选秀", "Drafting")}
               </div>
               <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>{currentTeam.name}</div>
             </div>
@@ -527,9 +534,17 @@ useEffect(() => {
 
           {draftComplete && (
             <div style={{ background: "#1e3a8a", padding: "8px 20px", borderRadius: 8, fontWeight: 700, color: "#fff", fontSize: 14 }}>
-              🏆 选秀完成!
+              🏆 {t("选秀完成!", "Draft Complete!")}
             </div>
           )}
+
+          {/* Language toggle */}
+          <button
+            onClick={() => setLang(lang === "zh" ? "en" : "zh")}
+            style={{ padding: "5px 12px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 6, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap" }}
+          >
+            {lang === "zh" ? "EN" : "中文"}
+          </button>
         </div>
       </div>
 
@@ -539,7 +554,7 @@ useEffect(() => {
           background: showPickBanner.teamId === myTeam.id ? "#15803d" : "#1e3a8a",
           padding: "9px 20px", textAlign: "center", fontWeight: 600, fontSize: 13, color: "#fff",
         }}>
-          第{showPickBanner.round}轮 #{showPickBanner.overallPick} — {showPickBanner.teamName} 选择了 {showPickBanner.player.name} ({showPickBanner.player.team} · {showPickBanner.player.position})
+          {t("第", "Round ")}{showPickBanner.round}{t("轮", "")} #{showPickBanner.overallPick} — {showPickBanner.teamName} {t("选择了", "picked")} {pn(showPickBanner.player.name)} ({tn(showPickBanner.player.team)} · {pos(showPickBanner.player.position)})
         </div>
       )}
 
@@ -547,7 +562,7 @@ useEffect(() => {
       {isMobile && (
         <div style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: "8px 14px", display: "flex", justifyContent: "flex-end" }}>
           <button onClick={() => setShowRightPanel(o => !o)} style={{ padding: "6px 14px", background: showRightPanel ? "#eff6ff" : "#f3f4f6", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, fontWeight: 700, color: showRightPanel ? "#1e3a8a" : "#374151", cursor: "pointer" }}>
-            {showRightPanel ? "▲ 收起阵容" : `▼ 我的阵容 (${myPicks.length})`}
+            {showRightPanel ? t("▲ 收起阵容", "▲ Hide Roster") : `▼ ${t("我的阵容", "My Roster")} (${myPicks.length})`}
           </button>
         </div>
       )}
@@ -557,7 +572,7 @@ useEffect(() => {
         <div style={{ background: "#fff", borderBottom: "2px solid #e5e7eb", maxHeight: 260, overflowY: "auto", padding: "6px 8px" }}>
           {myPicks.length === 0 ? (
             <div style={{ textAlign: "center", padding: "20px 16px", color: "#9ca3af", fontSize: 13 }}>
-              {isMyTurn ? "轮到你了，请选择球员!" : "等待其他队伍选秀..."}
+              {isMyTurn ? t("轮到你了，请选择球员!", "Your turn, pick a player!") : t("等待其他队伍选秀...", "Waiting for other teams...")}
             </div>
           ) : (
             myPicks.map((pick, i) => (
@@ -565,8 +580,8 @@ useEffect(() => {
                 <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#dbeafe", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>R{pick.round}</div>
                 <PlayerAvatar name={pick.player.name} size={28} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.player.name}</div>
-                  <div style={{ fontSize: 10, color: "#9ca3af" }}>{pick.player.team} · {pick.player.position}</div>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pn(pick.player.name)}</div>
+                  <div style={{ fontSize: 10, color: "#9ca3af" }}>{tn(pick.player.team)} · {pos(pick.player.position)}</div>
                 </div>
                 <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, flexShrink: 0 }}>{pick.player.ppg}</div>
               </div>
@@ -585,7 +600,7 @@ useEffect(() => {
           <div style={{ padding: "10px 14px", background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <input
               type="text"
-              placeholder="搜索球员..."
+              placeholder={t("搜索球员...", "Search players...")}
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); setPlayerPage(1); }}
               style={{ flex: 1, minWidth: 120, padding: "7px 12px", background: "#f9fafb", border: "1.5px solid #e5e7eb", borderRadius: 8, color: "#111827", fontSize: 13, outline: "none", fontFamily: FONT }}
@@ -595,17 +610,17 @@ useEffect(() => {
                 {pos}
               </button>
             ))}
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>{availablePlayers.length} 人可选</span>
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>{availablePlayers.length} {t("人可选", "available")}</span>
           </div>
 
           {/* Player list header */}
           <div style={{ display: "grid", gridTemplateColumns: "36px 220px 52px 36px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 44px 60px 70px", padding: "5px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 10, color: "#6b7280", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", minWidth: "max-content" }}>
-            <span>#</span><span>球员</span><span>位置</span>
+            <span>#</span><span>{t("球员", "Player")}</span><span>{t("位置", "Pos")}</span>
             <span>GP</span><span>MIN</span><span>FGM</span><span>FGA</span>
             <span>FTM</span><span>FTA</span><span>3PM</span>
             <span>REB</span><span>AST</span><span>STL</span><span>BLK</span><span>TO</span><span>PTS</span>
             <span style={{ color: "#1e3a8a" }}>FPTS</span>
-            <span style={{ textAlign: "center" }}>{isMyTurn ? "选择" : ""}</span>
+            <span style={{ textAlign: "center" }}>{isMyTurn ? t("选择", "Pick") : ""}</span>
           </div>
 
           {/* Player list */}
@@ -626,17 +641,17 @@ useEffect(() => {
                     <div style={{ flexShrink: 0 }}><PlayerAvatar name={player.name} size={28} /></div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {player.name}
+                        {pn(player.name)}
                         {player.injury && (
                           <span style={{ marginLeft: 5, padding: "1px 5px", background: player.injury === "Out" ? "#fee2e2" : "#fef3c7", color: player.injury === "Out" ? "#dc2626" : "#92400e", borderRadius: 4, fontSize: 9, fontWeight: 700 }}>
                             {player.injury}
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{player.team}</div>
+                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{tn(player.team)}</div>
                     </div>
                   </div>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>{player.position}</span>
+                  <span style={{ fontSize: 11, color: "#6b7280" }}>{pos(player.position)}</span>
                   <span style={{ fontSize: 11, color: "#9ca3af" }}>{s?.gamesPlayed ?? "—"}</span>
                   <span style={{ fontSize: 11, color: "#374151" }}>{fmt(s?.min)}</span>
                   <span style={{ fontSize: 11, color: "#374151" }}>{fmt(s?.fgm)}</span>
@@ -661,7 +676,7 @@ useEffect(() => {
                         disabled={picking}
                         style={{ padding: "4px 10px", background: picking ? "#e5e7eb" : "#1e3a8a", color: picking ? "#9ca3af" : "#fff", border: "none", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: picking ? "not-allowed" : "pointer", fontFamily: FONT }}
                       >
-                        {picking ? "..." : "选择"}
+                        {picking ? "..." : t("选择", "Pick")}
                       </button>
                     )}
                   </div>
@@ -678,7 +693,7 @@ useEffect(() => {
                 disabled={playerPage === 1}
                 style={{ padding: "5px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, cursor: playerPage === 1 ? "not-allowed" : "pointer", color: playerPage === 1 ? "#d1d5db" : "#374151", fontFamily: FONT }}
               >
-                ← 上一页
+                ← {t("上一页", "Prev")}
               </button>
               {(() => {
                 const start = Math.max(1, Math.min(playerPage - 2, totalPlayerPages - 4));
@@ -698,7 +713,7 @@ useEffect(() => {
                 disabled={playerPage === totalPlayerPages}
                 style={{ padding: "5px 12px", fontSize: 12, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, cursor: playerPage === totalPlayerPages ? "not-allowed" : "pointer", color: playerPage === totalPlayerPages ? "#d1d5db" : "#374151", fontFamily: FONT }}
               >
-                下一页 →
+                {t("下一页", "Next")} →
               </button>
             </div>
           )}
@@ -712,7 +727,7 @@ useEffect(() => {
             <div style={{ padding: "11px 16px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{myTeam.name}</div>
-                <div style={{ fontSize: 11, color: "#6b7280" }}>选秀位: #{myTeam.draft_position}</div>
+                <div style={{ fontSize: 11, color: "#6b7280" }}>{t("选秀位", "Draft Pos")}: #{myTeam.draft_position}</div>
               </div>
               <div style={{ padding: "3px 10px", background: "#dbeafe", borderRadius: 20, fontSize: 12, fontWeight: 700, color: "#1e3a8a" }}>
                 {myPicks.length}/{TOTAL_ROUNDS}
@@ -721,7 +736,7 @@ useEffect(() => {
             <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
               {myPicks.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "28px 16px", color: "#9ca3af", fontSize: 13 }}>
-                  {isMyTurn ? "轮到你了，请选择球员!" : "等待其他队伍选秀..."}
+                  {isMyTurn ? t("轮到你了，请选择球员!", "Your turn, pick a player!") : t("等待其他队伍选秀...", "Waiting for other teams...")}
                 </div>
               ) : (
                 myPicks.map((pick, i) => (
@@ -731,8 +746,8 @@ useEffect(() => {
                     </div>
                     <PlayerAvatar name={pick.player.name} size={28} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pick.player.name}</div>
-                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{pick.player.team} · {pick.player.position}</div>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pn(pick.player.name)}</div>
+                      <div style={{ fontSize: 10, color: "#9ca3af" }}>{tn(pick.player.team)} · {pos(pick.player.position)}</div>
                     </div>
                     <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, flexShrink: 0 }}>{pick.player.ppg}</div>
                   </div>
@@ -744,17 +759,17 @@ useEffect(() => {
           {/* Draft log */}
           <div style={{ height: 220, display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "9px 16px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontWeight: 700, fontSize: 12, color: "#374151" }}>
-              选秀记录 ({picks.length})
+              {t("选秀记录", "Draft Log")} ({picks.length})
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px" }}>
               {picks.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 12 }}>暂无记录</div>
+                <div style={{ textAlign: "center", padding: 20, color: "#9ca3af", fontSize: 12 }}>{t("暂无记录", "No picks yet")}</div>
               ) : (
                 [...picks].reverse().map((pick) => (
                   <div key={pick.overallPick} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", borderBottom: "1px solid #f9fafb", fontSize: 11 }}>
                     <span style={{ color: "#9ca3af", fontWeight: 600, width: 24, flexShrink: 0 }}>#{pick.overallPick}</span>
                     <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: pick.teamId === myTeam.id ? "#1e3a8a" : "#374151", fontWeight: pick.teamId === myTeam.id ? 700 : 400 }}>
-                      {pick.player.name}
+                      {pn(pick.player.name)}
                     </span>
                     <span style={{ color: "#9ca3af", fontSize: 10, flexShrink: 0 }}>{pick.teamName}</span>
                   </div>
@@ -770,24 +785,24 @@ useEffect(() => {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: "36px 40px", textAlign: "center", maxWidth: 500, width: "90%", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🏆</div>
-            <h2 style={{ margin: "0 0 8px 0", fontSize: 24, fontWeight: 800, color: "#111827" }}>选秀完成!</h2>
+            <h2 style={{ margin: "0 0 8px 0", fontSize: 24, fontWeight: 800, color: "#111827" }}>{t("选秀完成!", "Draft Complete!")}</h2>
             <p style={{ color: "#6b7280", marginBottom: 20, fontSize: 14 }}>
-              恭喜! 你的队伍 &ldquo;{myTeam.name}&rdquo; 已选择 {myPicks.length} 名球员
+              {t(`恭喜! 你的队伍 "${myTeam.name}" 已选择 ${myPicks.length} 名球员`, `Congrats! Your team "${myTeam.name}" drafted ${myPicks.length} players`)}
             </p>
             <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "left", maxHeight: 280, overflowY: "auto" }}>
-              <div style={{ fontWeight: 700, marginBottom: 10, color: "#374151", fontSize: 12 }}>你的阵容:</div>
+              <div style={{ fontWeight: 700, marginBottom: 10, color: "#374151", fontSize: 12 }}>{t("你的阵容:", "Your Roster:")}</div>
               {myPicks.map((pick, i) => (
                 <div key={pick.player.id} style={{ display: "flex", alignItems: "center", padding: "5px 0", borderBottom: i < myPicks.length - 1 ? "1px solid #f3f4f6" : "none", fontSize: 12 }}>
                   <span style={{ color: "#9ca3af", width: 24 }}>R{pick.round}</span>
                   <PlayerAvatar name={pick.player.name} size={24} style={{ marginLeft: 6 }} />
-                  <span style={{ flex: 1, marginLeft: 8, fontWeight: 600, color: "#111827" }}>{pick.player.name}</span>
-                  <span style={{ color: "#6b7280" }}>{pick.player.position}</span>
+                  <span style={{ flex: 1, marginLeft: 8, fontWeight: 600, color: "#111827" }}>{pn(pick.player.name)}</span>
+                  <span style={{ color: "#6b7280" }}>{pos(pick.player.position)}</span>
                   <span style={{ color: "#1e3a8a", marginLeft: 10, fontWeight: 700 }}>{pick.player.ppg} PPG</span>
                 </div>
               ))}
             </div>
             <button onClick={onDraftComplete} style={{ padding: "12px 32px", background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: "pointer", fontFamily: FONT }}>
-              返回联赛
+              {t("返回联赛", "Back to League")}
             </button>
           </div>
         </div>
