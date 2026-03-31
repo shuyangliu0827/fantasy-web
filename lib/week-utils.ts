@@ -2,6 +2,9 @@
 // Canonical matchup week helpers. Weeks run Monday–Sunday in UTC.
 
 export const CANONICAL_TIMEZONE = "UTC";
+export const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"] as const;
+export const BENCH_SLOTS = ["BE1", "BE2", "BE3"] as const;
+export const VALID_ACTIVE_STARTER_SLOTS = new Set<string>(STARTER_SLOTS);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function normalizeUtcDate(value: Date | string): Date {

@@ -1,10 +1,7 @@
 import type { DailyLineupMap, LineupMap, RosterPlayer } from "./store";
 import { calcFantasyPoints, PointsWeights } from "./scoring-config";
-
-export const CANONICAL_TIMEZONE = "UTC";
-export const STARTER_SLOTS = ["PG", "SG", "SF", "PF", "C", "G", "F", "UTIL1", "UTIL2", "UTIL3"] as const;
-export const BENCH_SLOTS = ["BE1", "BE2", "BE3"] as const;
-export const VALID_ACTIVE_STARTER_SLOTS = new Set<string>(STARTER_SLOTS);
+export { CANONICAL_TIMEZONE, STARTER_SLOTS, BENCH_SLOTS } from "./week-utils";
+import { VALID_ACTIVE_STARTER_SLOTS } from "./week-utils";
 
 export type PlayerGameStats = {
   min: number;
