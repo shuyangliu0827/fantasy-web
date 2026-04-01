@@ -1,5 +1,11 @@
 // lib/balldontlie.ts
-// Ball Don't Lie API Integration for ALL-STAR tier
+// Ball Don't Lie API Integration — low-level transport layer
+//
+// ROLE: thin HTTP wrapper around BDL API endpoints.
+// This file does NOT decide when to call BDL — that is the responsibility
+// of each caller (API routes, edge function). Callers own logging and
+// caching decisions. This file only handles request construction and
+// response parsing.
 
 import { getCurrentSeasonYear } from "./season";
 import { getTodayStr } from "./week-utils";

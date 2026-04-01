@@ -1,14 +1,23 @@
 export const dynamic = "force-dynamic";
 // app/api/compare-stats/route.ts
-// Multi-timeframe player comparison stats aggregation endpoint.
 //
-// GET /api/compare-stats?players=203999,1629029&timeframe=season&date=2025-03-28
+// ═══════════════════════════════════════════════════════════════
+// REFRESH OWNERSHIP MODEL
+// ═══════════════════════════════════════════════════════════════
+// ROLE: on-demand BDL reader for comparison data — not a cache writer
+//       for season-level stats (that is the edge function's job).
+//
+// This route always calls BDL for game logs. There is no scheduled
+// refresher for comparison data — each request fetches what it needs.
+// Season averages are read from player_stats_cache (cache-first).
+// Game logs for last7/last15/stability are always fetched live from BDL.
 //
 // Timeframe strategies:
-//   season     — reads player_stats_cache Supabase table + fetches game logs for stability
-//   last7      — fetches BDL game-by-game stats for past 7 days, aggregates
-//   last15     — fetches BDL game-by-game stats for past 15 days, aggregates
-//   lastSeason — uses ALL_PLAYERS static data from players-data.ts with heuristic stability
+//   season     — reads player_stats_cache (cache-first) + BDL game logs for stability
+//   last7      — BDL game logs for past 7 days (always live)
+//   last15     — BDL game logs for past 15 days (always live)
+//   lastSeason — ALL_PLAYERS static snapshot + heuristic stability (no BDL)
+// ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -46,12 +55,19 @@ function r1(v: number): number {
 /** Fetch all game stat entries for given player IDs + date/season range */
 async function fetchGameLogs(
   playerIds: number[],
-  options: { start_date?: string; end_date?: string; seasons?: number[] }
+  options: { start_date?: string; end_date?: string; seasons?: number[] },
+  reason: "season_stability" | "date_range"
 ): Promise<Map<number, GameLog[]>> {
   const logMap = new Map<number, GameLog[]>();
   playerIds.forEach(id => logMap.set(id, []));
 
+  const context = options.seasons
+    ? { seasons: options.seasons }
+    : { start_date: options.start_date, end_date: options.end_date };
+  console.log("[compare-stats] BDL game logs fetch starting", { source: "api-compare-stats", reason, playerIds, ...context });
+
   let cursor: number | undefined;
+  let totalRows = 0;
   do {
     try {
       const res = await getPlayerStats({
@@ -61,6 +77,7 @@ async function fetchGameLogs(
         ...options,
       });
 
+      totalRows += (res.data as BDLGameStats[]).length;
       for (const stat of res.data as BDLGameStats[]) {
         const pid = stat.player.id;
         if (!logMap.has(pid)) continue;
@@ -99,10 +116,14 @@ async function fetchGameLogs(
         });
       }
       cursor = res.meta?.next_cursor;
-    } catch {
+    } catch (err) {
+      console.error("[compare-stats] BDL game logs page error", { source: "api-compare-stats", reason, playerIds, error: err });
       cursor = undefined;
     }
   } while (cursor);
+
+  const totalGameLogs = Array.from(logMap.values()).reduce((sum, logs) => sum + logs.length, 0);
+  console.log("[compare-stats] BDL game logs fetch complete", { source: "api-compare-stats", reason, playerIds, bdlRowsFetched: totalRows, validGameLogs: totalGameLogs });
 
   // Sort each player's logs chronologically
   logMap.forEach(logs => logs.sort((a, b) => a.date.localeCompare(b.date)));
@@ -170,7 +191,7 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
   // Resolve season at request time (never at module scope — avoids freeze on long-running instances)
   const CURRENT_SEASON = getCurrentSeasonYear();
   // Fetch game logs for stability (season games) — parallel for both players
-  const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] });
+  const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] }, "season_stability");
 
   return rows.map((row: any) => {
     const logs = logMap.get(row.player_id) ?? [];
@@ -235,7 +256,7 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
   const days = timeframe === 'last7' ? 7 : 15;
   const startDate = formatDateStr(addUtcDays(referenceDate, -days));
 
-  const logMap = await fetchGameLogs(playerIds, { start_date: startDate, end_date: referenceDate });
+  const logMap = await fetchGameLogs(playerIds, { start_date: startDate, end_date: referenceDate }, "date_range");
 
   // We need player identity from player_stats_cache (team, position, injury, name)
   const { data: cacheRows } = await supabase

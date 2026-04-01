@@ -1,5 +1,16 @@
 export const dynamic = "force-dynamic";
 // app/api/nba-games/route.ts
+//
+// ═══════════════════════════════════════════════════════════════
+// REFRESH OWNERSHIP MODEL
+// ═══════════════════════════════════════════════════════════════
+// ROLE: schedule reader — always reads from BDL (no DB cache layer)
+//
+// Schedule data (game dates, opponents, status) changes frequently and
+// is not persisted to Supabase. This route uses an in-memory TTL cache
+// (10 minutes) to avoid redundant BDL calls within the same instance.
+// Every cache miss goes directly to BDL (schedule_lookup).
+// ═══════════════════════════════════════════════════════════════
 // Fetches NBA games for a date range from Ball Don't Lie API.
 // Returns games indexed by team abbreviation and date for quick roster lookups.
 
@@ -38,8 +49,11 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
     return cache.data;
   }
 
+  console.log("[nba-games] BDL fetch starting", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate });
+
   const map: TeamGamesMap = {};
   let cursor: number | undefined;
+  let totalGames = 0;
 
   do {
     const params: Record<string, string> = {
@@ -51,6 +65,7 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
 
     try {
       const res = await fetchAPI("/games", params);
+      totalGames += (res.data || []).length;
       for (const game of res.data || []) {
         const dateStr = game.date?.split("T")[0];
         if (!dateStr) continue;
@@ -80,11 +95,13 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
         };
       }
       cursor = res.meta?.next_cursor;
-    } catch {
+    } catch (err) {
+      console.error("[nba-games] BDL fetch error", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate, error: err });
       cursor = undefined;
     }
   } while (cursor);
 
+  console.log("[nba-games] BDL fetch complete", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate, gamesFound: totalGames, teamsCovered: Object.keys(map).length });
   cache = { key: cacheKey, data: map, timestamp: Date.now() };
   return map;
 }

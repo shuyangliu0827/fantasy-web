@@ -1,12 +1,23 @@
 export const dynamic = "force-dynamic";
 // app/api/nba-game-stats/route.ts
 //
-// Fetches individual player box-score stats for a specific date.
+// ═══════════════════════════════════════════════════════════════
+// REFRESH OWNERSHIP MODEL
+// ═══════════════════════════════════════════════════════════════
+// ROLE: cache-first reader for box-score stats (per-date)
+//
+// This route does NOT have a scheduled refresher — it is self-healing:
+//   Past dates: DB-first (player_day_stats). BDL called only if DB has no
+//     rows for that date (historical_backfill). Once written, never re-fetched.
+//   Today:      Always calls BDL (live_day). In-memory TTL cache (5 min) to
+//     avoid hammering BDL on repeated same-minute requests.
+//   Future:     Falls through to BDL (no data yet).
 //
 // CANONICAL PIPELINE (Rule A):
 //   For past dates: check player_day_stats DB first; only call BDL if missing.
 //   After BDL fetch: write valid stats to DB (null-safe — zero rows are skipped).
 //   This makes past-week score computation fully deterministic across Vercel restarts.
+// ═══════════════════════════════════════════════════════════════
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -43,9 +54,12 @@ function todayUtcStr(): string {
 
 // ── BDL API fetch ─────────────────────────────────────────────────────────────
 
-async function fetchFromBDL(date: string): Promise<DateStatsMap> {
+async function fetchFromBDL(date: string, reason: "live_day" | "historical_backfill"): Promise<DateStatsMap> {
   const map: DateStatsMap = {};
   let cursor: number | undefined;
+  let pagesFetched = 0;
+
+  console.log("[nba-game-stats] BDL fetch starting", { source: "api-nba-game-stats", reason, date });
 
   do {
     const url = new URL(`${API_BASE}/stats`);
@@ -56,7 +70,11 @@ async function fetchFromBDL(date: string): Promise<DateStatsMap> {
 
     try {
       const res = await fetch(url.toString(), { headers: { Authorization: API_KEY } });
-      if (!res.ok) break;
+      if (!res.ok) {
+        console.error("[nba-game-stats] BDL fetch failed", { source: "api-nba-game-stats", reason, date, status: res.status });
+        break;
+      }
+      pagesFetched++;
       const payload = await res.json();
 
       for (const stat of payload.data || []) {
@@ -98,11 +116,13 @@ async function fetchFromBDL(date: string): Promise<DateStatsMap> {
         };
       }
       cursor = payload.meta?.next_cursor;
-    } catch {
+    } catch (err) {
+      console.error("[nba-game-stats] BDL fetch page error", { source: "api-nba-game-stats", reason, date, error: err });
       break;
     }
   } while (cursor);
 
+  console.log("[nba-game-stats] BDL fetch complete", { source: "api-nba-game-stats", reason, date, pagesFetched, playerRows: Object.keys(map).length });
   return map;
 }
 
@@ -142,7 +162,12 @@ async function writeToDB(
     fetched_at: new Date().toISOString(),
   }));
   if (rows.length === 0) return;
-  await supabase.from("player_day_stats").upsert(rows, { onConflict: "player_id,date" });
+  const { error } = await supabase.from("player_day_stats").upsert(rows, { onConflict: "player_id,date" });
+  if (error) {
+    console.error("[nba-game-stats] DB write failed", { source: "api-nba-game-stats", date, rowsAttempted: rows.length, error });
+    throw error; // re-throw so callers can catch
+  }
+  console.log("[nba-game-stats] DB write complete", { source: "api-nba-game-stats", date, rowsWritten: rows.length });
 }
 
 // ── Main fetch orchestrator ───────────────────────────────────────────────────
@@ -167,7 +192,7 @@ async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
   }
 
   // Fetch from BDL (needed for today, future, or past dates not yet in DB)
-  const bdlStats = await fetchFromBDL(date);
+  const bdlStats = await fetchFromBDL(date, isPastDate ? "historical_backfill" : "live_day");
 
   if (isPastDate && Object.keys(bdlStats).length > 0) {
     // Persist to DB (null-safe write — skips zero rows, never erases valid data)

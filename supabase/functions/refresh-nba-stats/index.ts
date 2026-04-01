@@ -1,11 +1,20 @@
 // supabase/functions/refresh-nba-stats/index.ts
-// Fetches full-season averages from Ball Don't Lie API
-// and upserts into player_stats_cache. Called hourly via pg_cron.
 //
+// ═══════════════════════════════════════════════════════════════
+// PRIMARY SCHEDULED REFRESHER for player_stats_cache
+// ═══════════════════════════════════════════════════════════════
+// This is the AUTHORITATIVE source of truth writer for season-level
+// player stats. It is the ONLY path that should routinely update
+// player_stats_cache. API routes (app/api/nba-stats) are cache-first
+// readers; they only fall back to BDL when this function has not run.
+//
+// Schedule: hourly via pg_cron (Supabase scheduler)
 // BDL rate limit: 60 req/min.
-// Strategy: process BATCH_SIZE players per run, tracking position in stats_cursor table.
-// Each run advances the cursor so manual/scheduled invocations never duplicate work.
-// Full cycle = ceil(556 / 75) ≈ 8 runs (8 hours on cron, or ~12 min via manual invocations).
+// Strategy: process BATCH_SIZE players per run, tracking position in
+//   stats_cursor table. Each run advances the cursor so invocations
+//   never duplicate work. Full cycle ≈ 8 runs (~8 hours on hourly cron).
+// Source label for logs: "edge-refresh" / reason: "scheduled"
+// ═══════════════════════════════════════════════════════════════
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -48,7 +57,7 @@ Deno.serve(async () => {
   const r1 = (v: number) => Math.round(v * 10) / 10;
 
   try {
-    console.log("[1] Starting active players fetch");
+    console.log("[refresh-nba-stats][1] Starting active players fetch", { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON });
     // 1. Get all active players (~6 API calls, sorted by id for stable ordering)
     const allPlayers: any[] = [];
     let cursor: number | undefined;
@@ -60,7 +69,7 @@ Deno.serve(async () => {
       await new Promise(r => setTimeout(r, 300));
     } while (cursor);
 
-    console.log(`[2] Got ${allPlayers.length} players`);
+    console.log(`[refresh-nba-stats][2] Got ${allPlayers.length} active players`, { source: "edge-refresh", reason: "scheduled" });
     if (allPlayers.length === 0) {
       return new Response(JSON.stringify({ status: "no_players" }), { headers: { "Content-Type": "application/json" } });
     }
@@ -156,7 +165,7 @@ Deno.serve(async () => {
       });
     }
 
-    console.log(`[5] Built ${rows.length} rows, upserting in chunks...`);
+    console.log(`[refresh-nba-stats][5] Built ${rows.length} rows for upsert`, { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON, batch: `${Math.floor(startIndex / BATCH_SIZE) + 1}` });
     // 6. Upsert in chunks of 10 to isolate any failing rows
     let upsertErrors = 0;
     for (let i = 0; i < rows.length; i += 10) {
@@ -177,7 +186,7 @@ Deno.serve(async () => {
         upsertErrors++;
       }
     }
-    console.log(`[7] Upsert complete. errors=${upsertErrors}`);
+    console.log(`[refresh-nba-stats][7] Upsert complete`, { source: "edge-refresh", reason: "scheduled", rowsAttempted: rows.length, upsertErrors });
 
     try {
       await supabase

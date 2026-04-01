@@ -1,8 +1,31 @@
 export const dynamic = "force-dynamic";
 // app/api/nba-stats/route.ts
-// Reads persisted player stats from Supabase player_stats_cache.
-// Falls back to fetching full-season averages from BDL API (and persisting) if the table is empty.
-// The table is kept fresh by the refresh-nba-stats Supabase Edge Function (runs hourly via pg_cron).
+//
+// ═══════════════════════════════════════════════════════════════
+// REFRESH OWNERSHIP MODEL
+// ═══════════════════════════════════════════════════════════════
+//
+// PRIMARY REFRESHER:  supabase/functions/refresh-nba-stats/index.ts
+//   - Runs hourly via pg_cron as a Supabase Edge Function
+//   - Crawls BDL /season_averages in batches of 75 players/run
+//   - Full player pool cycle ≈ 8 runs (~8 hours)
+//   - This is the ONLY path that should routinely write player_stats_cache
+//
+// THIS ROUTE:  cache-first reader + bounded fallback
+//   - Normal path: read player_stats_cache from Supabase, return it
+//   - Fallback path: only entered when cache is MISSING or STALE
+//     (both are abnormal conditions — edge function cron not running)
+//   - Fallback is fire-and-forget background; response is still served
+//     immediately (loading status for missing, stale data for stale)
+//   - Fallback is rate-limited by FALLBACK_COOLDOWN_MS to prevent
+//     stampede across rapid requests within the same Vercel instance
+//     NOTE: this cooldown is per-instance only; a true distributed lock
+//     would require Supabase advisory locks or an external cache.
+//
+// POST /api/nba-stats:  manual override
+//   - Explicitly forces a refresh regardless of freshness
+//   - Intended for admin use only, not user-triggered flows
+// ═══════════════════════════════════════════════════════════════
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -14,6 +37,33 @@ import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
 // call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
+
+// ── Freshness policy ──────────────────────────────────────────
+//
+// FRESH:   max(updated_at) across all cache rows < STALE_AFTER_MS ago
+//          → serve from cache, no BDL fetch
+//
+// STALE:   max(updated_at) >= STALE_AFTER_MS ago, but rows exist
+//          → serve stale data immediately (better than empty)
+//          → trigger background fallback refresh if cooldown has passed
+//          → return isUpdating: true so callers know data may be behind
+//
+// MISSING: player_stats_cache is empty (data.length === 0)
+//          → return loading status
+//          → trigger background fallback refresh if cooldown has passed
+//
+// The edge function runs hourly and completes a full cycle in ~8 hours.
+// A 4-hour threshold means: if the newest row is 4+ hours old, the cron
+// has missed at least 4 scheduled runs — treat as stale.
+//
+const STALE_AFTER_MS    = 4 * 60 * 60 * 1000; // 4 hours
+//
+// Minimum gap between fallback refresh attempts within this process.
+// Prevents multiple concurrent requests from all triggering BDL fetches.
+// Per-instance only — not a distributed lock.
+//
+const FALLBACK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+// ─────────────────────────────────────────────────────────────
 
 // Use anon key — RLS is open for all operations on player_stats_cache
 const supabase = createClient(
@@ -92,9 +142,13 @@ function rowToPlayer(row: any, index: number) {
 
 // ──────────────────────────────────────────────
 // Fallback: fetch full-season averages from BDL + persist to DB
-// (used when the table is empty on first boot)
+// Only enters when cache is MISSING or STALE (abnormal — edge cron not running).
+// Not the normal data refresh path; that is the Supabase Edge Function.
 // ──────────────────────────────────────────────
+
+// Per-instance refresh guard (not distributed — see ownership model comment above)
 let isRefreshing = false;
+let lastFallbackAttemptAt = 0;
 
 async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   const url = new URL(`${API_BASE}${endpoint}`);
@@ -104,11 +158,15 @@ async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   return res.json();
 }
 
-async function refreshAndPersist() {
-  if (isRefreshing) return;
+async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
+  if (isRefreshing) {
+    console.log("[nba-stats] fallback refresh skipped: already in progress", { source: "api-nba-stats", reason });
+    return;
+  }
   isRefreshing = true;
+  lastFallbackAttemptAt = Date.now();
   const CURRENT_SEASON = getCurrentSeasonYear();
-  console.log("[nba-stats] Starting fallback refresh (full season stats)...");
+  console.log("[nba-stats] BDL fallback refresh starting", { source: "api-nba-stats", reason, season: CURRENT_SEASON });
 
   try {
     // 1. Fetch all stats for the current season (cursor-paginated)
@@ -119,12 +177,14 @@ async function refreshAndPersist() {
 
     const playerMap = new Map<number, Entry>();
     let cursor: number | undefined;
+    let pagesFetched = 0;
 
     do {
       const params: Record<string, string> = { per_page: "100", "seasons[]": String(CURRENT_SEASON) };
       if (cursor) params.cursor = String(cursor);
       try {
         const res = await fetchAPI("/stats", params);
+        pagesFetched++;
         for (const stat of (res.data || [])) {
           const minNum = parseFloat((stat.min || "0").replace(":", ".")) || 0;
           if (minNum === 0) continue;
@@ -156,6 +216,8 @@ async function refreshAndPersist() {
       } catch { cursor = undefined; }
       await new Promise(r => setTimeout(r, 200));
     } while (cursor);
+
+    console.log("[nba-stats] BDL /stats fetch complete", { source: "api-nba-stats", reason, season: CURRENT_SEASON, pagesFetched, uniquePlayers: playerMap.size });
 
     // 2. Fetch current injuries
     const injuryMap = new Map<number, string>();
@@ -218,17 +280,22 @@ async function refreshAndPersist() {
       .from("player_stats_cache")
       .upsert(rows, { onConflict: "player_id" });
 
-    if (error) console.error("[nba-stats] Supabase upsert error:", error);
-    else console.log(`[nba-stats] Persisted ${rows.length} players to player_stats_cache`);
+    if (error) {
+      console.error("[nba-stats] fallback upsert failed", { source: "api-nba-stats", reason, rowsAttempted: rows.length, error });
+    } else {
+      console.log("[nba-stats] fallback refresh complete", { source: "api-nba-stats", reason, season: CURRENT_SEASON, rowsWritten: rows.length });
+    }
   } catch (err) {
-    console.error("[nba-stats] Fallback refresh error:", err);
+    console.error("[nba-stats] fallback refresh error", { source: "api-nba-stats", reason, error: err });
   } finally {
     isRefreshing = false;
   }
 }
 
 // ──────────────────────────────────────────────
-// GET — read from Supabase
+// GET — cache-first reader
+// Normal path: read player_stats_cache, return it.
+// Fallback path (abnormal): only when cache is missing or stale.
 // ──────────────────────────────────────────────
 export async function GET() {
   const { data, error } = await supabase
@@ -240,9 +307,15 @@ export async function GET() {
     console.error("[nba-stats] Supabase read error:", error);
   }
 
+  // ── MISSING: cache is empty ──────────────────────────────────
   if (!data || data.length === 0) {
-    // Table is empty — trigger a background fetch+persist and return loading status
-    refreshAndPersist();
+    const cooldownRemaining = FALLBACK_COOLDOWN_MS - (Date.now() - lastFallbackAttemptAt);
+    if (cooldownRemaining <= 0) {
+      console.warn("[nba-stats] cache MISSING — triggering fallback refresh", { source: "api-nba-stats", reason: "cache_miss" });
+      refreshAndPersist("cache_miss");
+    } else {
+      console.warn("[nba-stats] cache MISSING — fallback skipped (cooldown active)", { source: "api-nba-stats", cooldownRemainingMs: cooldownRemaining });
+    }
     return NextResponse.json({
       status: "loading",
       message: "Stats are being loaded for the first time, please wait...",
@@ -253,13 +326,37 @@ export async function GET() {
     });
   }
 
-  // Re-sort by recomputed fptsAvg (new weights) and reassign ranks
+  // ── Compute cache age ────────────────────────────────────────
+  const lastUpdated = data.reduce((max: string | null, row) =>
+    !max || row.updated_at > max ? row.updated_at : max, null);
+  const cacheAgeMs = lastUpdated ? Date.now() - new Date(lastUpdated).getTime() : Infinity;
+  const isStale = cacheAgeMs > STALE_AFTER_MS;
+
+  // ── STALE: rows exist but edge function has not run in 4+ hours ──
+  if (isStale) {
+    const cooldownRemaining = FALLBACK_COOLDOWN_MS - (Date.now() - lastFallbackAttemptAt);
+    if (cooldownRemaining <= 0) {
+      console.warn("[nba-stats] cache STALE — triggering fallback refresh", {
+        source: "api-nba-stats", reason: "stale",
+        cacheAgeHours: (cacheAgeMs / 3_600_000).toFixed(1),
+        lastUpdated,
+      });
+      refreshAndPersist("stale");
+    } else {
+      console.warn("[nba-stats] cache STALE — fallback skipped (cooldown active)", {
+        source: "api-nba-stats",
+        cacheAgeHours: (cacheAgeMs / 3_600_000).toFixed(1),
+        cooldownRemainingMs: cooldownRemaining,
+      });
+    }
+    // Serve stale data immediately — better than empty
+  }
+
+  // ── FRESH (or stale-but-served): build response from cache ───
   const unsorted = data.map((row) => rowToPlayer(row, 0));
   unsorted.sort((a, b) => b.fptsAvg - a.fptsAvg);
   unsorted.forEach((p, i) => { p.rank = i + 1; });
   const players = unsorted;
-  const lastUpdated = data.reduce((max: string | null, row) =>
-    !max || row.updated_at > max ? row.updated_at : max, null);
 
   return NextResponse.json({
     status: "success",
@@ -267,16 +364,19 @@ export async function GET() {
     gamesLoaded: data.length,
     lastUpdated,
     isUpdating: isRefreshing,
+    isStale,
   });
 }
 
 // ──────────────────────────────────────────────
-// POST — manual trigger (re-fetches + persists)
+// POST — manual override (admin use only)
+// Forces a refresh regardless of freshness/cooldown.
 // ──────────────────────────────────────────────
 export async function POST() {
   if (isRefreshing) {
     return NextResponse.json({ status: "already_updating", message: "Refresh already in progress" });
   }
-  refreshAndPersist();
+  console.log("[nba-stats] manual refresh triggered", { source: "api-nba-stats", reason: "manual" });
+  refreshAndPersist("manual");
   return NextResponse.json({ status: "refresh_started", message: "Data refresh started in background" });
 }
