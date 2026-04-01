@@ -66,15 +66,29 @@ export default function TradePage() {
   // ── Helper functions (declared before hooks that reference them) ──
 
   function getLivePPG(player: RosterPlayer): string {
-    const stats = (player.bdl_id ? liveStats.get(String(player.bdl_id)) : undefined) || liveStats.get(player.name);
-    if (stats) return stats.averages.pts.toFixed(1);
+    if (player.bdl_id) {
+      const byId = liveStats.get(String(player.bdl_id));
+      if (byId) return byId.averages.pts.toFixed(1);
+    }
+    const byName = liveStats.get(player.name);
+    if (byName) {
+      if (!player.bdl_id) console.warn("[trade] getLivePPG name-fallback", { player: player.name });
+      return byName.averages.pts.toFixed(1);
+    }
     return player.ppg.toFixed(1);
   }
 
-  function getLiveFPTS(player: RosterPlayer): string {
-    const stats = (player.bdl_id ? liveStats.get(String(player.bdl_id)) : undefined) || liveStats.get(player.name);
-    if (stats) return stats.fptsAvg.toFixed(1);
-    return "-";
+  function getLiveFPTS(player: RosterPlayer): string | null {
+    if (player.bdl_id) {
+      const byId = liveStats.get(String(player.bdl_id));
+      if (byId) return byId.fptsAvg.toFixed(1);
+    }
+    const byName = liveStats.get(player.name);
+    if (byName) {
+      if (!player.bdl_id) console.warn("[trade] getLiveFPTS name-fallback", { player: player.name });
+      return byName.fptsAvg.toFixed(1);
+    }
+    return null;
   }
 
   // ── Data loading functions ──
@@ -444,7 +458,7 @@ export default function TradePage() {
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>
-                              <span className="tp-fpts">{getLiveFPTS(p)} FPTS</span>
+                              <span className="tp-fpts">{getLiveFPTS(p) !== null ? `${getLiveFPTS(p)} FPTS` : "stats pending"}</span>
                             </div>
                           </div>
                         ))}
@@ -470,7 +484,7 @@ export default function TradePage() {
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>
-                              <span className="tp-fpts">{getLiveFPTS(p)} FPTS</span>
+                              <span className="tp-fpts">{getLiveFPTS(p) !== null ? `${getLiveFPTS(p)} FPTS` : "stats pending"}</span>
                             </div>
                           </div>
                         ))}

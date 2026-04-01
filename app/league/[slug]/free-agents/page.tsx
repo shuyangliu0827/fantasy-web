@@ -257,6 +257,9 @@ export default function FreeAgentsPage() {
 
           {/* Free Agent List */}
           <div className="fa-table">
+            <div style={{ fontSize: 11, color: "#9ca3af", padding: "6px 12px 2px", fontStyle: "italic" }}>
+              {t("统计数据为赛季参考值", "Stats are season reference values")}
+            </div>
             <div className="fa-scroll-wrapper">
             <div className="fa-header">
               <div className="col-rank">#</div>

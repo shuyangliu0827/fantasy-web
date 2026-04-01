@@ -77,15 +77,6 @@ function abbreviateName(name: string): string {
   return `${first.charAt(0)}. ${last}`;
 }
 
-function computeTrend(player: PlayerStats): { value: number; label: string; bg: string; color: string } {
-  const raw = ((player.id * 17 + player.rank * 7) % 30 - 12) * 0.2;
-  if (raw > 0.3) {
-    return { value: raw, label: `▲ +${Math.abs(raw).toFixed(1)}`, bg: "#dcfce7", color: "#16a34a" };
-  } else if (raw < -0.3) {
-    return { value: raw, label: `▼ -${Math.abs(raw).toFixed(1)}`, bg: "#fee2e2", color: "#dc2626" };
-  }
-  return { value: raw, label: "— 0.0", bg: "#f3f4f6", color: "#6b7280" };
-}
 
 const QUESTIONABLE_STATUSES = new Set(["Questionable", "Probable", "Day-To-Day"]);
 const INJURED_STATUSES = new Set(["Out", "Doubtful"]);
@@ -576,13 +567,12 @@ export default function PlayerRankingsPage() {
                         t("失误", "TOV"),
                         t("命中率", "FG%"),
                         t("场均罚球", "FTM"),
-                        t("趋势", "Trend"),
                       ].map((h, i) => (
                         <th
                           key={i}
                           style={{
                             ...thStyle,
-                            textAlign: i === 0 ? "center" : i === 1 ? "left" : i >= 11 ? "center" : "right",
+                            textAlign: i === 0 ? "center" : i === 1 ? "left" : "right",
                           }}
                         >
                           {h}
@@ -592,7 +582,6 @@ export default function PlayerRankingsPage() {
                   </thead>
                   <tbody>
                     {paginatedPlayers.map((player) => {
-                      const trend = computeTrend(player);
                       const rowBg = player.injury ? "#fff5f5" : undefined;
                       return (
                         <tr
@@ -650,17 +639,6 @@ export default function PlayerRankingsPage() {
                           {/* 场均罚球 */}
                           <td style={{ ...tdStyle, textAlign: "right" }}>{player.averages.ftm.toFixed(1)}</td>
 
-                          {/* 趋势 */}
-                          <td style={{ ...tdStyle, textAlign: "center" }}>
-                            <span style={{
-                              background: trend.bg, color: trend.color,
-                              borderRadius: 20, padding: "4px 10px",
-                              fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
-                            }}>
-                              {trend.label}
-                            </span>
-                          </td>
-
                         </tr>
                       );
                     })}
@@ -674,7 +652,6 @@ export default function PlayerRankingsPage() {
           {viewMode === "card" && (
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16 }}>
               {paginatedPlayers.map((player) => {
-                const trend = computeTrend(player);
                 return (
                   <div
                     key={player.id}
@@ -712,7 +689,6 @@ export default function PlayerRankingsPage() {
                         { label: t("失误", "TOV"), val: player.averages.tov.toFixed(1) },
                         { label: t("命中率", "FG%"), val: `${player.averages.fg_pct.toFixed(1)}%` },
                         { label: t("场均罚球", "FTM"), val: player.averages.ftm.toFixed(1) },
-                        { label: t("趋势", "Trend"), val: trend.label },
                       ].map((s) => (
                         <div key={s.label} style={{ background: "#f9fafb", borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
                           <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{s.val}</div>
@@ -721,12 +697,6 @@ export default function PlayerRankingsPage() {
                       ))}
                     </div>
 
-                    {/* Trend badge */}
-                    <div style={{ display: "flex", alignItems: "center" }}>
-                      <span style={{ background: trend.bg, color: trend.color, borderRadius: 20, padding: "4px 10px", fontSize: 11, fontWeight: 600 }}>
-                        {trend.label}
-                      </span>
-                    </div>
                   </div>
                 );
               })}

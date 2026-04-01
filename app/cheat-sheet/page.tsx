@@ -4,10 +4,28 @@ import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { getPlayers, getWatchlist, Player } from "@/lib/store";
-import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
+import { getPlayers, getWatchlist } from "@/lib/store";
+import { PLAYER_POSITIONS } from "@/lib/player-positions";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
+
+type PlayerStats = {
+  id: number;
+  name: string;
+  team: string;
+  position: string;
+  rank: number;
+  fptsAvg: number;
+  averages: {
+    pts: number;
+    reb: number;
+    ast: number;
+    stl: number;
+    blk: number;
+    tov: number;
+  };
+  injury?: string;
+};
 
 const ROUND_COLS = [
   { label: "第1-3轮 必选", labelEn: "Rounds 1-3 · Must-Have", from: 1, to: 5, color: "#1e3a8a", textColor: "#fff" },
@@ -25,12 +43,15 @@ const POS_COLS = [
   { pos: "C",  color: "#166534", textColor: "#fff" },
 ];
 
-function calcFpts(p: Player): number {
-  return calcFantasyPoints(
-    { pts: p.ppg, reb: p.rpg, ast: p.apg, stl: p.spg, blk: p.bpg, tov: p.tov,
-      fgm: 0, fga: 0, fg3m: 0, ftm: 0, fta: 0 },
-    ESPN_DEFAULT_WEIGHTS
-  );
+// Map BDL broad position to a specific position bucket for the position view.
+// Uses PLAYER_POSITIONS override map first; falls back to broad→specific mapping.
+function getSpecificPosition(name: string, bdlPosition: string): string {
+  const override = PLAYER_POSITIONS[name];
+  if (override) return override.split("/")[0];
+  const broad = bdlPosition.split("-")[0].trim();
+  if (broad === "G") return "PG";
+  if (broad === "F") return "SF";
+  return broad || "C";
 }
 
 function shortName(fullName: string): string {
@@ -41,46 +62,83 @@ function shortName(fullName: string): string {
 
 export default function CheatSheetPage() {
   const { t } = useLang();
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [watchlist, setWatchlist] = useState<string[]>([]);
-  const [drafted, setDrafted] = useState<string[]>([]);
+  const [players, setPlayers] = useState<PlayerStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  // Watchlist: Set of player names (bridged from synthetic IDs via static player list)
+  const [watchlistNames, setWatchlistNames] = useState<Set<string>>(new Set());
+  // Drafted: Set of player names, persisted under v2 key to avoid legacy ID conflicts
+  const [drafted, setDrafted] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"overall" | "positions">("overall");
 
   useEffect(() => {
-    setPlayers(getPlayers());
+    // Load watchlist: bridge synthetic IDs → names via static player list
     const wl = getWatchlist();
-    setWatchlist(wl.map(w => w.playerId));
-    const savedDrafted = localStorage.getItem("bp_cheatsheet_drafted");
-    if (savedDrafted) setDrafted(JSON.parse(savedDrafted));
+    const staticPlayers = getPlayers();
+    const watchlistIdSet = new Set(wl.map((w) => w.playerId));
+    const names = new Set(
+      staticPlayers.filter((p) => watchlistIdSet.has(p.id)).map((p) => p.name)
+    );
+    setWatchlistNames(names);
+
+    // Load drafted (stored as array of names in v2 key)
+    const savedDrafted = localStorage.getItem("bp_cheatsheet_drafted_v2");
+    if (savedDrafted) {
+      try {
+        setDrafted(new Set(JSON.parse(savedDrafted)));
+      } catch {}
+    }
+
+    loadPlayers();
   }, []);
 
-  const toggleDrafted = (playerId: string) => {
-    const newDrafted = drafted.includes(playerId)
-      ? drafted.filter(id => id !== playerId)
-      : [...drafted, playerId];
-    setDrafted(newDrafted);
-    localStorage.setItem("bp_cheatsheet_drafted", JSON.stringify(newDrafted));
+  async function loadPlayers() {
+    try {
+      const res = await fetch("/api/nba-stats");
+      const data = await res.json();
+      if (data.status === "loading") {
+        setTimeout(loadPlayers, 5000);
+        return;
+      }
+      if (data.players && data.players.length > 0) {
+        setPlayers(data.players);
+        setLastUpdated(data.lastUpdated ?? null);
+        setError(null);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const toggleDrafted = (name: string) => {
+    const next = new Set(drafted);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    setDrafted(next);
+    localStorage.setItem("bp_cheatsheet_drafted_v2", JSON.stringify(Array.from(next)));
   };
 
   const clearDrafted = () => {
-    setDrafted([]);
-    localStorage.removeItem("bp_cheatsheet_drafted");
+    setDrafted(new Set());
+    localStorage.removeItem("bp_cheatsheet_drafted_v2");
   };
 
   const playersByPosition = players.reduce((acc, p) => {
-    const mainPos = p.position.split("/")[0];
-    if (!acc[mainPos]) acc[mainPos] = [];
-    acc[mainPos].push(p);
+    const pos = getSpecificPosition(p.name, p.position);
+    if (!acc[pos]) acc[pos] = [];
+    acc[pos].push(p);
     return acc;
-  }, {} as Record<string, Player[]>);
+  }, {} as Record<string, PlayerStats[]>);
 
-  function PlayerRow({ p, accentColor, last }: { p: Player; accentColor: string; last: boolean }) {
-    const isDrafted = drafted.includes(p.id);
-    const isWatchlist = watchlist.includes(p.id);
-    const fpts = calcFpts(p);
+  function PlayerRow({ p, accentColor, last }: { p: PlayerStats; accentColor: string; last: boolean }) {
+    const isDrafted = drafted.has(p.name);
+    const isWatchlist = watchlistNames.has(p.name);
     return (
       <div
-        onClick={() => toggleDrafted(p.id)}
+        onClick={() => toggleDrafted(p.name)}
         style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "9px 14px",
@@ -108,12 +166,23 @@ export default function CheatSheetPage() {
             {shortName(p.name)}
           </div>
           <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 1, letterSpacing: "0.2px" }}>
-            {p.team} · {p.position}
+            {p.team} · {PLAYER_POSITIONS[p.name] || p.position}
+            {p.injury && <span style={{ color: "#dc2626", marginLeft: 4 }}>· {p.injury}</span>}
           </div>
         </div>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a", flexShrink: 0 }}>
-          {fpts.toFixed(1)}
+          {p.fptsAvg.toFixed(1)}
         </span>
+      </div>
+    );
+  }
+
+  if (loading && players.length === 0) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <LightHeader activeHref="/cheat-sheet" />
+        <div style={{ fontSize: 48 }}></div>
+        <p style={{ color: "#6b7280", fontSize: 16 }}>{t("加载球员数据...", "Loading player data...")}</p>
       </div>
     );
   }
@@ -131,7 +200,15 @@ export default function CheatSheetPage() {
             </h1>
             <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
               {t("实时选秀助手，点击球员名字标记为已被选走", "Live draft assistant. Click player to mark as drafted")}
+              {lastUpdated && (
+                <span style={{ marginLeft: 10, fontSize: 11, color: "#9ca3af" }}>
+                  · {t("更新", "Updated")} {new Date(lastUpdated).toLocaleString()}
+                </span>
+              )}
             </p>
+            {error && (
+              <p style={{ fontSize: 12, color: "#dc2626", margin: "4px 0 0" }}>{error}</p>
+            )}
           </div>
 
           {/* Controls */}
@@ -166,10 +243,10 @@ export default function CheatSheetPage() {
             </div>
 
             {/* Drafted count */}
-            {drafted.length > 0 && (
+            {drafted.size > 0 && (
               <>
                 <span style={{ fontSize: 13, color: "#6b7280", padding: "0 4px" }}>
-                  {drafted.length} {t("人已被选", "drafted")}
+                  {drafted.size} {t("人已被选", "drafted")}
                 </span>
                 <button
                   onClick={clearDrafted}
@@ -245,6 +322,9 @@ export default function CheatSheetPage() {
           </div>
           <span style={{ fontSize: 12, color: "#9ca3af" }}>
             {t("点击球员可标记为已被选走", "Click player to mark as drafted")}
+          </span>
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>
+            {t("综合分 = 赛季场均ESPN得分", "FPTS = season avg ESPN score")}
           </span>
         </div>
       </main>

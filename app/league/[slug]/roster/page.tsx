@@ -411,12 +411,17 @@ export default function RosterPage() {
   }
 
   function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
-    // Try direct ID match first
-    const byId = playerStats.get(player.id);
-    if (byId) return byId;
-    // Fallback: match by name (in case IDs don't align)
+    // Primary: use BDL integer ID (O(1), correct)
+    if (player.bdl_id) {
+      const byBdlId = playerStats.get(String(player.bdl_id));
+      if (byBdlId) return byBdlId;
+    }
+    // Fallback: name-match (handles pre-hydration rosters without bdl_id yet)
     for (const s of playerStats.values()) {
-      if (s.name === player.name) return s;
+      if (s.name === player.name) {
+        console.warn("[roster] getStatsForPlayer name-fallback", { player: player.name, playerId: player.id, hasBdlId: !!player.bdl_id });
+        return s;
+      }
     }
     return null;
   }
@@ -855,7 +860,14 @@ export default function RosterPage() {
               )}
 
               {/* Starters */}
-              <div className="section-label">{t("首发阵容", "Starting Lineup")} ({starterSlots.length})</div>
+              <div className="section-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {t("首发阵容", "Starting Lineup")} ({starterSlots.length})
+                {isFutureDate && (
+                  <span style={{ fontSize: 11, fontWeight: 500, color: "#9ca3af", background: "#f3f4f6", borderRadius: 4, padding: "2px 6px" }}>
+                    {t("统计为赛季场均", "stats = season avg")}
+                  </span>
+                )}
+              </div>
               <div className="table-wrapper">
                 <div className="lineup-table">
                   <div className="lineup-header">
