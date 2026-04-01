@@ -5,6 +5,7 @@ import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { getPlayers, getWatchlist, Player } from "@/lib/store";
+import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
@@ -25,7 +26,11 @@ const POS_COLS = [
 ];
 
 function calcFpts(p: Player): number {
-  return p.ppg + p.rpg * 1.2 + p.apg * 1.5 + p.spg * 3 + p.bpg * 3 - p.tov;
+  return calcFantasyPoints(
+    { pts: p.ppg, reb: p.rpg, ast: p.apg, stl: p.spg, blk: p.bpg, tov: p.tov,
+      fgm: 0, fga: 0, fg3m: 0, ftm: 0, fta: 0 },
+    ESPN_DEFAULT_WEIGHTS
+  );
 }
 
 function shortName(fullName: string): string {

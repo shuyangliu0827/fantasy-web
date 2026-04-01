@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { getPlayers, Player, getSessionUser } from "@/lib/store";
+import { resolveBdlIds } from "@/lib/player-identity";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { supabase } from "@/lib/supabase";
 
@@ -380,41 +381,48 @@ useEffect(() => {
 
   useEffect(() => {
     if (!draftComplete || picks.length === 0) return;
-    try {
-      // Deduplicate: a player can only appear once across all teams.
-      // If the same player_id was somehow picked twice (e.g. due to a broadcast race),
-      // keep only the first occurrence (lower overallPick).
-      const seenPlayerIds = new Set<string>();
-      const dedupedPicks = picks.filter(pick => {
-        if (seenPlayerIds.has(pick.player.id)) return false;
-        seenPlayerIds.add(pick.player.id);
-        return true;
-      });
-
-      const rostersByTeam: Record<string, { id: string; name: string; team: string; position: string; ppg: number; rpg: number; apg: number; spg: number; bpg: number; fg: number; ft: number; tov: number; round: number }[]> = {};
-      for (const pick of dedupedPicks) {
-        if (!rostersByTeam[pick.teamId]) rostersByTeam[pick.teamId] = [];
-        rostersByTeam[pick.teamId].push({ id: pick.player.id, name: pick.player.name, team: pick.player.team, position: pick.player.position, ppg: pick.player.ppg, rpg: pick.player.rpg, apg: pick.player.apg, spg: pick.player.spg, bpg: pick.player.bpg, fg: pick.player.fg, ft: pick.player.ft, tov: pick.player.tov, round: pick.round });
-      }
-      localStorage.setItem(`bp_league_rosters_${league.id}`, JSON.stringify(rostersByTeam));
-      for (const [teamId, roster] of Object.entries(rostersByTeam)) {
-        supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
-      }
-      // Status update is a small, fast write — must commit quickly so onDraftComplete
-      // (called when user clicks "返回联赛") finds status = "active" and unmounts DraftRoom.
-      supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
-      // Write the complete deduplicated picks from state, then seed the ownership table
-      // only AFTER that write commits. Keeps draft_picks_data separate from the status
-      // update so the status lands quickly while this larger write finishes in the background.
-      supabase.from("leagues")
-        .update({ draft_picks_data: dedupedPicks.map(serializePick) } as never)
-        .eq("id", league.id)
-        .then(() => {
-          supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
+    async function saveDraftResults() {
+      try {
+        // Deduplicate: a player can only appear once across all teams.
+        // If the same player_id was somehow picked twice (e.g. due to a broadcast race),
+        // keep only the first occurrence (lower overallPick).
+        const seenPlayerIds = new Set<string>();
+        const dedupedPicks = picks.filter(pick => {
+          if (seenPlayerIds.has(pick.player.id)) return false;
+          seenPlayerIds.add(pick.player.id);
+          return true;
         });
-    } catch (e) {
-      console.error("Failed to save draft results:", e);
+
+        // Resolve BDL integer IDs for all drafted players in one batch
+        const allNames = dedupedPicks.map(p => p.player.name);
+        const bdlIdMap = await resolveBdlIds(allNames);
+
+        const rostersByTeam: Record<string, { id: string; name: string; team: string; position: string; ppg: number; rpg: number; apg: number; spg: number; bpg: number; fg: number; ft: number; tov: number; round: number; bdl_id?: number }[]> = {};
+        for (const pick of dedupedPicks) {
+          if (!rostersByTeam[pick.teamId]) rostersByTeam[pick.teamId] = [];
+          rostersByTeam[pick.teamId].push({ id: pick.player.id, name: pick.player.name, team: pick.player.team, position: pick.player.position, ppg: pick.player.ppg, rpg: pick.player.rpg, apg: pick.player.apg, spg: pick.player.spg, bpg: pick.player.bpg, fg: pick.player.fg, ft: pick.player.ft, tov: pick.player.tov, round: pick.round, bdl_id: bdlIdMap.get(pick.player.name) });
+        }
+        localStorage.setItem(`bp_league_rosters_${league.id}`, JSON.stringify(rostersByTeam));
+        for (const [teamId, roster] of Object.entries(rostersByTeam)) {
+          supabase.from("fantasy_teams").update({ roster_data: roster }).eq("id", teamId).then(() => {});
+        }
+        // Status update is a small, fast write — must commit quickly so onDraftComplete
+        // (called when user clicks "返回联赛") finds status = "active" and unmounts DraftRoom.
+        supabase.from("leagues").update({ status: "active", draft_completed_at: new Date().toISOString() }).eq("id", league.id).then(() => {});
+        // Write the complete deduplicated picks from state, then seed the ownership table
+        // only AFTER that write commits. Keeps draft_picks_data separate from the status
+        // update so the status lands quickly while this larger write finishes in the background.
+        supabase.from("leagues")
+          .update({ draft_picks_data: dedupedPicks.map(serializePick) } as never)
+          .eq("id", league.id)
+          .then(() => {
+            supabase.rpc("upsert_draft_ownerships", { p_league_id: league.id }).then(() => {});
+          });
+      } catch (e) {
+        console.error("Failed to save draft results:", e);
+      }
     }
+    saveDraftResults();
   }, [draftComplete, picks, league.id]);
 
   const handlePlayerPick = useCallback(async (player: Player) => {

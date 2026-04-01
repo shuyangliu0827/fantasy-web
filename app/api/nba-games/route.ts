@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = "https://api.balldontlie.io/v1";
-const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
+const API_KEY = process.env.BDL_API_KEY ?? "";
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 type GameInfo = {

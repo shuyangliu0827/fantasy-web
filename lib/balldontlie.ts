@@ -2,10 +2,11 @@
 // Ball Don't Lie API Integration for ALL-STAR tier
 
 import { getCurrentSeasonYear } from "./season";
+import { getTodayStr } from "./week-utils";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 
-const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
+const API_KEY = process.env.BDL_API_KEY ?? "";
 // ==================== Types ====================
 
 export type BDLTeam = {
@@ -333,8 +334,7 @@ export async function getGames(options?: {
 }
 
 export async function getTodayGames(): Promise<BDLGame[]> {
-  const d = new Date();
-  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const today = getTodayStr();
   const response = await getGames({ dates: [today] });
   return response.data;
 }

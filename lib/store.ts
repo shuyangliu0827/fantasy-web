@@ -1893,6 +1893,7 @@
        return { ok: false, error: "Roster is full (13 players). Drop a player first." };
      }
 
+     const bdlMap = await resolveBdlIds([player.name]);
      const newPlayer: RosterPlayer = {
        id: player.id,
        name: player.name,
@@ -1909,7 +1910,7 @@
        round: 0,
        acquiredVia: "free_agent",
        acquiredAt: Date.now(),
-       bdl_id: player.bdl_id,
+       bdl_id: bdlMap.get(player.name),
      };
 
      roster.push(newPlayer);
@@ -2084,6 +2085,14 @@
          return { ok: false, error: "Requested players not found on roster. The roster data may not have synced yet — please try again." };
        }
 
+       // Resolve bdl_ids for any traded players that are missing them
+       const missingBdlNames = [...offeredPlayers, ...requestedPlayers]
+         .filter(p => !p.bdl_id)
+         .map(p => p.name);
+       const bdlMap = missingBdlNames.length > 0
+         ? await resolveBdlIds(missingBdlNames)
+         : new Map<string, number>();
+
        // Mark traded players as released on their original roster (preserves history)
        const now = Date.now();
        const newFromRoster = fromRoster.map(p =>
@@ -2097,12 +2106,12 @@
            : p
        );
 
-       // Add to new rosters with updated acquisition info
+       // Add to new rosters with updated acquisition info and resolved bdl_ids
        for (const p of offeredPlayers) {
-         newToRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now });
+         newToRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now, bdl_id: p.bdl_id ?? bdlMap.get(p.name) });
        }
        for (const p of requestedPlayers) {
-         newFromRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now });
+         newFromRoster.push({ ...p, releasedAt: undefined, acquiredVia: "trade", acquiredAt: now, bdl_id: p.bdl_id ?? bdlMap.get(p.name) });
        }
 
        // Await both roster saves to Supabase before updating trade status

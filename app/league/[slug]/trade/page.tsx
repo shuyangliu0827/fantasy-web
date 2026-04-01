@@ -66,13 +66,13 @@ export default function TradePage() {
   // ── Helper functions (declared before hooks that reference them) ──
 
   function getLivePPG(player: RosterPlayer): string {
-    const stats = liveStats.get(player.id) || liveStats.get(player.name);
+    const stats = (player.bdl_id ? liveStats.get(String(player.bdl_id)) : undefined) || liveStats.get(player.name);
     if (stats) return stats.averages.pts.toFixed(1);
     return player.ppg.toFixed(1);
   }
 
   function getLiveFPTS(player: RosterPlayer): string {
-    const stats = liveStats.get(player.id) || liveStats.get(player.name);
+    const stats = (player.bdl_id ? liveStats.get(String(player.bdl_id)) : undefined) || liveStats.get(player.name);
     if (stats) return stats.fptsAvg.toFixed(1);
     return "-";
   }

@@ -14,7 +14,7 @@ import { filterValidStats } from "@/lib/canonical-pipeline";
 import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/scoring-config";
 
 const API_BASE = "https://api.balldontlie.io/v1";
-const API_KEY  = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
+const API_KEY  = process.env.BDL_API_KEY ?? "";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes (live / today only)
 
 type PlayerGameStats = {
@@ -181,7 +181,9 @@ async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
   // Today/future or BDL returned empty — use in-memory cache only
   // For today with valid data, still write to DB for partial persistence
   if (!isPastDate && Object.keys(bdlStats).length > 0) {
-    writeToDB(supabase, date, bdlStats).catch(() => {}); // fire-and-forget for today
+    writeToDB(supabase, date, bdlStats).catch((err) => {
+      console.error("[nba-game-stats] Failed to persist today's stats to DB:", { date, error: err });
+    });
   }
 
   cache.set(date, { data: bdlStats, timestamp: Date.now() });

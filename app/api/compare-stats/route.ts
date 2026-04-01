@@ -30,8 +30,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key"
 );
 
-const CURRENT_SEASON = getCurrentSeasonYear();
-
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -169,6 +167,8 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
     throw new Error("player_stats_cache unavailable");
   }
 
+  // Resolve season at request time (never at module scope — avoids freeze on long-running instances)
+  const CURRENT_SEASON = getCurrentSeasonYear();
   // Fetch game logs for stability (season games) — parallel for both players
   const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] });
 

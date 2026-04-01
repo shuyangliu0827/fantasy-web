@@ -171,6 +171,30 @@ export default function SettingsPage() {
   // ── Save rules
   async function handleSaveRules() {
     if (!league) return;
+
+    // Validate custom weights before saving — prevent null/NaN/all-zero from being locked in
+    if (scoringType === "h2h_points" && pointsSystem === "custom") {
+      const weightKeys = Object.keys(customWeights) as (keyof PointsWeights)[];
+      const invalidKeys = weightKeys.filter(
+        (k) => typeof customWeights[k] !== "number" || isNaN(customWeights[k] as number)
+      );
+      if (invalidKeys.length > 0) {
+        alert(t(
+          `权重包含无效值 (${invalidKeys.join(", ")})，请确保所有权重均为数字。`,
+          `Scoring weights contain invalid values (${invalidKeys.join(", ")}). All weights must be numbers.`
+        ));
+        return;
+      }
+      const hasNonZero = weightKeys.some((k) => (customWeights[k] as number) !== 0);
+      if (!hasNonZero) {
+        alert(t(
+          "自定义权重不能全部为零，至少一个统计类别必须有非零权重。",
+          "Custom scoring weights cannot all be zero — at least one category must have a non-zero weight."
+        ));
+        return;
+      }
+    }
+
     setSavingRules(true);
     const result = await updateLeagueRules(league.id, {
       scoring_type: scoringType,

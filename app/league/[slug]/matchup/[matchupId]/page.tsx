@@ -245,7 +245,7 @@ export default function MatchupDetailPage() {
   function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
-    if (dayMap[player.id]) return dayMap[player.id];
+    if (player.bdl_id && dayMap[String(player.bdl_id)]) return dayMap[String(player.bdl_id)];
 
     for (const cached of playerStatsCache.values()) {
       if (cached.name === player.name && dayMap[String(cached.id)]) {

@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const API_BASE = "https://api.balldontlie.io/v1";
-const API_KEY = "14fd7de0-c9c0-40d3-bbeb-e8c86a61d56a";
+const API_KEY = process.env.BDL_API_KEY ?? "";
 import { getCurrentSeasonYear } from "@/lib/season";
 import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and

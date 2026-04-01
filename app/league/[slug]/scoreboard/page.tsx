@@ -12,10 +12,10 @@ import {
   LeagueMember,
   RosterPlayer,
   fetchTeamLineupFromDB,
+  fetchTeamRosterFromDB,
   getLeagueBySlug,
   getLeagueMembers,
   getSessionUser,
-  getTeamRoster,
   saveWeeklyMatchupResult,
   supabase,
 } from "@/lib/store";
@@ -85,22 +85,25 @@ export default function ScoreboardPage() {
 
       const [membersData, teamsResult, statsResult] = await Promise.all([
         getLeagueMembers(leagueData.id),
-        supabase.from("fantasy_teams").select("id, user_id, roster_data").eq("league_id", leagueData.id),
+        supabase.from("fantasy_teams").select("id, user_id").eq("league_id", leagueData.id),
         fetch("/api/nba-stats").then((response) => response.json()).catch(() => ({ status: "error" })),
       ]);
 
       if (cancelled) return;
       setMembers(membersData);
 
+      const teams = teamsResult.data || [];
       const rosters: Record<string, RosterPlayer[]> = {};
       const lineups: Record<string, DailyLineupMap> = {};
       const idMap: Record<string, string> = {};
-      for (const team of teamsResult.data || []) {
-        rosters[team.user_id] = Array.isArray(team.roster_data)
-          ? (team.roster_data as RosterPlayer[])
-          : getTeamRoster(leagueData.id, team.id);
-        lineups[team.user_id] = await fetchTeamLineupFromDB(leagueData.id, team.id);
-        idMap[team.user_id] = team.id; // user_id → fantasy_team.id
+      const [rosterResults, lineupResults] = await Promise.all([
+        Promise.all(teams.map((t) => fetchTeamRosterFromDB(leagueData.id, t.id))),
+        Promise.all(teams.map((t) => fetchTeamLineupFromDB(leagueData.id, t.id))),
+      ]);
+      for (let i = 0; i < teams.length; i++) {
+        rosters[teams[i].user_id] = rosterResults[i];
+        lineups[teams[i].user_id] = lineupResults[i];
+        idMap[teams[i].user_id] = teams[i].id;
       }
       if (cancelled) return;
       setTeamRosters(rosters);
@@ -190,8 +193,13 @@ export default function ScoreboardPage() {
   function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
     const dayMap = weekDayStats[dateStr];
     if (!dayMap) return null;
-    if (dayMap[player.id]) return dayMap[player.id];
 
+    // Primary: BDL integer ID (canonical — matches player_day_stats keys)
+    if (player.bdl_id && dayMap[String(player.bdl_id)]) {
+      return dayMap[String(player.bdl_id)];
+    }
+
+    // Fallback: name-match (for players whose bdl_id hasn't been resolved yet)
     for (const cached of playerStatsCache.values()) {
       if (cached.name === player.name && dayMap[String(cached.id)]) {
         return dayMap[String(cached.id)];

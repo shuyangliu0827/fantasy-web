@@ -217,8 +217,7 @@ export default function RosterPage() {
 
   async function fetchGames(start: Date) {
     setGamesLoading(true);
-    const endDate = new Date(start);
-    endDate.setDate(start.getDate() + 6);
+    const endDate = addUtcDays(start, 6);
     try {
       const res = await fetch(
         `/api/nba-games?start_date=${formatDateStr(start)}&end_date=${formatDateStr(endDate)}`
