@@ -1698,13 +1698,15 @@
      const allPlayers = getPlayers();
      const rosters = getLeagueRosters(leagueId);
      const activeIds = new Set<string>();
+     const activeNames = new Set<string>();
      for (const teamPlayers of Object.values(rosters)) {
        // Only count currently active (not released) players as "taken"
        for (const p of getCurrentRoster(teamPlayers)) {
          activeIds.add(p.id);
+         activeNames.add(toCanonicalPlayerKey(p.name));
        }
      }
-   return allPlayers.filter(p => !activeIds.has(p.id));
+   return allPlayers.filter(p => !activeIds.has(p.id) && !activeNames.has(toCanonicalPlayerKey(p.name)));
   }
 
   function toCanonicalPlayerKey(name: string): string {

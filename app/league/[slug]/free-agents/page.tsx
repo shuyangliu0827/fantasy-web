@@ -47,6 +47,33 @@ function toCanonicalPlayerKey(name: string): string {
     .toLowerCase();
 }
 
+const POSITION_ORDER: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
+const CANONICAL_PAIRS = new Set(["PG/SG", "SG/SF", "SF/PF", "PF/C"]);
+const POSITION_OVERRIDE_BY_KEY = new Map(
+  Object.entries(PLAYER_POSITIONS).map(([name, pos]) => [toCanonicalPlayerKey(name), pos])
+);
+
+function normalizePosition(raw?: string): string {
+  if (!raw) return "N/A";
+  const clean = raw.toUpperCase().replace(/\s+/g, "");
+  if (clean === "G") return "PG/SG";
+  if (clean === "F") return "SF/PF";
+  if (clean === "G-F" || clean === "F-G") return "SG/SF";
+  if (clean === "F-C" || clean === "C-F") return "PF/C";
+
+  const tokens = clean.split("/").map(t => t.trim()).filter(Boolean);
+  const deduped = Array.from(new Set(tokens))
+    .filter((t) => t in POSITION_ORDER)
+    .sort((a, b) => POSITION_ORDER[a] - POSITION_ORDER[b]);
+
+  if (deduped.length === 0) return "N/A";
+  if (deduped.length === 1) return deduped[0];
+
+  const pair = `${deduped[0]}/${deduped[1]}`;
+  if (CANONICAL_PAIRS.has(pair)) return pair;
+  return deduped[0];
+}
+
 export default function FreeAgentsPage() {
   const { t } = useLang();
   const params = useParams();
@@ -208,13 +235,21 @@ export default function FreeAgentsPage() {
 
   // Helper: get live stat value for a player, falling back to static Player field if no live data loaded.
   function buildDisplayRow(player: Player): FreeAgentDisplayRow {
-    const live = liveStatsMap.get(toCanonicalPlayerKey(player.name));
+    const canonicalName = toCanonicalPlayerKey(player.name);
+    const live = liveStatsMap.get(canonicalName);
+    const overridePos = POSITION_OVERRIDE_BY_KEY.get(canonicalName);
+    const normalizedLivePos = normalizePosition(live?.position);
+    const normalizedStaticPos = normalizePosition(player.position);
+    const displayPosition = overridePos
+      ? normalizePosition(overridePos)
+      : (live?.position ? normalizedLivePos : normalizedStaticPos);
+
     if (live) {
       return {
         player,
         name: player.name,
         team: live.team || player.team,
-        position: live.position || player.position,
+        position: displayPosition,
         ppg: live.ppg,
         rpg: live.rpg,
         apg: live.apg,
@@ -228,7 +263,7 @@ export default function FreeAgentsPage() {
       player,
       name: player.name,
       team: player.team,
-      position: player.position,
+      position: displayPosition,
       ppg: player.ppg,
       rpg: player.rpg,
       apg: player.apg,
