@@ -26,6 +26,17 @@ import {
 } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
 
+// Live stats from /api/nba-stats — same canonical path as rankings / cheat sheet / trade.
+type LiveFAStats = {
+  ppg: number;
+  rpg: number;
+  apg: number;
+  spg: number;
+  bpg: number;
+  rank: number;
+  injury?: string;
+};
+
 export default function FreeAgentsPage() {
   const { t } = useLang();
   const params = useParams();
@@ -46,10 +57,38 @@ export default function FreeAgentsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
+  // Live stats keyed by lowercase player name — same source as rankings / cheat sheet / trade.
+  const [liveStatsMap, setLiveStatsMap] = useState<Map<string, LiveFAStats>>(new Map());
+
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
   }, [slug]);
+
+  async function fetchLiveStats(): Promise<Map<string, LiveFAStats>> {
+    try {
+      const res = await fetch("/api/nba-stats");
+      const data = await res.json();
+      if (data.status === "success" && data.players) {
+        const map = new Map<string, LiveFAStats>();
+        for (const p of data.players) {
+          map.set((p.name as string).toLowerCase(), {
+            ppg: p.averages.pts,
+            rpg: p.averages.reb,
+            apg: p.averages.ast,
+            spg: p.averages.stl,
+            bpg: p.averages.blk,
+            rank: p.rank,
+            injury: p.injury ?? undefined,
+          });
+        }
+        return map;
+      }
+    } catch {
+      // Non-fatal: fall back to showing "—" for stats
+    }
+    return new Map();
+  }
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -80,8 +119,14 @@ export default function FreeAgentsPage() {
       }
     }
 
-    // Read from DB so all users see the same, up-to-date free agent pool
-    setFreeAgents(await fetchUndraftedPlayersFromDB(leagueData.id));
+    // Fetch free-agent pool (ownership from DB) and live stats in parallel.
+    // Pool identifies WHO is a free agent; live stats supply current-season display values.
+    const [pool, liveMap] = await Promise.all([
+      fetchUndraftedPlayersFromDB(leagueData.id),
+      fetchLiveStats(),
+    ]);
+    setFreeAgents(pool);
+    setLiveStatsMap(liveMap);
     setLoading(false);
   }
 
@@ -134,6 +179,14 @@ export default function FreeAgentsPage() {
 
   const isOwner = user && league && league.commissioner_id === user.id;
 
+  // Helper: get live stat value for a player, falling back to static Player field if no live data loaded.
+  function getLiveStat(player: Player, field: "ppg" | "rpg" | "apg" | "spg" | "bpg" | "rank"): number {
+    const live = liveStatsMap.get(player.name.toLowerCase());
+    if (live) return live[field];
+    // Fall back to static data only when live map hasn't loaded yet (map is empty).
+    return player[field] as number;
+  }
+
   const filteredAgents = freeAgents
     .filter(p => {
       if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -141,8 +194,8 @@ export default function FreeAgentsPage() {
       return true;
     })
     .sort((a, b) => {
-      if (sortBy === "rank") return a.rank - b.rank;
-      return (b[sortBy as keyof typeof b] as number) - (a[sortBy as keyof typeof a] as number);
+      if (sortBy === "rank") return getLiveStat(a, "rank") - getLiveStat(b, "rank");
+      return getLiveStat(b, sortBy) - getLiveStat(a, sortBy);
     });
 
   const totalPages = Math.ceil(filteredAgents.length / pageSize);
@@ -258,7 +311,9 @@ export default function FreeAgentsPage() {
           {/* Free Agent List */}
           <div className="fa-table">
             <div style={{ fontSize: 11, color: "#9ca3af", padding: "6px 12px 2px", fontStyle: "italic" }}>
-              {t("统计数据为赛季参考值", "Stats are season reference values")}
+              {liveStatsMap.size > 0
+                ? t("当前赛季实时数据", "Current-season stats")
+                : t("统计数据为赛季参考值", "Stats are season reference values")}
             </div>
             <div className="fa-scroll-wrapper">
             <div className="fa-header">
@@ -274,21 +329,26 @@ export default function FreeAgentsPage() {
             {filteredAgents.length === 0 && (
               <div className="empty-row">{t("没有符合条件的自由球员", "No free agents match your criteria")}</div>
             )}
-            {paginatedAgents.map((player) => (
+            {paginatedAgents.map((player) => {
+              const live = liveStatsMap.get(player.name.toLowerCase());
+              const injuryStatus = live?.injury ?? player.injury;
+              const hasLive = !!live;
+              const fmt = (val: number | undefined) => val != null ? val.toFixed(1) : "—";
+              return (
               <div key={player.id} className="fa-row">
-                <div className="col-rank">{player.rank}</div>
+                <div className="col-rank">{hasLive ? live!.rank : player.rank}</div>
                 <div className="col-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <PlayerAvatar name={player.name} size={32} />
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
-                    <span className="player-meta">{player.team} · {player.position}{player.injury ? ` · ${player.injury}` : ""}</span>
+                    <span className="player-meta">{player.team} · {player.position}{injuryStatus ? ` · ${injuryStatus}` : ""}</span>
                   </div>
                 </div>
-                <div className="col-stat">{player.ppg.toFixed(1)}</div>
-                <div className="col-stat">{player.rpg.toFixed(1)}</div>
-                <div className="col-stat">{player.apg.toFixed(1)}</div>
-                <div className="col-stat">{player.spg.toFixed(1)}</div>
-                <div className="col-stat">{player.bpg.toFixed(1)}</div>
+                <div className="col-stat">{fmt(hasLive ? live!.ppg : player.ppg)}</div>
+                <div className="col-stat">{fmt(hasLive ? live!.rpg : player.rpg)}</div>
+                <div className="col-stat">{fmt(hasLive ? live!.apg : player.apg)}</div>
+                <div className="col-stat">{fmt(hasLive ? live!.spg : player.spg)}</div>
+                <div className="col-stat">{fmt(hasLive ? live!.bpg : player.bpg)}</div>
                 <div className="col-action">
                   {myTeam && (
                     pickupCount >= WEEKLY_PICKUP_LIMIT ? (
@@ -303,7 +363,8 @@ export default function FreeAgentsPage() {
                   )}
                 </div>
               </div>
-            ))}
+            );
+            })}
             </div>
           </div>
           {totalPages > 1 && (
@@ -353,9 +414,13 @@ export default function FreeAgentsPage() {
                 <div className="add-player-name">{showAddModal.name}</div>
                 <div className="add-player-meta">{showAddModal.team} · {showAddModal.position}</div>
                 <div className="add-player-stats">
-                  <span>{showAddModal.ppg} PPG</span>
-                  <span>{showAddModal.rpg} RPG</span>
-                  <span>{showAddModal.apg} APG</span>
+                  {(() => {
+                    const live = liveStatsMap.get(showAddModal.name.toLowerCase());
+                    const ppg = live ? live.ppg.toFixed(1) : showAddModal.ppg;
+                    const rpg = live ? live.rpg.toFixed(1) : showAddModal.rpg;
+                    const apg = live ? live.apg.toFixed(1) : showAddModal.apg;
+                    return (<><span>{ppg} PPG</span><span>{rpg} RPG</span><span>{apg} APG</span></>);
+                  })()}
                 </div>
               </div>
 
