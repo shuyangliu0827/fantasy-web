@@ -39,6 +39,14 @@ type LiveFAStats = {
   injury?: string;
 };
 
+function toCanonicalPlayerKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+}
+
 export default function FreeAgentsPage() {
   const { t } = useLang();
   const params = useParams();
@@ -59,7 +67,7 @@ export default function FreeAgentsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
-  // Live stats keyed by lowercase player name — same source as rankings / cheat sheet / trade.
+  // Live stats keyed by canonical player name — same source as rankings / cheat sheet / trade.
   const [liveStatsMap, setLiveStatsMap] = useState<Map<string, LiveFAStats>>(new Map());
 
   type FreeAgentDisplayRow = {
@@ -83,7 +91,7 @@ export default function FreeAgentsPage() {
       if (data.status === "success" && data.players) {
         const map = new Map<string, LiveFAStats>();
         for (const p of data.players) {
-          map.set((p.name as string).toLowerCase(), {
+          map.set(toCanonicalPlayerKey(p.name as string), {
             team: p.team,
             position: p.position,
             ppg: p.averages.pts,
@@ -145,6 +153,7 @@ export default function FreeAgentsPage() {
   }, [slug]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);
 
@@ -199,7 +208,7 @@ export default function FreeAgentsPage() {
 
   // Helper: get live stat value for a player, falling back to static Player field if no live data loaded.
   function buildDisplayRow(player: Player): FreeAgentDisplayRow {
-    const live = liveStatsMap.get(player.name.toLowerCase());
+    const live = liveStatsMap.get(toCanonicalPlayerKey(player.name));
     if (live) {
       return {
         player,
@@ -267,8 +276,6 @@ export default function FreeAgentsPage() {
 
   return (
     <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
-      <LightHeader activeHref="/league" />
-
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
