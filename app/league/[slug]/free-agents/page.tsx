@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
@@ -28,6 +28,8 @@ import { supabase } from "@/lib/supabase";
 
 // Live stats from /api/nba-stats — same canonical path as rankings / cheat sheet / trade.
 type LiveFAStats = {
+  team?: string;
+  position?: string;
   ppg: number;
   rpg: number;
   apg: number;
@@ -36,6 +38,41 @@ type LiveFAStats = {
   rank: number;
   injury?: string;
 };
+
+function toCanonicalPlayerKey(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+}
+
+const POSITION_ORDER: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
+const CANONICAL_PAIRS = new Set(["PG/SG", "SG/SF", "SF/PF", "PF/C"]);
+const POSITION_OVERRIDE_BY_KEY = new Map(
+  Object.entries(PLAYER_POSITIONS).map(([name, pos]) => [toCanonicalPlayerKey(name), pos])
+);
+
+function normalizePosition(raw?: string): string {
+  if (!raw) return "N/A";
+  const clean = raw.toUpperCase().replace(/\s+/g, "");
+  if (clean === "G") return "PG/SG";
+  if (clean === "F") return "SF/PF";
+  if (clean === "G-F" || clean === "F-G") return "SG/SF";
+  if (clean === "F-C" || clean === "C-F") return "PF/C";
+
+  const tokens = clean.split("/").map(t => t.trim()).filter(Boolean);
+  const deduped = Array.from(new Set(tokens))
+    .filter((t) => t in POSITION_ORDER)
+    .sort((a, b) => POSITION_ORDER[a] - POSITION_ORDER[b]);
+
+  if (deduped.length === 0) return "N/A";
+  if (deduped.length === 1) return deduped[0];
+
+  const pair = `${deduped[0]}/${deduped[1]}`;
+  if (CANONICAL_PAIRS.has(pair)) return pair;
+  return deduped[0];
+}
 
 export default function FreeAgentsPage() {
   const { t } = useLang();
@@ -57,13 +94,22 @@ export default function FreeAgentsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
-  // Live stats keyed by lowercase player name — same source as rankings / cheat sheet / trade.
+  // Live stats keyed by canonical player name — same source as rankings / cheat sheet / trade.
   const [liveStatsMap, setLiveStatsMap] = useState<Map<string, LiveFAStats>>(new Map());
 
-  useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+  type FreeAgentDisplayRow = {
+    player: Player;
+    name: string;
+    team: string;
+    position: string;
+    ppg: number;
+    rpg: number;
+    apg: number;
+    spg: number;
+    bpg: number;
+    rank: number;
+    injury?: string;
+  };
 
   async function fetchLiveStats(): Promise<Map<string, LiveFAStats>> {
     try {
@@ -72,7 +118,9 @@ export default function FreeAgentsPage() {
       if (data.status === "success" && data.players) {
         const map = new Map<string, LiveFAStats>();
         for (const p of data.players) {
-          map.set((p.name as string).toLowerCase(), {
+          map.set(toCanonicalPlayerKey(p.name as string), {
+            team: p.team,
+            position: p.position,
             ppg: p.averages.pts,
             rpg: p.averages.reb,
             apg: p.averages.ast,
@@ -90,12 +138,13 @@ export default function FreeAgentsPage() {
     return new Map();
   }
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     const leagueData = await getLeagueBySlug(slug);
     if (!leagueData) { setLoading(false); return; }
     setLeague(leagueData);
 
     const currentUser = getSessionUser();
+    setUser(currentUser);
     if (currentUser) {
       const { data: teamsData } = await supabase
         .from("fantasy_teams")
@@ -128,7 +177,12 @@ export default function FreeAgentsPage() {
     setFreeAgents(pool);
     setLiveStatsMap(liveMap);
     setLoading(false);
-  }
+  }, [slug]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+  }, [loadData]);
 
   function handleAddPlayer(player: Player) {
     if (!myTeam) {
@@ -180,22 +234,56 @@ export default function FreeAgentsPage() {
   const isOwner = user && league && league.commissioner_id === user.id;
 
   // Helper: get live stat value for a player, falling back to static Player field if no live data loaded.
-  function getLiveStat(player: Player, field: "ppg" | "rpg" | "apg" | "spg" | "bpg" | "rank"): number {
-    const live = liveStatsMap.get(player.name.toLowerCase());
-    if (live) return live[field];
-    // Fall back to static data only when live map hasn't loaded yet (map is empty).
-    return player[field] as number;
+  function buildDisplayRow(player: Player): FreeAgentDisplayRow {
+    const canonicalName = toCanonicalPlayerKey(player.name);
+    const live = liveStatsMap.get(canonicalName);
+    const overridePos = POSITION_OVERRIDE_BY_KEY.get(canonicalName);
+    const normalizedLivePos = normalizePosition(live?.position);
+    const normalizedStaticPos = normalizePosition(player.position);
+    const displayPosition = overridePos
+      ? normalizePosition(overridePos)
+      : (live?.position ? normalizedLivePos : normalizedStaticPos);
+
+    if (live) {
+      return {
+        player,
+        name: player.name,
+        team: live.team || player.team,
+        position: displayPosition,
+        ppg: live.ppg,
+        rpg: live.rpg,
+        apg: live.apg,
+        spg: live.spg,
+        bpg: live.bpg,
+        rank: live.rank,
+        injury: live.injury ?? player.injury,
+      };
+    }
+    return {
+      player,
+      name: player.name,
+      team: player.team,
+      position: displayPosition,
+      ppg: player.ppg,
+      rpg: player.rpg,
+      apg: player.apg,
+      spg: player.spg,
+      bpg: player.bpg,
+      rank: player.rank,
+      injury: player.injury,
+    };
   }
 
-  const filteredAgents = freeAgents
-    .filter(p => {
-      if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (posFilter !== "ALL" && !p.position.includes(posFilter)) return false;
+  const displayRows = freeAgents.map(buildDisplayRow);
+  const filteredAgents = displayRows
+    .filter(row => {
+      if (search && !row.name.toLowerCase().includes(search.toLowerCase())) return false;
+      if (posFilter !== "ALL" && !row.position.includes(posFilter)) return false;
       return true;
     })
     .sort((a, b) => {
-      if (sortBy === "rank") return getLiveStat(a, "rank") - getLiveStat(b, "rank");
-      return getLiveStat(b, sortBy) - getLiveStat(a, sortBy);
+      if (sortBy === "rank") return a.rank - b.rank;
+      return b[sortBy] - a[sortBy];
     });
 
   const totalPages = Math.ceil(filteredAgents.length / pageSize);
@@ -223,8 +311,6 @@ export default function FreeAgentsPage() {
 
   return (
     <div className="app" style={{ minHeight: "100vh", background: "#f9fafb" }}>
-      <LightHeader activeHref="/league" />
-
       <div className="league-header-mini">
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
@@ -329,26 +415,24 @@ export default function FreeAgentsPage() {
             {filteredAgents.length === 0 && (
               <div className="empty-row">{t("没有符合条件的自由球员", "No free agents match your criteria")}</div>
             )}
-            {paginatedAgents.map((player) => {
-              const live = liveStatsMap.get(player.name.toLowerCase());
-              const injuryStatus = live?.injury ?? player.injury;
-              const hasLive = !!live;
+            {paginatedAgents.map((row) => {
+              const player = row.player;
               const fmt = (val: number | undefined) => val != null ? val.toFixed(1) : "—";
               return (
               <div key={player.id} className="fa-row">
-                <div className="col-rank">{hasLive ? live!.rank : player.rank}</div>
+                <div className="col-rank">{row.rank}</div>
                 <div className="col-player" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <PlayerAvatar name={player.name} size={32} />
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
-                    <span className="player-meta">{player.team} · {player.position}{injuryStatus ? ` · ${injuryStatus}` : ""}</span>
+                    <span className="player-meta">{row.team} · {row.position}{row.injury ? ` · ${row.injury}` : ""}</span>
                   </div>
                 </div>
-                <div className="col-stat">{fmt(hasLive ? live!.ppg : player.ppg)}</div>
-                <div className="col-stat">{fmt(hasLive ? live!.rpg : player.rpg)}</div>
-                <div className="col-stat">{fmt(hasLive ? live!.apg : player.apg)}</div>
-                <div className="col-stat">{fmt(hasLive ? live!.spg : player.spg)}</div>
-                <div className="col-stat">{fmt(hasLive ? live!.bpg : player.bpg)}</div>
+                <div className="col-stat">{fmt(row.ppg)}</div>
+                <div className="col-stat">{fmt(row.rpg)}</div>
+                <div className="col-stat">{fmt(row.apg)}</div>
+                <div className="col-stat">{fmt(row.spg)}</div>
+                <div className="col-stat">{fmt(row.bpg)}</div>
                 <div className="col-action">
                   {myTeam && (
                     pickupCount >= WEEKLY_PICKUP_LIMIT ? (
@@ -405,6 +489,10 @@ export default function FreeAgentsPage() {
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const addRow = buildDisplayRow(showAddModal);
+              return (
+                <>
             <div className="modal-header">
               <h3>{t("签约球员", "Add Player")}</h3>
               <button className="modal-close" onClick={() => setShowAddModal(null)}></button>
@@ -412,13 +500,12 @@ export default function FreeAgentsPage() {
             <div className="modal-body">
               <div className="add-player-card">
                 <div className="add-player-name">{showAddModal.name}</div>
-                <div className="add-player-meta">{showAddModal.team} · {showAddModal.position}</div>
+                <div className="add-player-meta">{addRow.team} · {addRow.position}</div>
                 <div className="add-player-stats">
                   {(() => {
-                    const live = liveStatsMap.get(showAddModal.name.toLowerCase());
-                    const ppg = live ? live.ppg.toFixed(1) : showAddModal.ppg;
-                    const rpg = live ? live.rpg.toFixed(1) : showAddModal.rpg;
-                    const apg = live ? live.apg.toFixed(1) : showAddModal.apg;
+                    const ppg = addRow.ppg.toFixed(1);
+                    const rpg = addRow.rpg.toFixed(1);
+                    const apg = addRow.apg.toFixed(1);
                     return (<><span>{ppg} PPG</span><span>{rpg} RPG</span><span>{apg} APG</span></>);
                   })()}
                 </div>
@@ -454,6 +541,9 @@ export default function FreeAgentsPage() {
                   : t("确认签约", "Confirm Add")}
               </button>
             </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

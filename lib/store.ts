@@ -1694,18 +1694,28 @@
 
    // ==================== Free Agency ====================
 
-   export function getUndraftedPlayers(leagueId: string): Player[] {
+  export function getUndraftedPlayers(leagueId: string): Player[] {
      const allPlayers = getPlayers();
      const rosters = getLeagueRosters(leagueId);
      const activeIds = new Set<string>();
+     const activeNames = new Set<string>();
      for (const teamPlayers of Object.values(rosters)) {
        // Only count currently active (not released) players as "taken"
        for (const p of getCurrentRoster(teamPlayers)) {
          activeIds.add(p.id);
+         activeNames.add(toCanonicalPlayerKey(p.name));
        }
      }
-     return allPlayers.filter(p => !activeIds.has(p.id));
-   }
+   return allPlayers.filter(p => !activeIds.has(p.id) && !activeNames.has(toCanonicalPlayerKey(p.name)));
+  }
+
+  function toCanonicalPlayerKey(name: string): string {
+    return name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .toLowerCase();
+  }
 
    /**
     * Async version of getUndraftedPlayers that reads from Supabase so all users
@@ -1715,7 +1725,7 @@
     * scanning all fantasy_teams.roster_data if the ownership table is empty
     * (e.g. migration not yet applied).
     */
-   export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
+  export async function fetchUndraftedPlayersFromDB(leagueId: string): Promise<Player[]> {
      const allPlayers = getPlayers();
 
      // ── Primary: ownership table ────────────────────────────────────────────
@@ -1746,11 +1756,15 @@
          .eq("league_id", leagueId);
 
        const unseededOwned = new Set<string>();
+       const activeOwnedIds = new Set<string>();
+       const activeOwnedNames = new Set<string>();
        if (teamsData) {
          let hasUnseededPicks = false;
          for (const t of teamsData) {
            const r = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
            for (const p of getCurrentRoster(r)) {
+             activeOwnedIds.add(p.id);
+             activeOwnedNames.add(toCanonicalPlayerKey(p.name));
              if (!ownedByTable.has(p.id)) {
                // Player is active in roster_data but not owned per the ownership table.
                // Treat as owned regardless of releasedByTable — if roster_data still shows
@@ -1770,7 +1784,19 @@
          }
        }
 
-       return allPlayers.filter(p => !ownedByTable.has(p.id) && !unseededOwned.has(p.id));
+       // Exclude by both ID and canonical lowercase name:
+       // - ID handles normal ownership rows
+       // - Name prevents leaks when historical roster entries used non-static IDs
+       //   (e.g. bdl_id-based IDs) that don't match ALL_PLAYERS synthetic IDs.
+       return allPlayers.filter((p) => {
+         const nameKey = toCanonicalPlayerKey(p.name);
+         return (
+           !ownedByTable.has(p.id) &&
+           !unseededOwned.has(p.id) &&
+           !activeOwnedIds.has(p.id) &&
+           !activeOwnedNames.has(nameKey)
+         );
+       });
      }
 
      // ── Fallback: ownership table unavailable (migration not yet applied) ──
@@ -1781,11 +1807,15 @@
 
      if (!teamErr && teams && teams.length > 0) {
        const activeIds = new Set<string>();
+       const activeNames = new Set<string>();
        for (const t of teams) {
          const roster = (Array.isArray(t.roster_data) ? t.roster_data : []) as RosterPlayer[];
-         for (const p of getCurrentRoster(roster)) activeIds.add(p.id);
+         for (const p of getCurrentRoster(roster)) {
+           activeIds.add(p.id);
+           activeNames.add(toCanonicalPlayerKey(p.name));
+         }
        }
-       return allPlayers.filter(p => !activeIds.has(p.id));
+       return allPlayers.filter((p) => !activeIds.has(p.id) && !activeNames.has(toCanonicalPlayerKey(p.name)));
      }
 
      // Final fallback: localStorage
