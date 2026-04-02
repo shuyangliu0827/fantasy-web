@@ -257,7 +257,15 @@ export default function ComparePage() {
         </div>
 
         {/* ── Scoring Weights ── */}
-        <ScoringWeightsPanel weights={scoringWeights} onChange={setScoringWeights} isMobile={isMobile} />
+        <ScoringWeightsPanel
+          weights={scoringWeights}
+          onChange={setScoringWeights}
+          isMobile={isMobile}
+          note={timeframe === "lastSeason" ? t(
+            "注意：Last Season 数据不含 FGM/FGA/FTM/FTA 场均统计 — 这四项权重对 Last Season 结果无影响（season/last7/last15 不受影响）",
+            "Note: Last Season data has no per-game FGM/FGA/FTM/FTA — adjusting those weights has zero effect on Last Season FPTS. Season / last7 / last15 are unaffected."
+          ) : undefined}
+        />
 
         {/* ── Timeframe Selector ── */}
         <TimeframeSelector timeframe={timeframe} onChange={setTimeframe} isLoading={isLoading} />

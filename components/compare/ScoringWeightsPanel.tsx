@@ -1,6 +1,7 @@
 "use client";
 // components/compare/ScoringWeightsPanel.tsx
 // Compact inline scoring weights editor — mirrors the in-game league settings UI.
+// Shows all 11 ESPN H2H Points terms so the displayed formula matches the actual calculation.
 
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
@@ -11,16 +12,23 @@ interface ScoringWeightsPanelProps {
   weights: PointsWeights;
   onChange: (w: PointsWeights) => void;
   isMobile: boolean;
+  /** Optional contextual note shown below the formula (e.g. lastSeason approximation warning). */
+  note?: string;
 }
 
+// All 11 ESPN H2H Points terms — matches calcFantasyPoints / ESPN_DEFAULT_WEIGHTS exactly.
 const STAT_ROWS: { key: keyof PointsWeights; label: string; labelZh: string; min: number; max: number; step: number }[] = [
-  { key: "pts",  label: "PTS",  labelZh: "得分",   min: 0,   max: 5, step: 0.5 },
-  { key: "reb",  label: "REB",  labelZh: "篮板",   min: 0,   max: 5, step: 0.5 },
-  { key: "ast",  label: "AST",  labelZh: "助攻",   min: 0,   max: 5, step: 0.5 },
-  { key: "stl",  label: "STL",  labelZh: "抢断",   min: 0,   max: 6, step: 0.5 },
-  { key: "blk",  label: "BLK",  labelZh: "盖帽",   min: 0,   max: 6, step: 0.5 },
-  { key: "fg3m", label: "3PM",  labelZh: "三分",   min: 0,   max: 5, step: 0.5 },
-  { key: "tov",  label: "TOV",  labelZh: "失误",   min: -4,  max: 0, step: 0.5 },
+  { key: "pts",  label: "PTS",  labelZh: "得分",     min: 0,  max: 5, step: 0.5 },
+  { key: "fgm",  label: "FGM",  labelZh: "投篮命中", min: 0,  max: 5, step: 0.5 },
+  { key: "fga",  label: "FGA",  labelZh: "投篮出手", min: -3, max: 0, step: 0.5 },
+  { key: "fg3m", label: "3PM",  labelZh: "三分命中", min: 0,  max: 5, step: 0.5 },
+  { key: "ftm",  label: "FTM",  labelZh: "罚球命中", min: 0,  max: 5, step: 0.5 },
+  { key: "fta",  label: "FTA",  labelZh: "罚球出手", min: -3, max: 0, step: 0.5 },
+  { key: "reb",  label: "REB",  labelZh: "篮板",     min: 0,  max: 5, step: 0.5 },
+  { key: "ast",  label: "AST",  labelZh: "助攻",     min: 0,  max: 5, step: 0.5 },
+  { key: "stl",  label: "STL",  labelZh: "抢断",     min: 0,  max: 6, step: 0.5 },
+  { key: "blk",  label: "BLK",  labelZh: "盖帽",     min: 0,  max: 6, step: 0.5 },
+  { key: "tov",  label: "TOV",  labelZh: "失误",     min: -4, max: 0, step: 0.5 },
 ];
 
 function isEspnDefault(w: PointsWeights): boolean {
@@ -29,19 +37,24 @@ function isEspnDefault(w: PointsWeights): boolean {
   );
 }
 
+// Build full 11-term formula string matching calcFantasyPoints term order.
 function formulaStr(w: PointsWeights): string {
   const parts: string[] = [];
   if (w.pts  !== 0) parts.push(`${w.pts}×PTS`);
+  if (w.fgm  !== 0) parts.push(`${w.fgm}×FGM`);
+  if (w.fga  !== 0) parts.push(`${w.fga}×FGA`);
+  if (w.fg3m !== 0) parts.push(`${w.fg3m}×3PM`);
+  if (w.ftm  !== 0) parts.push(`${w.ftm}×FTM`);
+  if (w.fta  !== 0) parts.push(`${w.fta}×FTA`);
   if (w.reb  !== 0) parts.push(`${w.reb}×REB`);
   if (w.ast  !== 0) parts.push(`${w.ast}×AST`);
   if (w.stl  !== 0) parts.push(`${w.stl}×STL`);
   if (w.blk  !== 0) parts.push(`${w.blk}×BLK`);
-  if (w.fg3m !== 0) parts.push(`${w.fg3m}×3PM`);
   if (w.tov  !== 0) parts.push(`${w.tov}×TOV`);
   return parts.join("  +  ").replace(/\+\s+−/g, "−");
 }
 
-export default function ScoringWeightsPanel({ weights, onChange, isMobile }: ScoringWeightsPanelProps) {
+export default function ScoringWeightsPanel({ weights, onChange, isMobile, note }: ScoringWeightsPanelProps) {
   const { t } = useLang();
   const [expanded, setExpanded] = useState(false);
   const isDefault = isEspnDefault(weights);
@@ -78,7 +91,7 @@ export default function ScoringWeightsPanel({ weights, onChange, isMobile }: Sco
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <span style={{ fontSize: 14 }}>⚙️</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.textPrimary, flexShrink: 0 }}>
-            {t("计分权重", "Scoring Weights")}
+            {t("计分权重 (ESPN H2H 积分制)", "Scoring Weights (ESPN H2H Points)")}
           </span>
           {!isDefault && (
             <span style={{
@@ -108,10 +121,10 @@ export default function ScoringWeightsPanel({ weights, onChange, isMobile }: Sco
 
       {expanded && (
         <div style={{ padding: "4px 16px 16px" }}>
-          {/* Stat grid */}
+          {/* Stat grid — 6 columns on desktop to accommodate all 11 terms cleanly */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(7, 1fr)",
+            gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(6, 1fr)",
             gap: isMobile ? "12px 16px" : 12,
             marginBottom: 14,
           }}>
@@ -185,7 +198,7 @@ export default function ScoringWeightsPanel({ weights, onChange, isMobile }: Sco
             })}
           </div>
 
-          {/* Formula preview */}
+          {/* Formula preview — all 11 terms */}
           <div style={{
             background: COLORS.bg,
             borderRadius: 8,
@@ -200,6 +213,20 @@ export default function ScoringWeightsPanel({ weights, onChange, isMobile }: Sco
             {t("FPTS = ", "FPTS = ")}
             {formulaStr(weights)}
           </div>
+
+          {/* Contextual note (e.g. lastSeason approximation) */}
+          {note && (
+            <div style={{
+              fontSize: 11, color: "#92400e",
+              background: "#fef3c7",
+              borderRadius: 6,
+              padding: "6px 10px",
+              marginBottom: 10,
+              lineHeight: 1.5,
+            }}>
+              {note}
+            </div>
+          )}
 
           {/* Reset button */}
           {!isDefault && (
