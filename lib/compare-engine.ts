@@ -468,11 +468,15 @@ export function reweightPlayer(player: CompareStats, weights: PointsWeights): Co
     // No logs: recompute from per-game averages
     const fptsPerGame = r1(
       player.ppg    * weights.pts  +
+      player.fgmPg  * weights.fgm  +
+      player.fgaPg  * weights.fga  +
+      player.fg3mPg * weights.fg3m +
+      player.ftmPg  * weights.ftm  +
+      player.ftaPg  * weights.fta  +
       player.rpg    * weights.reb  +
       player.apg    * weights.ast  +
       player.spg    * weights.stl  +
       player.bpg    * weights.blk  +
-      player.fg3mPg * weights.fg3m +
       player.tov    * weights.tov
     );
     const stability = fptsPerGame > 0

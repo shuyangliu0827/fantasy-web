@@ -41,6 +41,10 @@ export interface CompareStats {
   spg: number;
   bpg: number;
   fg3mPg: number;    // 3PM per game — explicit ESPN scoring stat
+  fgmPg: number;    // FGM per game — needed for full 11-term ESPN reweight
+  fgaPg: number;    // FGA per game — needed for full 11-term ESPN reweight
+  ftmPg: number;    // FTM per game — needed for full 11-term ESPN reweight
+  ftaPg: number;    // FTA per game — needed for full 11-term ESPN reweight
   tov: number;
   mpg: number;
   gp: number;

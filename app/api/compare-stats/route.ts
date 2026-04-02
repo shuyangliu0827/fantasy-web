@@ -136,13 +136,14 @@ function aggregateLogs(logs: GameLog[]): {
   totalFpts: number;
   fptsPerGame: number;
   ppg: number; rpg: number; apg: number; spg: number; bpg: number;
-  fg3mPg: number; tov: number; mpg: number;
+  fg3mPg: number; fgmPg: number; fgaPg: number; ftmPg: number; ftaPg: number;
+  tov: number; mpg: number;
   fgPct: number; ftPct: number; fg3Pct: number;
 } {
   const played = logs.filter(l => l.played);
   const gp = played.length;
   if (gp === 0) {
-    return { gp: 0, totalFpts: 0, fptsPerGame: 0, ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fg3mPg: 0, tov: 0, mpg: 0, fgPct: 0, ftPct: 0, fg3Pct: 0 };
+    return { gp: 0, totalFpts: 0, fptsPerGame: 0, ppg: 0, rpg: 0, apg: 0, spg: 0, bpg: 0, fg3mPg: 0, fgmPg: 0, fgaPg: 0, ftmPg: 0, ftaPg: 0, tov: 0, mpg: 0, fgPct: 0, ftPct: 0, fg3Pct: 0 };
   }
 
   let totFpts = 0, totPts = 0, totReb = 0, totAst = 0, totStl = 0, totBlk = 0;
@@ -166,6 +167,10 @@ function aggregateLogs(logs: GameLog[]): {
     spg: r1(totStl / gp),
     bpg: r1(totBlk / gp),
     fg3mPg: r1(totFg3m / gp),
+    fgmPg: r1(totFgm / gp),
+    fgaPg: r1(totFga / gp),
+    ftmPg: r1(totFtm / gp),
+    ftaPg: r1(totFta / gp),
     tov: r1(totTov / gp),
     mpg: r1(totMin / gp),
     fgPct: totFga > 0 ? Math.round((totFgm / totFga) * 1000) / 10 : 0,
@@ -218,6 +223,10 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
       spg: r1(row.stl_avg ?? 0),
       bpg: r1(row.blk_avg ?? 0),
       fg3mPg: r1(row.fg3m_avg ?? 0),
+      fgmPg: r1(row.fgm_avg ?? 0),
+      fgaPg: r1(row.fga_avg ?? 0),
+      ftmPg: r1(row.ftm_avg ?? 0),
+      ftaPg: r1(row.fta_avg ?? 0),
       tov: r1(row.tov_avg ?? 0),
       mpg: r1(row.min_avg ?? 0),
       gp,
@@ -294,6 +303,10 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
       spg: agg.spg,
       bpg: agg.bpg,
       fg3mPg: agg.fg3mPg,
+      fgmPg: agg.fgmPg,
+      fgaPg: agg.fgaPg,
+      ftmPg: agg.ftmPg,
+      ftaPg: agg.ftaPg,
       tov: agg.tov,
       mpg: agg.mpg,
       gp: agg.gp,
@@ -366,6 +379,10 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
       spg: staticPlayer.spg,
       bpg: staticPlayer.bpg,
       fg3mPg: (staticPlayer as any).fg3m ?? 0,
+      fgmPg: 0,
+      fgaPg: 0,
+      ftmPg: 0,
+      ftaPg: 0,
       tov: staticPlayer.tov,
       mpg: (staticPlayer as any).mpg ?? 0,
       gp: staticPlayer.gp,
