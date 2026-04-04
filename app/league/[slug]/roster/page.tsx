@@ -161,6 +161,15 @@ export default function RosterPage() {
     fetchGameDayStats(selectedDate);
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (selectedDate !== getTodayStr()) return;
+    const interval = setInterval(() => {
+      fetchGameDayStats(selectedDate);
+      fetchGames(weekStart);
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [selectedDate, weekStart]);
+
   // When selected date changes, load that date's lineup from dailyLineups
   useEffect(() => {
     const dateLineup = dailyLineups[selectedDate] || {};
@@ -266,9 +275,15 @@ export default function RosterPage() {
   // and (b) switching between dates within the same session always shows the saved lineup.
   function persistLineup(newLineup: LineupMap) {
     if (!league || !myTeam) return;
+    const prevLineup = lineup;
     setLineup(newLineup);
     setDailyLineups(prev => ({ ...prev, [selectedDate]: newLineup }));
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch(console.error);
+    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch((err) => {
+      console.error(err);
+      setLineup(prevLineup);
+      setDailyLineups(prev => ({ ...prev, [selectedDate]: prevLineup }));
+      alert(t("阵容保存失败：比赛已开始的球员不可调整", "Failed to save lineup: started-game players cannot be changed"));
+    });
   }
 
   function getPlayerInSlot(slot: string): RosterPlayer | undefined {
@@ -396,7 +411,10 @@ export default function RosterPage() {
   // Get the live/current team for a player from the stats cache
   function getLiveTeam(player: RosterPlayer): string {
     const stats = getStatsForPlayer(player);
-    return stats?.team || player.team;
+    const statsTeam = stats?.team;
+    if (statsTeam && teamGames[statsTeam]?.[selectedDate]) return statsTeam;
+    if (teamGames[player.team]?.[selectedDate]) return player.team;
+    return statsTeam || player.team;
   }
 
   // Get accurate multi-position for a player (override map takes priority)
@@ -406,10 +424,12 @@ export default function RosterPage() {
   }
 
   function getGameForPlayer(player: RosterPlayer): GameInfo | null {
-    const team = getLiveTeam(player);
-    const teamSchedule = teamGames[team];
-    if (!teamSchedule) return null;
-    return teamSchedule[selectedDate] || null;
+    const liveTeam = getLiveTeam(player);
+    const primary = teamGames[liveTeam]?.[selectedDate];
+    if (primary) return primary;
+    const fallback = teamGames[player.team]?.[selectedDate];
+    if (fallback) return fallback;
+    return null;
   }
 
   function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
