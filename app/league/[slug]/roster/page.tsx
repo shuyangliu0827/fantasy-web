@@ -25,7 +25,7 @@ import {
   supabase,
 } from "@/lib/store";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
-import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr } from "@/lib/week-utils";
+import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr, getLocalDateStr, localToUtcMidnight } from "@/lib/week-utils";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 // ── Types ──
@@ -125,8 +125,13 @@ export default function RosterPage() {
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; user_id: string }[]>([]);
 
   // New state for schedule & stats
-  const [weekStart, setWeekStart] = useState<Date>(normalizeUtcDate(new Date()));
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
+  // localToUtcMidnight: anchors weekStart to the user's LOCAL calendar date so
+  // addUtcDays arithmetic stays aligned with BDL game keys (US Eastern dates).
+  // normalizeUtcDate() would use the UTC date, which diverges from local after ~7 PM.
+  const [weekStart, setWeekStart] = useState<Date>(localToUtcMidnight());
+  // getLocalDateStr: BDL keys games by US Eastern date; getTodayStr() is UTC-based
+  // and returns "tomorrow" for US users after ~7 PM local, breaking all lookups.
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateStr());
   const [teamGames, setTeamGames] = useState<TeamGamesMap>({});
   const [playerStats, setPlayerStats] = useState<Map<string, CachedPlayerStats>>(new Map());
   const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
@@ -140,7 +145,7 @@ export default function RosterPage() {
   // Note: todayStr is also declared below at the date-navigation section; this
   // useMemo captures selectedDate and recomputes when it changes.
   const displayRoster = useMemo(() => {
-    const today = formatDateStr(new Date());
+    const today = getLocalDateStr(); // local date to match selectedDate and BDL keys
     if (selectedDate >= today) return getCurrentRoster(roster);
     return getHistoricalRosterForDate(roster, selectedDate);
   }, [roster, selectedDate]);
@@ -201,8 +206,8 @@ export default function RosterPage() {
         setRoster(rosterData);
         const dailyData = await fetchTeamLineupFromDB(leagueData.id, teamId);
         setDailyLineups(dailyData);
-        // Extract lineup for selected date (today by default)
-        const todayDate = formatDateStr(new Date());
+        // Extract lineup for selected date (today by default) — local date matches BDL keys
+        const todayDate = getLocalDateStr();
         const dateLineup = dailyData[todayDate] || {};
         setLineup(dateLineup);
       }
@@ -460,7 +465,7 @@ export default function RosterPage() {
   // ── Date navigation ──
 
   const weekDates = getWeekDates(weekStart);
-  const todayStr = getTodayStr();
+  const todayStr = getLocalDateStr(); // local date — must match BDL game key format
 
   function shiftWeek(direction: number) {
     const next = addUtcDays(weekStart, direction * 7);

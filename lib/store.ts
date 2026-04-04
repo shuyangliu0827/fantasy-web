@@ -13,7 +13,7 @@
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
    export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
-   import { getTodayStr, formatDateStr, addUtcDays } from "./week-utils";
+   import { getTodayStr, formatDateStr, addUtcDays, getLocalDateStr } from "./week-utils";
    import { resolveBdlIds } from "./player-identity";
    
    // ==================== Types ====================
@@ -1596,7 +1596,9 @@
      date: string,
      newLineup: LineupMap,
    ): Promise<void> {
-     if (date !== getTodayStr()) return;
+     // Use local date (not UTC getTodayStr) so lock enforcement fires correctly
+     // for US users after ~7 PM local time when UTC has already rolled to tomorrow.
+     if (date !== getLocalDateStr()) return;
      const [daily, roster] = await Promise.all([
        fetchTeamLineupFromDB(leagueId, teamId),
        fetchTeamRosterFromDB(leagueId, teamId),

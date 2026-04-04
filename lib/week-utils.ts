@@ -7,6 +7,31 @@ export const BENCH_SLOTS = ["BE1", "BE2", "BE3"] as const;
 export const VALID_ACTIVE_STARTER_SLOTS = new Set<string>(STARTER_SLOTS);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Today's date string in the browser/server's LOCAL timezone ("YYYY-MM-DD").
+ * Use this — not getTodayStr() — when keying against BDL game data, which is
+ * indexed by the US Eastern game date, not UTC. getTodayStr() is UTC-based and
+ * diverges from local date after ~7 PM CDT / ~8 PM EDT, causing schedule lookups
+ * to miss all games for the remainder of the evening.
+ */
+export function getLocalDateStr(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Converts a local-time Date's calendar date (year/month/day) into a UTC
+ * midnight Date so addUtcDays() arithmetic stays aligned with the user's
+ * local calendar rather than UTC. Use this to initialize weekStart on the
+ * roster page — not normalizeUtcDate(), which uses the UTC date of the
+ * instant and diverges from local date in the same evening window.
+ */
+export function localToUtcMidnight(d: Date = new Date()): Date {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
 export function normalizeUtcDate(value: Date | string): Date {
   const src = value instanceof Date ? value : new Date(value);
   return new Date(Date.UTC(src.getUTCFullYear(), src.getUTCMonth(), src.getUTCDate()));
