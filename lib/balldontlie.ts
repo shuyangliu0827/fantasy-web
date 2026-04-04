@@ -94,6 +94,17 @@ export type BDLGame = {
   visitor_team: BDLTeam;
 };
 
+// ==================== Utilities ====================
+
+/**
+ * Parses a BDL minutes string to a float.
+ * BDL returns minutes as "MM:SS" or as a plain decimal string.
+ */
+export function parseMinutes(minStr: string | null | undefined): number {
+  if (!minStr) return 0;
+  return parseFloat(minStr.includes(":") ? minStr.replace(":", ".") : minStr) || 0;
+}
+
 // ==================== API Functions ====================
 
 async function fetchAPI<T>(endpoint: string, params?: Record<string, string>): Promise<T> {

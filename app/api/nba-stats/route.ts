@@ -33,7 +33,8 @@ import { createClient } from "@supabase/supabase-js";
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = process.env.BDL_API_KEY ?? "";
 import { getCurrentSeasonYear } from "@/lib/season";
-import { ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
+import { calcFantasyPoints } from "@/lib/scoring-config";
+import { parseMinutes } from "@/lib/balldontlie";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
 // call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
@@ -79,19 +80,19 @@ const supabase = createClient(
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 function rowToPlayer(row: any, index: number) {
-  const fptsAvg = r1(
-    (row.pts_avg  || 0) * ESPN_DEFAULT_WEIGHTS.pts  +
-    (row.fgm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fgm  +
-    (row.fga_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fga  +
-    (row.fg3m_avg || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
-    (row.ftm_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ftm  +
-    (row.fta_avg  || 0) * ESPN_DEFAULT_WEIGHTS.fta  +
-    (row.reb_avg  || 0) * ESPN_DEFAULT_WEIGHTS.reb  +
-    (row.ast_avg  || 0) * ESPN_DEFAULT_WEIGHTS.ast  +
-    (row.stl_avg  || 0) * ESPN_DEFAULT_WEIGHTS.stl  +
-    (row.blk_avg  || 0) * ESPN_DEFAULT_WEIGHTS.blk  +
-    (row.tov_avg  || 0) * ESPN_DEFAULT_WEIGHTS.tov
-  );
+  const fptsAvg = r1(calcFantasyPoints({
+    pts:  row.pts_avg  || 0,
+    fgm:  row.fgm_avg  || 0,
+    fga:  row.fga_avg  || 0,
+    fg3m: row.fg3m_avg || 0,
+    ftm:  row.ftm_avg  || 0,
+    fta:  row.fta_avg  || 0,
+    reb:  row.reb_avg  || 0,
+    ast:  row.ast_avg  || 0,
+    stl:  row.stl_avg  || 0,
+    blk:  row.blk_avg  || 0,
+    tov:  row.tov_avg  || 0,
+  }));
   const fpts = r1(fptsAvg * (row.games_played || 0));
 
   return {
@@ -186,7 +187,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
         const res = await fetchAPI("/stats", params);
         pagesFetched++;
         for (const stat of (res.data || [])) {
-          const minNum = parseFloat((stat.min || "0").replace(":", ".")) || 0;
+          const minNum = parseMinutes(stat.min);
           if (minNum === 0) continue;
           const pid = stat.player.id;
           if (!playerMap.has(pid)) {
@@ -227,7 +228,6 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
     } catch { /* non-fatal */ }
 
     // 3. Build cache rows
-    const r1 = (v: number) => Math.round(v * 10) / 10;
     const rows: any[] = [];
 
     for (const [playerId, { player, team, gp, totals }] of playerMap.entries()) {
@@ -240,14 +240,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
         stl:  r1(totals.stl  / gp), blk:  r1(totals.blk  / gp),
         tov:  r1(totals.tov  / gp), pts:  r1(totals.pts  / gp),
       };
-      const fptsAvg = r1(
-        avg.pts  * ESPN_DEFAULT_WEIGHTS.pts  + avg.fgm  * ESPN_DEFAULT_WEIGHTS.fgm  +
-        avg.fga  * ESPN_DEFAULT_WEIGHTS.fga  + avg.fg3m * ESPN_DEFAULT_WEIGHTS.fg3m +
-        avg.ftm  * ESPN_DEFAULT_WEIGHTS.ftm  + avg.fta  * ESPN_DEFAULT_WEIGHTS.fta  +
-        avg.reb  * ESPN_DEFAULT_WEIGHTS.reb  + avg.ast  * ESPN_DEFAULT_WEIGHTS.ast  +
-        avg.stl  * ESPN_DEFAULT_WEIGHTS.stl  + avg.blk  * ESPN_DEFAULT_WEIGHTS.blk  +
-        avg.tov  * ESPN_DEFAULT_WEIGHTS.tov
-      );
+      const fptsAvg = r1(calcFantasyPoints(avg));
       rows.push({
         player_id: playerId,
         name: `${player.first_name} ${player.last_name}`,

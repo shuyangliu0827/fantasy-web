@@ -23,8 +23,8 @@ import {
   League,
   Player,
   RosterPlayer,
+  supabase,
 } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
 
 // Live stats from /api/nba-stats — same canonical path as rankings / cheat sheet / trade.
 type LiveFAStats = {

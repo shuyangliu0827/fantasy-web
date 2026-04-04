@@ -25,6 +25,8 @@ const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1
 const BATCH_SIZE = 75;       // players per run — keeps total API calls under 60/min
 const REQ_DELAY_MS = 1000;   // 1 s between season_averages calls
 
+// NOTE: mirrors ESPN_DEFAULT_WEIGHTS in lib/scoring-config.ts — must stay in sync.
+// (Cannot import from lib/ here — this is a Deno edge function.)
 const FANTASY_WEIGHTS = { pts: 1, fgm: 2, fga: -1, fg3m: 1, ftm: 1, fta: -1, reb: 1, ast: 2, stl: 4, blk: 4, tov: -2 };
 
 async function fetchRaw(url: string): Promise<any> {
@@ -33,6 +35,7 @@ async function fetchRaw(url: string): Promise<any> {
   return res.json();
 }
 
+// NOTE: mirrors calcFantasyPoints in lib/scoring-config.ts — must stay in sync.
 function calcFpts(avg: { pts: number; fgm: number; fga: number; fg3m: number; ftm: number; fta: number; reb: number; ast: number; stl: number; blk: number; tov: number }): number {
   return (
     avg.pts  * FANTASY_WEIGHTS.pts  +

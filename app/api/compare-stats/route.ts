@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getCurrentSeasonYear } from "@/lib/season";
-import { getPlayerStats } from "@/lib/balldontlie";
+import { getPlayerStats, parseMinutes } from "@/lib/balldontlie";
 import type { BDLGameStats } from "@/lib/balldontlie";
 import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
 import { addUtcDays, formatDateStr } from "@/lib/week-utils";
@@ -42,11 +42,6 @@ const supabase = createClient(
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
-
-function parseMin(minStr: string | null | undefined): number {
-  if (!minStr) return 0;
-  return parseFloat(minStr.replace(":", ".")) || 0;
-}
 
 function r1(v: number): number {
   return Math.round(v * 10) / 10;
@@ -81,7 +76,7 @@ async function fetchGameLogs(
       for (const stat of res.data as BDLGameStats[]) {
         const pid = stat.player.id;
         if (!logMap.has(pid)) continue;
-        const min = parseMin(stat.min);
+        const min = parseMinutes(stat.min);
         if (min === 0 && stat.pts === 0) continue; // skip DNP stubs
         const fpts = calcFantasyPoints({
           pts:  stat.pts     || 0,

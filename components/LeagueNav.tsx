@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, getPendingTradeCount } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
+import { getSessionUser, getPendingTradeCount, supabase } from "@/lib/store";
 
 type LeagueNavProps = {
   slug: string;

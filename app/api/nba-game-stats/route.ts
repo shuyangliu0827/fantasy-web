@@ -23,6 +23,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { filterValidStats } from "@/lib/canonical-pipeline";
 import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/scoring-config";
+import { parseMinutes } from "@/lib/balldontlie";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY  = process.env.BDL_API_KEY ?? "";
@@ -78,8 +79,7 @@ async function fetchFromBDL(date: string, reason: "live_day" | "historical_backf
       const payload = await res.json();
 
       for (const stat of payload.data || []) {
-        const minStr: string = stat.min || "0";
-        const minNum = parseFloat(minStr.includes(":") ? minStr.replace(":", ".") : minStr) || 0;
+        const minNum = parseMinutes(stat.min);
         if (minNum === 0 && stat.pts === 0) continue;
 
         const playerId = String(stat.player.id);

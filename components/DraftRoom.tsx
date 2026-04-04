@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { getPlayers, Player, getSessionUser } from "@/lib/store";
+import { getPlayers, Player, getSessionUser, supabase } from "@/lib/store";
 import { resolveBdlIds } from "@/lib/player-identity";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { supabase } from "@/lib/supabase";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

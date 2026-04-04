@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { updatePassword } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
+import { updatePassword, supabase } from "@/lib/store";
 
 export default function ResetPasswordPage() {
   const { t } = useLang();
