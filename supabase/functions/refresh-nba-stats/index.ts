@@ -20,8 +20,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = Deno.env.get("BDL_API_KEY") ?? "";
-// Dynamic: Oct–Dec → next year, Jan–Sep → this year (matches NBA season convention)
-const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
 const BATCH_SIZE = 75;       // players per run — keeps total API calls under 60/min
 const REQ_DELAY_MS = 1000;   // 1 s between season_averages calls
 
@@ -60,6 +58,9 @@ Deno.serve(async () => {
   const r1 = (v: number) => Math.round(v * 10) / 10;
 
   try {
+    // Dynamic: Oct–Dec → next year, Jan–Sep → this year (matches NBA season convention)
+    // Evaluate at invocation time to avoid module-load season freeze.
+    const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
     console.log("[refresh-nba-stats][1] Starting active players fetch", { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON });
     // 1. Get all active players (~6 API calls, sorted by id for stable ordering)
     const allPlayers: any[] = [];

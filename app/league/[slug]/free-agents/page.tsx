@@ -8,6 +8,7 @@ import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
+import { getCanonicalPlayerPosition, normalizePosition, toCanonicalPlayerKey } from "@/lib/player-metadata";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -39,40 +40,9 @@ type LiveFAStats = {
   injury?: string;
 };
 
-function toCanonicalPlayerKey(name: string): string {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]/g, "")
-    .toLowerCase();
-}
-
-const POSITION_ORDER: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
-const CANONICAL_PAIRS = new Set(["PG/SG", "SG/SF", "SF/PF", "PF/C"]);
 const POSITION_OVERRIDE_BY_KEY = new Map(
   Object.entries(PLAYER_POSITIONS).map(([name, pos]) => [toCanonicalPlayerKey(name), pos])
 );
-
-function normalizePosition(raw?: string): string {
-  if (!raw) return "N/A";
-  const clean = raw.toUpperCase().replace(/\s+/g, "");
-  if (clean === "G") return "PG/SG";
-  if (clean === "F") return "SF/PF";
-  if (clean === "G-F" || clean === "F-G") return "SG/SF";
-  if (clean === "F-C" || clean === "C-F") return "PF/C";
-
-  const tokens = clean.split("/").map(t => t.trim()).filter(Boolean);
-  const deduped = Array.from(new Set(tokens))
-    .filter((t) => t in POSITION_ORDER)
-    .sort((a, b) => POSITION_ORDER[a] - POSITION_ORDER[b]);
-
-  if (deduped.length === 0) return "N/A";
-  if (deduped.length === 1) return deduped[0];
-
-  const pair = `${deduped[0]}/${deduped[1]}`;
-  if (CANONICAL_PAIRS.has(pair)) return pair;
-  return deduped[0];
-}
 
 export default function FreeAgentsPage() {
   const { t } = useLang();
@@ -238,11 +208,7 @@ export default function FreeAgentsPage() {
     const canonicalName = toCanonicalPlayerKey(player.name);
     const live = liveStatsMap.get(canonicalName);
     const overridePos = POSITION_OVERRIDE_BY_KEY.get(canonicalName);
-    const normalizedLivePos = normalizePosition(live?.position);
-    const normalizedStaticPos = normalizePosition(player.position);
-    const displayPosition = overridePos
-      ? normalizePosition(overridePos)
-      : (live?.position ? normalizedLivePos : normalizedStaticPos);
+    const displayPosition = normalizePosition(overridePos || live?.position || player.position);
 
     if (live) {
       return {
@@ -522,7 +488,7 @@ export default function FreeAgentsPage() {
                         onClick={() => setDropPlayerId(p.id)}
                       >
                         <span className="drop-name">{p.name}</span>
-                        <span className="drop-meta">{PLAYER_POSITIONS[p.name] || p.position} · {p.ppg} PPG</span>
+                        <span className="drop-meta">{getCanonicalPlayerPosition(p.name, p.position)} · {p.ppg} PPG</span>
                       </div>
                     ))}
                   </div>

@@ -7,7 +7,6 @@ import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/store";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr } from "@/lib/week-utils";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 // ── Types ──
 
@@ -44,6 +44,7 @@ type CachedPlayerStats = {
   id: number;
   name: string;
   team: string;
+  position: string;
   averages: {
     min: number; fgm: number; fga: number; fg3m: number;
     ftm: number; fta: number; reb: number; ast: number;
@@ -160,6 +161,15 @@ export default function RosterPage() {
     fetchGameDayStats(selectedDate);
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (selectedDate !== getTodayStr()) return;
+    const interval = setInterval(() => {
+      fetchGameDayStats(selectedDate);
+      fetchGames(weekStart);
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [selectedDate, weekStart]);
+
   // When selected date changes, load that date's lineup from dailyLineups
   useEffect(() => {
     const dateLineup = dailyLineups[selectedDate] || {};
@@ -265,9 +275,15 @@ export default function RosterPage() {
   // and (b) switching between dates within the same session always shows the saved lineup.
   function persistLineup(newLineup: LineupMap) {
     if (!league || !myTeam) return;
+    const prevLineup = lineup;
     setLineup(newLineup);
     setDailyLineups(prev => ({ ...prev, [selectedDate]: newLineup }));
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch(console.error);
+    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch((err) => {
+      console.error(err);
+      setLineup(prevLineup);
+      setDailyLineups(prev => ({ ...prev, [selectedDate]: prevLineup }));
+      alert(t("阵容保存失败：比赛已开始的球员不可调整", "Failed to save lineup: started-game players cannot be changed"));
+    });
   }
 
   function getPlayerInSlot(slot: string): RosterPlayer | undefined {
@@ -395,19 +411,25 @@ export default function RosterPage() {
   // Get the live/current team for a player from the stats cache
   function getLiveTeam(player: RosterPlayer): string {
     const stats = getStatsForPlayer(player);
-    return stats?.team || player.team;
+    const statsTeam = stats?.team;
+    if (statsTeam && teamGames[statsTeam]?.[selectedDate]) return statsTeam;
+    if (teamGames[player.team]?.[selectedDate]) return player.team;
+    return statsTeam || player.team;
   }
 
   // Get accurate multi-position for a player (override map takes priority)
   function getPlayerPosition(player: RosterPlayer): string {
-    return PLAYER_POSITIONS[player.name] || player.position;
+    const livePos = getStatsForPlayer(player)?.position;
+    return getCanonicalPlayerPosition(player.name, livePos || player.position);
   }
 
   function getGameForPlayer(player: RosterPlayer): GameInfo | null {
-    const team = getLiveTeam(player);
-    const teamSchedule = teamGames[team];
-    if (!teamSchedule) return null;
-    return teamSchedule[selectedDate] || null;
+    const liveTeam = getLiveTeam(player);
+    const primary = teamGames[liveTeam]?.[selectedDate];
+    if (primary) return primary;
+    const fallback = teamGames[player.team]?.[selectedDate];
+    if (fallback) return fallback;
+    return null;
   }
 
   function getStatsForPlayer(player: RosterPlayer): CachedPlayerStats | null {
@@ -575,6 +597,7 @@ export default function RosterPage() {
 
   // Check if the selected date has a completed or in-progress game for this player
   function hasPlayedGame(player: RosterPlayer): boolean {
+    if (getGameDayStatsForPlayer(player)) return true;
     const game = getGameForPlayer(player);
     if (!game) return false;
     // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
@@ -593,7 +616,7 @@ export default function RosterPage() {
     const dayStats = player ? getGameDayStatsForPlayer(player) : null;
     const played = player ? hasPlayedGame(player) : false;
     const game = player ? getGameForPlayer(player) : null;
-    const useGameDay = played && dayStats;
+    const useGameDay = !!dayStats;
 
     const dashRow = (
       <>
