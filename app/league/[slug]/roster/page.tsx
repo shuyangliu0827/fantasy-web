@@ -23,8 +23,8 @@ import {
   RosterPlayer,
   LineupMap,
   DailyLineupMap,
+  supabase,
 } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr } from "@/lib/week-utils";
 

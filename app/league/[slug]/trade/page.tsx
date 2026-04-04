@@ -20,8 +20,8 @@ import {
   League,
   RosterPlayer,
   TradeProposal,
+  supabase,
 } from "@/lib/store";
-import { supabase } from "@/lib/supabase";
 
 type TeamInfo = { id: string; name: string; user_id: string };
 
