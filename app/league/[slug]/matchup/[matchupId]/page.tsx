@@ -43,11 +43,13 @@ import {
   parseDateStr,
 } from "@/lib/week-utils";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 type CachedPlayerStats = {
   id: number;
   name: string;
   team: string;
+  position: string;
 };
 
 type TeamBundle = {
@@ -191,7 +193,7 @@ export default function MatchupDetailPage() {
       if (statsIndex.status === "success" && Array.isArray(statsIndex.players)) {
         const map = new Map<string, CachedPlayerStats>();
         for (const player of statsIndex.players) {
-          map.set(String(player.id), { id: player.id, name: player.name, team: player.team });
+          map.set(String(player.id), { id: player.id, name: player.name, team: player.team, position: player.position });
         }
         setPlayerStatsCache(map);
       }
@@ -254,6 +256,19 @@ export default function MatchupDetailPage() {
     }
 
     return null;
+  }
+
+  function getDisplayPosition(player: RosterPlayer): string {
+    if (player.bdl_id) {
+      const live = playerStatsCache.get(String(player.bdl_id));
+      if (live?.position) return getCanonicalPlayerPosition(player.name, live.position);
+    }
+    for (const cached of playerStatsCache.values()) {
+      if (cached.name === player.name && cached.position) {
+        return getCanonicalPlayerPosition(player.name, cached.position);
+      }
+    }
+    return getCanonicalPlayerPosition(player.name, player.position);
   }
 
   function getRowsForView(roster: RosterPlayer[], dailyLineups: DailyLineupMap): SlottedPlayerRow[] {
@@ -425,7 +440,7 @@ export default function MatchupDetailPage() {
                           <PlayerAvatar name={row.player.name} size={28} />
                           <div>
                             <strong>{row.player.name}</strong>
-                            <span>{row.player.team} · {row.player.position}</span>
+                            <span>{row.player.team} · {getDisplayPosition(row.player)}</span>
                           </div>
                         </div>
                       </td>

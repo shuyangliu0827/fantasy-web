@@ -30,6 +30,7 @@ import { getScheduleMock } from "@/lib/schedule-mock";
 import { computeStabilityFromLogs, estimateStabilityHeuristic } from "@/lib/compare-engine";
 import { generateCompareResult } from "@/lib/compare-engine";
 import type { CompareStats, CompareApiResponse, GameLog, Timeframe } from "@/lib/compare-types";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 // Import ALL_PLAYERS for lastSeason fallback
 import { ALL_PLAYERS } from "@/lib/players-data";
@@ -206,7 +207,7 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
       playerId: String(row.player_id),
       playerName: row.name,
       team: row.team,
-      position: row.position,
+      position: getCanonicalPlayerPosition(row.name, row.position),
       timeframe,
       dataSource: 'cache' as const,
 
@@ -286,7 +287,7 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
       playerId: String(pid),
       playerName: identity?.name ?? `Player ${pid}`,
       team: identity?.team ?? "N/A",
-      position: identity?.position ?? "N/A",
+      position: getCanonicalPlayerPosition(identity?.name ?? `Player ${pid}`, identity?.position ?? "N/A"),
       timeframe,
       dataSource: 'live' as const,
 
@@ -362,7 +363,7 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
       playerId: String(pid),
       playerName: staticPlayer.name,
       team: staticPlayer.team,
-      position: staticPlayer.position,
+      position: getCanonicalPlayerPosition(staticPlayer.name, staticPlayer.position),
       timeframe: 'lastSeason',
       dataSource: 'static' as const,
 

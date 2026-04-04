@@ -7,7 +7,6 @@ import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -27,6 +26,7 @@ import {
 } from "@/lib/store";
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr } from "@/lib/week-utils";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 // ── Types ──
 
@@ -44,6 +44,7 @@ type CachedPlayerStats = {
   id: number;
   name: string;
   team: string;
+  position: string;
   averages: {
     min: number; fgm: number; fga: number; fg3m: number;
     ftm: number; fta: number; reb: number; ast: number;
@@ -400,7 +401,8 @@ export default function RosterPage() {
 
   // Get accurate multi-position for a player (override map takes priority)
   function getPlayerPosition(player: RosterPlayer): string {
-    return PLAYER_POSITIONS[player.name] || player.position;
+    const livePos = getStatsForPlayer(player)?.position;
+    return getCanonicalPlayerPosition(player.name, livePos || player.position);
   }
 
   function getGameForPlayer(player: RosterPlayer): GameInfo | null {
@@ -575,6 +577,7 @@ export default function RosterPage() {
 
   // Check if the selected date has a completed or in-progress game for this player
   function hasPlayedGame(player: RosterPlayer): boolean {
+    if (getGameDayStatsForPlayer(player)) return true;
     const game = getGameForPlayer(player);
     if (!game) return false;
     // "Final" = completed, any other non-empty non-"scheduled" status could be in-progress
@@ -593,7 +596,7 @@ export default function RosterPage() {
     const dayStats = player ? getGameDayStatsForPlayer(player) : null;
     const played = player ? hasPlayedGame(player) : false;
     const game = player ? getGameForPlayer(player) : null;
-    const useGameDay = played && dayStats;
+    const useGameDay = !!dayStats;
 
     const dashRow = (
       <>
