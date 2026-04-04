@@ -55,10 +55,11 @@ function todayUtcStr(): string {
 
 // ── BDL API fetch ─────────────────────────────────────────────────────────────
 
-async function fetchFromBDL(date: string, reason: "live_day" | "historical_backfill"): Promise<DateStatsMap> {
+async function fetchFromBDL(date: string, reason: "live_day" | "historical_backfill"): Promise<{ map: DateStatsMap; hadError: boolean }> {
   const map: DateStatsMap = {};
   let cursor: number | undefined;
   let pagesFetched = 0;
+  let hadError = false;
 
   console.log("[nba-game-stats] BDL fetch starting", { source: "api-nba-game-stats", reason, date });
 
@@ -73,6 +74,7 @@ async function fetchFromBDL(date: string, reason: "live_day" | "historical_backf
       const res = await fetch(url.toString(), { headers: { Authorization: API_KEY } });
       if (!res.ok) {
         console.error("[nba-game-stats] BDL fetch failed", { source: "api-nba-game-stats", reason, date, status: res.status });
+        hadError = true;
         break;
       }
       pagesFetched++;
@@ -118,12 +120,13 @@ async function fetchFromBDL(date: string, reason: "live_day" | "historical_backf
       cursor = payload.meta?.next_cursor;
     } catch (err) {
       console.error("[nba-game-stats] BDL fetch page error", { source: "api-nba-game-stats", reason, date, error: err });
+      hadError = true;
       break;
     }
   } while (cursor);
 
-  console.log("[nba-game-stats] BDL fetch complete", { source: "api-nba-game-stats", reason, date, pagesFetched, playerRows: Object.keys(map).length });
-  return map;
+  console.log("[nba-game-stats] BDL fetch complete", { source: "api-nba-game-stats", reason, date, pagesFetched, playerRows: Object.keys(map).length, hadError });
+  return { map, hadError };
 }
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
@@ -192,14 +195,17 @@ async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
   }
 
   // Fetch from BDL (needed for today, future, or past dates not yet in DB)
-  const bdlStats = await fetchFromBDL(date, isPastDate ? "historical_backfill" : "live_day");
+  const { map: bdlStats, hadError: bdlError } = await fetchFromBDL(date, isPastDate ? "historical_backfill" : "live_day");
 
   if (isPastDate && Object.keys(bdlStats).length > 0) {
     // Persist to DB (null-safe write — skips zero rows, never erases valid data)
     await writeToDB(supabase, date, bdlStats);
     // Re-read to get canonical merged result (merges any rows already in DB)
     const merged = await readFromDB(supabase, date);
-    cache.set(date, { data: merged, timestamp: Date.now() });
+    // Only cache if both BDL fetch and DB read are complete without errors
+    if (!bdlError) {
+      cache.set(date, { data: merged, timestamp: Date.now() });
+    }
     return merged;
   }
 
@@ -211,7 +217,12 @@ async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
     });
   }
 
-  cache.set(date, { data: bdlStats, timestamp: Date.now() });
+  // Only cache if BDL responded without error. If BDL failed, don't cache the
+  // empty/partial result — the next request will retry BDL immediately rather
+  // than serving a stale empty map for up to 5 minutes.
+  if (!bdlError) {
+    cache.set(date, { data: bdlStats, timestamp: Date.now() });
+  }
   return bdlStats;
 }
 

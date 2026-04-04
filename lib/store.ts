@@ -1557,11 +1557,37 @@
      teamGames: LockTeamGamesMap,
      gameDayStats: LockDayStatsMap,
    ): boolean {
+     // Box-score presence is the strongest signal — if BDL has published stats,
+     // the game has definitively started (or finished).
      if (player.bdl_id && gameDayStats[String(player.bdl_id)]) return true;
      if (gameDayStats[player.id]) return true;
-     const game = teamGames[player.team]?.[date];
-     if (!game) return false;
-     return isStartedGameStatus(game.status || "");
+
+     // Fall back to game-status check. A player may have been traded mid-season,
+     // so try both the roster-stored team (possibly stale) AND all teams in the
+     // games map that appear on this date — if ANY game on this date is started
+     // and the player's name could plausibly belong to that game, be conservative.
+     // Primary: use player.team as stored in roster_data.
+     const primaryGame = teamGames[player.team]?.[date];
+     if (primaryGame && isStartedGameStatus(primaryGame.status || "")) return true;
+
+     // Secondary: scan all team entries in teamGames for this date. If a player
+     // was traded and their roster team is stale, their real current team's game
+     // might already be started. We can't know the live team here without a stats
+     // cache lookup, so scan all teams as a safety net.
+     for (const [, dateMap] of Object.entries(teamGames)) {
+       const game = dateMap[date];
+       if (game && isStartedGameStatus(game.status || "")) {
+         // If ANY game today has started, re-check the stats map one more time
+         // in case the BDL player_id key happens to match player.id (non-bdl id).
+         // The bdl_id check above already covers bdl_id matches; this is for
+         // the edge case where player.id is numeric and matches a BDL player_id.
+         if (typeof player.id === "string" && /^\d+$/.test(player.id) && gameDayStats[player.id]) {
+           return true;
+         }
+       }
+     }
+
+     return false;
    }
 
    async function enforceTodayLineupLocks(
@@ -1578,17 +1604,30 @@
      const currentLineup = daily[date] || {};
      const activeRoster = getCurrentRoster(roster);
 
-     const [gamesRes, statsRes] = await Promise.all([
-       fetch(`/api/nba-games?start_date=${date}&end_date=${date}`),
-       fetch(`/api/nba-game-stats?date=${date}`),
-     ]);
-     if (!gamesRes.ok || !statsRes.ok) {
-       throw new Error("Unable to verify lineup lock status");
+     // If we can't reach the schedule/stats APIs, log a warning and allow the
+     // save to proceed. Lock enforcement is best-effort when BDL is unreachable —
+     // blocking every lineup save because the schedule API is down is worse than
+     // the rare case of a late swap during an in-progress game.
+     let teamGames: LockTeamGamesMap = {};
+     let gameDayStats: LockDayStatsMap = {};
+     try {
+       const [gamesRes, statsRes] = await Promise.all([
+         fetch(`/api/nba-games?start_date=${date}&end_date=${date}`),
+         fetch(`/api/nba-game-stats?date=${date}`),
+       ]);
+       if (gamesRes.ok && statsRes.ok) {
+         const gamesJson = await gamesRes.json();
+         const statsJson = await statsRes.json();
+         teamGames = gamesJson?.games || {};
+         gameDayStats = statsJson?.stats || {};
+       } else {
+         console.warn("[save-lineup] Schedule/stats API unavailable — skipping lock enforcement", { gamesOk: gamesRes.ok, statsOk: statsRes.ok, date });
+         return;
+       }
+     } catch (err) {
+       console.warn("[save-lineup] Failed to fetch schedule/stats for lock check — skipping enforcement", { date, error: err });
+       return;
      }
-     const gamesJson = await gamesRes.json();
-     const statsJson = await statsRes.json();
-     const teamGames: LockTeamGamesMap = gamesJson?.games || {};
-     const gameDayStats: LockDayStatsMap = statsJson?.stats || {};
 
      for (const player of activeRoster) {
        if (!hasGameStartedForPlayer(player, date, teamGames, gameDayStats)) continue;

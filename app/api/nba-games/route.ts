@@ -54,6 +54,7 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
   const map: TeamGamesMap = {};
   let cursor: number | undefined;
   let totalGames = 0;
+  let hadBdlError = false;
 
   do {
     const params: Record<string, string> = {
@@ -97,12 +98,19 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
       cursor = res.meta?.next_cursor;
     } catch (err) {
       console.error("[nba-games] BDL fetch error", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate, error: err });
+      hadBdlError = true;
       cursor = undefined;
     }
   } while (cursor);
 
-  console.log("[nba-games] BDL fetch complete", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate, gamesFound: totalGames, teamsCovered: Object.keys(map).length });
-  cache = { key: cacheKey, data: map, timestamp: Date.now() };
+  console.log("[nba-games] BDL fetch complete", { source: "api-nba-games", reason: "schedule_lookup", startDate, endDate, gamesFound: totalGames, teamsCovered: Object.keys(map).length, hadBdlError });
+
+  // Only cache successful responses. If BDL threw on any page, don't cache the
+  // (potentially incomplete) result — the next request will retry BDL immediately
+  // rather than serving a stale empty map for up to 10 minutes.
+  if (!hadBdlError) {
+    cache = { key: cacheKey, data: map, timestamp: Date.now() };
+  }
   return map;
 }
 

@@ -158,6 +158,9 @@ export default function RosterPage() {
   }, [weekStart]);
 
   useEffect(() => {
+    // Clear stale stats immediately when the date changes so we don't briefly
+    // show the previous date's stats while the new request is in-flight.
+    setGameDayStats({});
     fetchGameDayStats(selectedDate);
   }, [selectedDate]);
 
@@ -249,11 +252,11 @@ export default function RosterPage() {
       const data = await res.json();
       if (data.status === "success" && data.stats) {
         setGameDayStats(data.stats);
-      } else {
-        setGameDayStats({});
       }
+      // On non-success: preserve existing gameDayStats rather than wiping them.
+      // A transient polling error should not erase live stats already on screen.
     } catch {
-      setGameDayStats({});
+      // Network error during polling: preserve existing state (same reason above).
     }
   }
 
@@ -278,11 +281,17 @@ export default function RosterPage() {
     const prevLineup = lineup;
     setLineup(newLineup);
     setDailyLineups(prev => ({ ...prev, [selectedDate]: newLineup }));
-    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch((err) => {
+    saveLineupForDate(league.id, myTeam.id, selectedDate, newLineup).catch((err: unknown) => {
       console.error(err);
       setLineup(prevLineup);
       setDailyLineups(prev => ({ ...prev, [selectedDate]: prevLineup }));
-      alert(t("阵容保存失败：比赛已开始的球员不可调整", "Failed to save lineup: started-game players cannot be changed"));
+      const msg = err instanceof Error ? err.message : String(err);
+      // Show a specific message for lineup-lock violations vs generic API errors
+      if (msg.includes("lock") || msg.includes("started")) {
+        alert(t("已开赛球员不能调换阵容位置", "Started-game players cannot be moved"));
+      } else {
+        alert(t("阵容保存失败，请重试", "Failed to save lineup, please try again"));
+      }
     });
   }
 
@@ -543,7 +552,7 @@ export default function RosterPage() {
     const cached = getStatsForPlayer(player);
     const game = getGameForPlayer(player);
 
-    // No game today — check for injury note
+    // No game — check for injury note or loading state
     if (!game) {
       if (cached?.injury) {
         return (
@@ -552,6 +561,11 @@ export default function RosterPage() {
             <span className="status-reason">{cached.injury}</span>
           </div>
         );
+      }
+      // While schedule data is still loading, show a spinner placeholder instead
+      // of "--" so the user knows data is in-flight (not definitively absent).
+      if (gamesLoading) {
+        return <div className="col-schedule dim">…</div>;
       }
       return <div className="col-schedule dim">--</div>;
     }
