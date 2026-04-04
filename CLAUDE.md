@@ -31,16 +31,16 @@ Tests use Node's built-in `node:test` + `node:assert/strict` — no external tes
 
 ### `lib/` module roles
 
-- **`store.ts`** — Central data layer; all Supabase reads/writes, type definitions (`User`, `League`, `Team`, `RosterPlayer`, `LineupMap`, `DailyLineupMap`), and localStorage utilities for draft/lineup state.
-- **`supabase.ts`** — Supabase client singleton + low-level DB types (`League`, `Team`, `FantasyPlayer`).
-- **`scoring-config.ts`** — Single source of truth for fantasy points weights. `ESPN_DEFAULT_WEIGHTS` and `getLeaguePointsWeights()`. Import here for any scoring math.
+- **`store.ts`** — Central data layer; all Supabase reads/writes, type definitions (`User`, `League`, `Team`, `RosterPlayer`, `LineupMap`, `DailyLineupMap`), and localStorage utilities for draft/lineup state. Also re-exports `supabase` — always import `supabase` from here, not from `lib/supabase`.
+- **`supabase.ts`** — Supabase client singleton only. Do not import types or helpers from here; use `lib/store`.
+- **`scoring-config.ts`** — Single source of truth for fantasy points weights. `ESPN_DEFAULT_WEIGHTS`, `calcFantasyPoints()`, and `getLeaguePointsWeights()`. Import here for any scoring math — never inline the formula.
 - **`fantasy-scoring.ts`** — Scoring engine: `getStarterIdsForDate`, `calcWeekScore`, roster score aggregation.
 - **`canonical-pipeline.ts`** — Pure helpers with no DB imports: `filterValidStats` (Rule A: null-safe BDL writes) and `computeStandingsFromMatchups` (Rule D: authoritative W/L/PF/PA from matchups, not `fantasy_teams` counters).
 - **`lineup.ts`** — `SLOT_ELIGIBLE` map, `isEligibleForSlot`, `autoSetLineup`. No Supabase.
 - **`roster-history.ts`** — `getCurrentRoster` / `getHistoricalRosterForDate` — pure, no Supabase.
 - **`week-utils.ts`** — Week math (Mon–Sun in UTC), date helpers, `STARTER_SLOTS`, `BENCH_SLOTS`.
 - **`fantasy-matchups.ts`** — Deterministic matchup generation via seeded shuffle (no DB).
-- **`balldontlie.ts`** — Thin HTTP wrapper for Ball Don't Lie API (server-side only; key via `BDL_API_KEY` env var).
+- **`balldontlie.ts`** — Thin HTTP wrapper for Ball Don't Lie API (server-side only; key via `BDL_API_KEY` env var). Also exports `parseMinutes()` — the canonical parser for BDL `"MM:SS"` minute strings; use this instead of inline `parseFloat` calls.
 - **`player-identity.ts`** — `resolveBdlIds()`: maps synthetic player names → BDL integer IDs via `player_stats_cache`.
 - **`lang.tsx`** — `LangProvider` + `useLang()` hook; `t(zh, en)` returns the appropriate string. Preference in `localStorage.bp_lang`.
 
