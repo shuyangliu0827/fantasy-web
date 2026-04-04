@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test tests/**/*.test.ts"
+    "lint:core": "eslint tests/**/*.test.ts lib/fantasy-scoring.ts lib/canonical-pipeline.ts lib/week-utils.ts lib/player-metadata.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/**/*.test.ts",
+    "test:smoke": "node --experimental-strip-types --test tests/canonical-pipeline.test.ts tests/fantasy-scoring.test.ts tests/lineup.test.ts tests/player-metadata.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.93.2",

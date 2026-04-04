@@ -24,6 +24,7 @@ import { createClient } from "@supabase/supabase-js";
 import { filterValidStats } from "@/lib/canonical-pipeline";
 import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/scoring-config";
 import { parseMinutes } from "@/lib/balldontlie";
+import { getNbaTodayStr } from "@/lib/week-utils";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY  = process.env.BDL_API_KEY ?? "";
@@ -50,7 +51,7 @@ function getSupabase() {
 }
 
 function todayUtcStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getNbaTodayStr();
 }
 
 // ── BDL API fetch ─────────────────────────────────────────────────────────────

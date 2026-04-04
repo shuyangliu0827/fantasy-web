@@ -34,6 +34,23 @@ type TeamGamesMap = Record<string, Record<string, GameInfo>>;
 // In-memory cache
 let cache: { key: string; data: TeamGamesMap; timestamp: number } | null = null;
 
+function toNbaDateKey(isoDate: string): string | null {
+  const raw = new Date(isoDate);
+  if (Number.isNaN(raw.getTime())) return null;
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(raw);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+  if (!y || !m || !d) return null;
+  return `${y}-${m}-${d}`;
+}
+
 async function fetchAPI(endpoint: string, params?: Record<string, string>) {
   const url = new URL(`${API_BASE}${endpoint}`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
@@ -67,7 +84,7 @@ async function fetchGamesForRange(startDate: string, endDate: string): Promise<T
       const res = await fetchAPI("/games", params);
       totalGames += (res.data || []).length;
       for (const game of res.data || []) {
-        const dateStr = game.date?.split("T")[0];
+        const dateStr = game.date ? toNbaDateKey(game.date) : null;
         if (!dateStr) continue;
 
         const home = game.home_team?.abbreviation;

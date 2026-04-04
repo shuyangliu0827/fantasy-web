@@ -56,6 +56,25 @@ export function getTodayStr(): string {
   return formatDateStr(new Date());
 }
 
+export function getDateStrInTimeZone(timeZone: string, value: Date = new Date()): string {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(value);
+  const y = parts.find((p) => p.type === "year")?.value;
+  const m = parts.find((p) => p.type === "month")?.value;
+  const d = parts.find((p) => p.type === "day")?.value;
+  if (!y || !m || !d) return formatDateStr(value);
+  return `${y}-${m}-${d}`;
+}
+
+export function getNbaTodayStr(): string {
+  return getDateStrInTimeZone("America/New_York");
+}
+
 export function getCurrentWeek(leagueStart: Date | null, today: Date | string = new Date()): number {
   if (!leagueStart) return 1;
   const todayUtc = normalizeUtcDate(today);

@@ -35,6 +35,7 @@ const API_KEY = process.env.BDL_API_KEY ?? "";
 import { getCurrentSeasonYear } from "@/lib/season";
 import { calcFantasyPoints } from "@/lib/scoring-config";
 import { parseMinutes } from "@/lib/balldontlie";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
 // call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
@@ -99,7 +100,7 @@ function rowToPlayer(row: any, index: number) {
     id: row.player_id,
     name: row.name,
     team: row.team,
-    position: row.position,
+    position: getCanonicalPlayerPosition(row.name, row.position),
     gamesPlayed: row.games_played,
     totals: {
       min:  row.min_total,
@@ -245,7 +246,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
         player_id: playerId,
         name: `${player.first_name} ${player.last_name}`,
         team: team?.abbreviation || player.team?.abbreviation || "N/A",
-        position: player.position || "N/A",
+        position: getCanonicalPlayerPosition(`${player.first_name} ${player.last_name}`, player.position || "N/A"),
         games_played: gp,
         min_avg: avg.min,   pts_avg: avg.pts,   reb_avg: avg.reb,   ast_avg: avg.ast,
         stl_avg: avg.stl,   blk_avg: avg.blk,   tov_avg: avg.tov,

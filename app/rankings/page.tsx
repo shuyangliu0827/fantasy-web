@@ -165,9 +165,7 @@ export default function PlayerRankingsPage() {
     }
 
     if (positionFilter !== "all") {
-      const posMap: Record<string, string> = { PG: "G", SG: "G", SF: "F", PF: "F", C: "C" };
-      const apiPos = posMap[positionFilter] ?? positionFilter;
-      result = result.filter((p) => p.position.includes(apiPos));
+      result = result.filter((p) => p.position.split("/").includes(positionFilter));
     }
 
     if (minPts > 0) {

@@ -13,7 +13,7 @@
    import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
    export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
-   import { getTodayStr, formatDateStr, addUtcDays } from "./week-utils";
+   import { getTodayStr, getNbaTodayStr, formatDateStr, addUtcDays } from "./week-utils";
    import { resolveBdlIds } from "./player-identity";
    
    // ==================== Types ====================
@@ -1535,6 +1535,71 @@
      return result;
    }
 
+   type LockGameInfo = { status?: string };
+   type LockTeamGamesMap = Record<string, Record<string, LockGameInfo>>;
+   type LockDayStatsMap = Record<string, unknown>;
+
+   function isStartedGameStatus(status: string): boolean {
+     const s = (status || "").toLowerCase();
+     return s === "final" || (s !== "" && s !== "scheduled" && !s.includes("scheduled"));
+   }
+
+   function getPlayerSlot(lineup: LineupMap, playerId: string): string | null {
+     for (const [slot, pid] of Object.entries(lineup)) {
+       if (pid === playerId) return slot;
+     }
+     return null;
+   }
+
+   function hasGameStartedForPlayer(
+     player: RosterPlayer,
+     date: string,
+     teamGames: LockTeamGamesMap,
+     gameDayStats: LockDayStatsMap,
+   ): boolean {
+     if (player.bdl_id && gameDayStats[String(player.bdl_id)]) return true;
+     if (gameDayStats[player.id]) return true;
+     const game = teamGames[player.team]?.[date];
+     if (!game) return false;
+     return isStartedGameStatus(game.status || "");
+   }
+
+   async function enforceTodayLineupLocks(
+     leagueId: string,
+     teamId: string,
+     date: string,
+     newLineup: LineupMap,
+   ): Promise<void> {
+     if (date !== getNbaTodayStr()) return;
+     const [daily, roster] = await Promise.all([
+       fetchTeamLineupFromDB(leagueId, teamId),
+       fetchTeamRosterFromDB(leagueId, teamId),
+     ]);
+     const currentLineup = daily[date] || {};
+     const activeRoster = getCurrentRoster(roster);
+
+     const [gamesRes, statsRes] = await Promise.all([
+       fetch(`/api/nba-games?start_date=${date}&end_date=${date}`),
+       fetch(`/api/nba-game-stats?date=${date}`),
+     ]);
+     if (!gamesRes.ok || !statsRes.ok) {
+       throw new Error("Unable to verify lineup lock status");
+     }
+     const gamesJson = await gamesRes.json();
+     const statsJson = await statsRes.json();
+     const teamGames: LockTeamGamesMap = gamesJson?.games || {};
+     const gameDayStats: LockDayStatsMap = statsJson?.stats || {};
+
+     for (const player of activeRoster) {
+       if (!hasGameStartedForPlayer(player, date, teamGames, gameDayStats)) continue;
+       const prevSlot = getPlayerSlot(currentLineup, player.id);
+       const nextSlot = getPlayerSlot(newLineup, player.id);
+       if (prevSlot !== nextSlot) {
+         throw new Error(`Lineup lock violation for started player: ${player.name}`);
+       }
+     }
+   }
+
    export async function setLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap): Promise<void> {
      if (!canUseStorage()) return;
      const dedupedLineup = dedupeLineup(lineup);
@@ -1590,6 +1655,7 @@
     * editing one date never touches another date's lineup.
     */
    export async function saveLineupForDate(leagueId: string, teamId: string, date: string, lineup: LineupMap): Promise<void> {
+     await enforceTodayLineupLocks(leagueId, teamId, date, lineup);
      await setLineupForDate(leagueId, teamId, date, lineup);
    }
 
