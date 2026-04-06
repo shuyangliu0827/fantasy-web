@@ -84,11 +84,6 @@ export default function StandingsPage() {
   const [matchupHistory, setMatchupHistory] = useState<MatchupRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
-
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
@@ -112,6 +107,11 @@ export default function StandingsPage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    setUser(getSessionUser());
+    loadData();
+  }, [slug]);
 
   const isOwner = user && league && league.commissioner_id === user.id;
 

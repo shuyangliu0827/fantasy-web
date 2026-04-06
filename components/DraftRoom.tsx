@@ -460,7 +460,7 @@ useEffect(() => {
       alert("选择失败");
     }
     setPicking(false);
-  }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, picks, applyPicks]);
+  }, [isMyTurn, picking, draftComplete, currentTeam, currentRound, currentPickInRound, overallPick, picks, applyPicks, league.id]);
 
   // Auto-pick the best available player when the turn clock expires.
   // Only the client whose turn it is fires the pick — the isMyTurn guard in

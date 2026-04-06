@@ -78,7 +78,7 @@ export default function MockDraftPage() {
     while (nextPick <= settings.teams * settings.rounds) {
       const round = Math.ceil(nextPick / settings.teams);
       const pickInRound = ((nextPick - 1) % settings.teams) + 1;
-      let isUserPick = settings.type === "snake"
+      const isUserPick = settings.type === "snake"
         ? (round % 2 === 1 ? pickInRound === settings.position : pickInRound === (settings.teams - settings.position + 1))
         : pickInRound === settings.position;
       if (isUserPick) { setCurrentPick(nextPick); setAvailablePlayers(newAvailable); return; }

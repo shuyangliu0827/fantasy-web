@@ -190,27 +190,28 @@ export default function ScoreboardPage() {
     return member.user?.username || member.user?.name || "Anonymous";
   }
 
-  function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
-    const dayMap = weekDayStats[dateStr];
-    if (!dayMap) return null;
-
-    // Primary: BDL integer ID (canonical — matches player_day_stats keys)
-    if (player.bdl_id && dayMap[String(player.bdl_id)]) {
-      return dayMap[String(player.bdl_id)];
-    }
-
-    // Fallback: name-match (for players whose bdl_id hasn't been resolved yet)
-    for (const cached of playerStatsCache.values()) {
-      if (cached.name === player.name && dayMap[String(cached.id)]) {
-        return dayMap[String(cached.id)];
-      }
-    }
-
-    return null;
-  }
-
   const matchupCards = useMemo(() => {
     if (!league || !weekRange) return [];
+
+    function getPlayerDayStats(player: RosterPlayer, dateStr: string): PlayerGameStats | null {
+      const dayMap = weekDayStats[dateStr];
+      if (!dayMap) return null;
+
+      // Primary: BDL integer ID (canonical — matches player_day_stats keys)
+      if (player.bdl_id && dayMap[String(player.bdl_id)]) {
+        return dayMap[String(player.bdl_id)];
+      }
+
+      // Fallback: name-match (for players whose bdl_id hasn't been resolved yet)
+      for (const cached of playerStatsCache.values()) {
+        if (cached.name === player.name && dayMap[String(cached.id)]) {
+          return dayMap[String(cached.id)];
+        }
+      }
+
+      return null;
+    }
+
     return generateMatchupsForWeek(members, league.id, selectedWeek).map((matchup) => {
       const homeTeamId = teamIdByUserId[matchup.home.user_id];
       const awayTeamId = teamIdByUserId[matchup.away.user_id];
@@ -247,7 +248,7 @@ export default function ScoreboardPage() {
         awayScore,
       };
     });
-  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache, weekStatus, pinnedScores, teamIdByUserId, scoresLoading]);
+  }, [league, members, selectedWeek, teamLineups, teamRosters, weekRange, weekDayStats, playerStatsCache, weekStatus, pinnedScores, teamIdByUserId, scoresLoading, leagueWeights]);
 
   // ── Persist weekly results to DB when a past week's scores are fully loaded ──
   useEffect(() => {

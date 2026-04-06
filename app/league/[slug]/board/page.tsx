@@ -42,11 +42,6 @@ export default function BoardPage() {
   const [newBody, setNewBody] = useState("");
   const [posting, setPosting] = useState(false);
 
-  useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
-
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
@@ -76,6 +71,11 @@ export default function BoardPage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    setUser(getSessionUser());
+    loadData();
+  }, [slug]);
 
   async function handlePost() {
     if (!user || !league) return;

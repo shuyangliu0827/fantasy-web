@@ -10,7 +10,6 @@ import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   getSessionUser,
   getLeagueBySlug,
-  setLineupForDate,
   autoSetLineup,
   isEligibleForSlot,
   fetchTeamRosterFromDB,
@@ -633,8 +632,6 @@ export default function RosterPage() {
   function renderStatCells(player: RosterPlayer | undefined) {
     const stats = player ? getStatsForPlayer(player) : null;
     const dayStats = player ? getGameDayStatsForPlayer(player) : null;
-    const played = player ? hasPlayedGame(player) : false;
-    const game = player ? getGameForPlayer(player) : null;
     const useGameDay = !!dayStats;
 
     const dashRow = (

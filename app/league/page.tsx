@@ -32,8 +32,6 @@ export default function PublicLeaguesPage() {
   const [activeTab, setActiveTab]     = useState<Tab>("all");
   const user = getSessionUser();
 
-  useEffect(() => { load(); }, []);
-
   async function load() {
     const data = await listLeagues();
     const publicLeagues = data.filter(l => l.visibility === "public");
@@ -55,6 +53,8 @@ export default function PublicLeaguesPage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => { load(); }, []);
 
   const filtered = leagues.filter(l => {
     const matchSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase());

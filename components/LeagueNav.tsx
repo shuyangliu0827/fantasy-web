@@ -17,6 +17,25 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
   const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
 
+  async function loadPendingCount() {
+    if (!leagueId) return;
+    const user = getSessionUser();
+    if (!user) return;
+
+    // Find user's team in this league
+    const { data: team } = await supabase
+      .from("fantasy_teams")
+      .select("id")
+      .eq("league_id", leagueId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (team) {
+      const count = await getPendingTradeCount(leagueId, team.id);
+      setPendingCount(count);
+    }
+  }
+
   useEffect(() => {
     if (!leagueId) return;
     loadPendingCount();
@@ -42,25 +61,6 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
       supabase.removeChannel(channel);
     };
   }, [leagueId]);
-
-  async function loadPendingCount() {
-    if (!leagueId) return;
-    const user = getSessionUser();
-    if (!user) return;
-
-    // Find user's team in this league
-    const { data: team } = await supabase
-      .from("fantasy_teams")
-      .select("id")
-      .eq("league_id", leagueId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (team) {
-      const count = await getPendingTradeCount(leagueId, team.id);
-      setPendingCount(count);
-    }
-  }
 
   const mainNav: { href: string; label: string; badge: number }[] = [
     { href: `/league/${slug}`, label: t("联赛主页", "League Home"), badge: 0 },

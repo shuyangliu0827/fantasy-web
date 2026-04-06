@@ -60,13 +60,6 @@ export default function SchedulePage() {
   // Real completed-matchup scores fetched from DB
   const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
 
-  useEffect(() => {
-    const u = getSessionUser();
-    setUser(u);
-    if (u) setSelectedUserId(u.id);
-    loadData();
-  }, [slug]);
-
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
@@ -105,6 +98,13 @@ export default function SchedulePage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    const u = getSessionUser();
+    setUser(u);
+    if (u) setSelectedUserId(u.id);
+    loadData();
+  }, [slug]);
 
   const isOwner = user && league && league.commissioner_id === user.id;
 

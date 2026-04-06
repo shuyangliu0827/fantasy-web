@@ -644,7 +644,7 @@
      }
    
      // 删除帖子（相关评论会因为外键约束自动删除，或者手动删除）
-     const { error: deleteCommentsError } = await supabase
+     await supabase
        .from("comments")
        .delete()
        .eq("insight_id", insightId);
@@ -674,7 +674,7 @@
      }
    
      // 更新数据库 heat + 1
-     const { data, error } = await supabase.rpc('increment_heat', { insight_id: insightId });
+     const { error } = await supabase.rpc('increment_heat', { insight_id: insightId });
      
      // 如果没有 rpc 函数，用普通更新
      if (error) {
@@ -988,9 +988,6 @@
      
      if (error || !members) return [];
 
-     // 获取所有用户 ID
-     const userIds = members.map(m => m.user_id);
-     
      // 获取用户信息
      const { data: users } = await supabase
        .from("users")
@@ -1476,7 +1473,7 @@
    // Per-date lineup history: { "YYYY-MM-DD": LineupMap }
    export type LineupHistory = Record<string, LineupMap>;
 
-   function isOldFlatLineup(data: any): boolean {
+   function isOldFlatLineup(data: unknown): boolean {
      if (!data || typeof data !== 'object') return false;
      const keys = Object.keys(data);
      if (keys.length === 0) return false;
@@ -1491,7 +1488,7 @@
 
    export function getDailyLineups(leagueId: string, teamId: string): DailyLineupMap {
      if (!canUseStorage()) return {};
-     const raw = safeParse<any>(
+     const raw = safeParse<unknown>(
        localStorage.getItem(`bp_league_lineup_${leagueId}_${teamId}`), {}
      );
      if (isOldFlatLineup(raw)) return migrateFlatLineup(raw as LineupMap);
@@ -2118,7 +2115,8 @@
    };
 
    // Map Supabase row to TradeProposal
-   function mapTradeRow(row: any): TradeProposal {
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function mapTradeRow(row: any): TradeProposal {
      return {
        id: row.id,
        leagueId: row.league_id,

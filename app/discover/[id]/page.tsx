@@ -53,13 +53,6 @@ export default function DiscoverPostPage() {
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
 
-  useEffect(() => {
-    const currentUser = getSessionUser();
-    setUser(currentUser);
-    setHiddenComments(getHiddenComments());
-    loadInsight();
-  }, [id]);
-
   async function loadInsight() {
     const data = await getInsightById(id);
     if (data) {
@@ -71,6 +64,13 @@ export default function DiscoverPostPage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    const currentUser = getSessionUser();
+    setUser(currentUser);
+    setHiddenComments(getHiddenComments());
+    loadInsight();
+  }, [id]);
 
   const isAuthor = user && insight && insight.author_id === user.id;
 

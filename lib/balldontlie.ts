@@ -380,8 +380,6 @@ export function convertToAppPlayer(bdlPlayer: BDLPlayer, stats?: {
   ft_pct: number;
   tov: number;
 }, injury?: BDLInjury) {
-  // Parse height (e.g., "6-2" -> just keep as string or calculate)
-  const [feet, inches] = (bdlPlayer.height || "0-0").split("-").map(Number);
   const age = bdlPlayer.draft_year ? new Date().getFullYear() - bdlPlayer.draft_year + 19 : 25; // Estimate age
 
   return {

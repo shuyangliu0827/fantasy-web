@@ -20,6 +20,7 @@ export default function PlayerRevealVisual({
   const mousePos = useRef({ x: 0.5, y: 0.5 });
   const smoothMouse = useRef({ x: 0.5, y: 0.5 });
   const rafRef = useRef<number>(0);
+  const loopRef = useRef<FrameRequestCallback>(() => {});
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -33,7 +34,7 @@ export default function PlayerRevealVisual({
 
     const container = containerRef.current;
     if (!container) {
-      rafRef.current = requestAnimationFrame(animate);
+      rafRef.current = requestAnimationFrame(loopRef.current);
       return;
     }
 
@@ -72,8 +73,9 @@ export default function PlayerRevealVisual({
       glowEl.style.transform = `translate(${mx * 40}px, ${my * 30}px)`;
     }
 
-    rafRef.current = requestAnimationFrame(animate);
+    rafRef.current = requestAnimationFrame(loopRef.current);
   }, []);
+  loopRef.current = animate;
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(animate);

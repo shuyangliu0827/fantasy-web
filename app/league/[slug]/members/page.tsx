@@ -33,11 +33,6 @@ export default function MembersPage() {
   const [joining, setJoining] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
-
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
     if (leagueData) {
@@ -61,6 +56,11 @@ export default function MembersPage() {
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    setUser(getSessionUser());
+    loadData();
+  }, [slug]);
 
   async function handleJoin() {
     if (!user) {
