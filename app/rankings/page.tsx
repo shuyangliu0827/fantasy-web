@@ -547,14 +547,15 @@ export default function PlayerRankingsPage() {
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb" }}>
               <div
                 style={{
-                  overflowX: "auto",
+                  overflow: "auto",
                   WebkitOverflowScrolling: "touch",
                   msOverflowStyle: "none",
-                  touchAction: "pan-x",
+                  touchAction: "auto",
+                  maxHeight: isMobile ? "60svh" : undefined,
                 } as React.CSSProperties}
               >
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 760 : 820 }}>
-                  <thead>
+                  <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
                     <tr>
                       {[
                         t("排名", "Rank"),

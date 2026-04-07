@@ -559,7 +559,7 @@ export default function MatchupDetailPage() {
                       {weekRange?.dateStrings.map((date) => {
                         const parsed = parseDateStr(date);
                         const weekday = parsed.toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "short", timeZone: CANONICAL_TIMEZONE });
-                        return <th key={date}>{date}<small>{weekday}</small></th>;
+                        return <th key={date} style={{ whiteSpace: "nowrap" }}>{date}<small>{weekday}</small></th>;
                       })}
                       <th>{t("总分", "Total")}</th>
                     </tr>
@@ -937,11 +937,13 @@ const styles = `
     .container { padding: 0 12px; }
     .league-bar-inner { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; flex-direction: column; gap: 8px; }
     .timezone-pill { font-size: 11px; padding: 6px 10px; }
-    .hero-card { padding: 16px; flex-direction: column; gap: 14px; }
-    .hero-copy h1 { font-size: 22px; }
-    .hero-copy p:last-child { font-size: 13px; }
-    .meta-line { padding: 12px 14px; }
-    .meta-line strong { font-size: 16px; }
+    .hero-card { padding: 16px; flex-direction: column; gap: 10px; }
+    .hero-copy h1 { font-size: 20px; }
+    .hero-copy p:last-child { font-size: 12px; margin-top: 6px; }
+    .hero-meta { display: flex; flex-direction: row; gap: 8px; min-width: 0; }
+    .meta-line { padding: 10px 12px; flex: 1; min-width: 0; border-radius: 12px; }
+    .meta-line span { font-size: 11px; margin-bottom: 4px; }
+    .meta-line strong { font-size: 14px; }
     .summary-card, .breakdown-card { padding: 14px; }
     .summary-team { padding: 12px; gap: 10px; }
     .summary-avatar { width: 40px; height: 40px; font-size: 14px; border-radius: 12px; }
