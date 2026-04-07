@@ -1257,7 +1257,7 @@ const styles = `
   }
   .lineup-header {
     display: grid;
-    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    grid-template-columns: 56px minmax(160px, 200px) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
@@ -1269,7 +1269,7 @@ const styles = `
   }
   .lineup-row {
     display: grid;
-    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    grid-template-columns: 56px minmax(160px, 200px) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     border-bottom: 1px solid #f3f4f6;
     align-items: center;

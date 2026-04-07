@@ -823,7 +823,11 @@ const styles = `
     color: #0f172a;
     font-weight: 600;
   }
-  .table-scroll { overflow-x: auto; }
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
   .breakdown-table,
   .stats-table {
     width: 100%;
@@ -930,8 +934,25 @@ const styles = `
     .summary-score { font-size: 32px; }
   }
   @media (max-width: 720px) {
-    .container { padding: 0 14px; }
-    .league-bar-inner { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; flex-direction: column; }
-    .hero-card, .summary-card, .breakdown-card { padding: 18px; }
+    .container { padding: 0 12px; }
+    .league-bar-inner { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; flex-direction: column; gap: 8px; }
+    .timezone-pill { font-size: 11px; padding: 6px 10px; }
+    .hero-card { padding: 16px; flex-direction: column; gap: 14px; }
+    .hero-copy h1 { font-size: 22px; }
+    .hero-copy p:last-child { font-size: 13px; }
+    .meta-line { padding: 12px 14px; }
+    .meta-line strong { font-size: 16px; }
+    .summary-card, .breakdown-card { padding: 14px; }
+    .summary-team { padding: 12px; gap: 10px; }
+    .summary-avatar { width: 40px; height: 40px; font-size: 14px; border-radius: 12px; }
+    .summary-score { font-size: 26px; }
+    .summary-copy strong { font-size: 14px; }
+    .summary-gap { font-size: 26px; }
+    .page-content { padding: 16px 0 48px; }
+    .layout-stack { gap: 14px; }
+    .table-card-header { padding: 14px 14px 0; flex-wrap: wrap; gap: 8px; }
+    .breakdown-header { flex-wrap: wrap; gap: 8px; }
+    .view-control select { min-width: 110px; padding: 8px 10px; font-size: 13px; }
+    .back-link { font-size: 13px; }
   }
 `;

@@ -436,7 +436,6 @@ const styles = `
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    overflow: hidden;
     position: relative;
   }
   .schedule-card-top-border {

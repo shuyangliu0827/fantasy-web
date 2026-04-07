@@ -544,7 +544,7 @@ export default function PlayerRankingsPage() {
 
           {/* ── Table View ── */}
           {viewMode === "table" && (
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb" }}>
               <div
                 style={{
                   overflowX: "auto",
