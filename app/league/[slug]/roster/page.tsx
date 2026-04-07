@@ -1246,6 +1246,8 @@ const styles = `
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-x pan-y;
     border-radius: 12px;
     border: 1px solid #e5e7eb;
   }
@@ -1257,7 +1259,7 @@ const styles = `
   }
   .lineup-header {
     display: grid;
-    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    grid-template-columns: 56px minmax(220px, 1.6fr) minmax(72px, 0.9fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     background: #f9fafb;
     border-bottom: 1px solid #e5e7eb;
@@ -1269,7 +1271,7 @@ const styles = `
   }
   .lineup-row {
     display: grid;
-    grid-template-columns: 56px minmax(140px, 2fr) minmax(80px, 1fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
+    grid-template-columns: 56px minmax(220px, 1.6fr) minmax(72px, 0.9fr) repeat(10, minmax(40px, 1fr)) minmax(55px, 1fr);
     padding: 10px 12px;
     border-bottom: 1px solid #f3f4f6;
     align-items: center;
@@ -1323,9 +1325,13 @@ const styles = `
     font-size: 13px;
     font-weight: 500;
     color: #111827;
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
   }
   .player-meta { font-size: 11px; color: #9ca3af; }
   .empty-slot { font-size: 13px; color: #444; font-style: italic; }
@@ -1431,7 +1437,7 @@ const styles = `
     .date-num { font-size: 11px; white-space: nowrap; }
     .slot-badge { white-space: nowrap; }
     .col-fpts { white-space: nowrap; }
-    .player-name { font-size: 8px; font-weight: 500; }
+    .player-name { font-size: 10px; font-weight: 500; line-height: 1.15; }
     .player-meta { font-size: 8px; }
     .page-content { padding: 16px 8px 48px; }
     .page-header-top { flex-direction: column; gap: 8px; }

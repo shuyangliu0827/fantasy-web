@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
-import { useLang } from "@/lib/lang";
+import { useLang } from "@/lib/lang"
+import { translateTeam } from "@/lib/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   DailyLineupMap,
@@ -438,7 +439,7 @@ export default function MatchupDetailPage() {
                           <PlayerAvatar name={row.player.name} size={28} />
                           <div>
                             <strong>{row.player.name}</strong>
-                            <span>{row.player.team} · {getDisplayPosition(row.player)}</span>
+                            <span>{translateTeam(row.player.team, lang)} · {getDisplayPosition(row.player)}</span>
                           </div>
                         </div>
                       </td>
@@ -822,7 +823,15 @@ const styles = `
     color: #0f172a;
     font-weight: 600;
   }
-  .table-scroll { overflow-x: auto; }
+  .table-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-x pan-y;
+  }
+  .table-scroll::-webkit-scrollbar { display: none; }
   .breakdown-table,
   .stats-table {
     width: 100%;
@@ -932,5 +941,16 @@ const styles = `
     .container { padding: 0 14px; }
     .league-bar-inner { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; flex-direction: column; }
     .hero-card, .summary-card, .breakdown-card { padding: 18px; }
+    .page-content { padding: 16px 0 40px; }
+    .hero-copy h1 { font-size: 42px; }
+    .meta-line strong { font-size: 16px; }
+    .summary-team { padding: 14px; gap: 10px; }
+    .summary-avatar { width: 44px; height: 44px; border-radius: 12px; font-size: 16px; }
+    .summary-copy strong { font-size: 15px; }
+    .summary-score { font-size: 28px; }
+    .summary-gap { font-size: 28px; }
+    .view-control { width: 100%; justify-content: space-between; }
+    .view-control select { min-width: 124px; }
+    .table-card-header { padding: 16px 16px 0; }
   }
 `;

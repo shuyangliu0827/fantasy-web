@@ -6,6 +6,7 @@ import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
 import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -23,6 +24,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function MockDraftPage() {
   const { t } = useLang();
+  const isMobile = useIsMobile();
   const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [draftStarted, setDraftStarted] = useState(false);
   const [currentDraft, setCurrentDraft] = useState<Draft | null>(null);
@@ -118,13 +120,13 @@ export default function MockDraftPage() {
         <LightHeader activeHref="/mock-draft" />
 
         {/* Page content */}
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 32px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: isMobile ? "20px 12px 28px" : "48px 32px" }}>
           <h1 style={{ fontSize: 32, fontWeight: 800, color: "#111827", margin: "0 0 6px 0" }}>{t("模拟选秀", "Mock Draft")}</h1>
           <p style={{ fontSize: 15, color: "#6b7280", margin: "0 0 36px 0" }}>{t("练习你的选秀策略，数据会自动保存", "Practice your draft strategy. Data saves automatically.")}</p>
 
-          <div style={{ display: "grid", gridTemplateColumns: myDrafts.length > 0 ? "1fr 1fr" : "1fr", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (myDrafts.length > 0 ? "1fr 1fr" : "1fr"), gap: isMobile ? 14 : 24 }}>
             {/* Setup card */}
-            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "32px 28px" }}>
+            <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: isMobile ? "20px 14px" : "32px 28px" }}>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 24px 0" }}>{t("开始新的模拟选秀", "Start New Mock Draft")}</h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -182,7 +184,7 @@ export default function MockDraftPage() {
 
             {/* Draft history */}
             {myDrafts.length > 0 && (
-              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "32px 28px" }}>
+              <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: isMobile ? "20px 14px" : "32px 28px" }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 20px 0" }}>{t("历史选秀记录", "Draft History")}</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {myDrafts.slice(-5).reverse().map(d => (
@@ -207,8 +209,8 @@ export default function MockDraftPage() {
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT, display: "flex", flexDirection: "column" }}>
       {/* Draft header */}
       <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 24px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 24 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ maxWidth: 1400, margin: "0 auto", padding: isMobile ? "0 10px" : "0 24px", minHeight: isMobile ? 64 : 60, display: "flex", alignItems: "center", justifyContent: "space-between", gap: isMobile ? 10 : 24, flexWrap: isMobile ? "wrap" : "nowrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 8 : 16, flexWrap: isMobile ? "wrap" : "nowrap" }}>
             <Link href="/" style={{ textDecoration: "none" }}>
               <span style={{ fontSize: 18, fontWeight: 800, color: "#1e3a8a" }}>蓝本·</span>
             </Link>
@@ -220,7 +222,7 @@ export default function MockDraftPage() {
               </span>
             )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: isMobile ? "wrap" : "nowrap", marginLeft: "auto" }}>
             {isDraftComplete ? (
               <span style={{ padding: "8px 20px", fontSize: 14, fontWeight: 700, color: "#fff", background: "linear-gradient(90deg,#f59e0b,#f97316)", borderRadius: 8 }}>
                 {t("选秀完成", "Draft Complete")}
@@ -242,7 +244,7 @@ export default function MockDraftPage() {
       </header>
 
       {/* Draft body */}
-      <div style={{ flex: 1, maxWidth: 1400, margin: "0 auto", width: "100%", padding: "24px", display: "flex", gap: 20, alignItems: "flex-start" }}>
+      <div style={{ flex: 1, maxWidth: 1400, margin: "0 auto", width: "100%", padding: isMobile ? "12px" : "24px", display: "flex", flexDirection: isMobile ? "column" : "row", gap: 12, alignItems: "flex-start" }}>
 
         {/* Available players */}
         <div style={{ flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
@@ -255,7 +257,7 @@ export default function MockDraftPage() {
               placeholder={t("搜索球员...", "Search players...")}
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); setPlayerPage(1); }}
-              style={{ padding: "7px 12px", fontSize: 13, border: "1.5px solid #e5e7eb", borderRadius: 8, outline: "none", width: 180, color: "#111827" }}
+              style={{ padding: "7px 12px", fontSize: 13, border: "1.5px solid #e5e7eb", borderRadius: 8, outline: "none", width: isMobile ? "100%" : 180, color: "#111827" }}
             />
           </div>
           <div style={{ maxHeight: "calc(100vh - 180px)", overflowY: "auto" }}>
@@ -329,7 +331,7 @@ export default function MockDraftPage() {
         </div>
 
         {/* My team panel */}
-        <div style={{ width: 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
+        <div style={{ width: isMobile ? "100%" : 260, flexShrink: 0, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "16px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{t("已选球员", "My Picks")}</span>
             <span style={{ fontSize: 12, color: "#9ca3af" }}>{myPicks.length} / {settings.rounds}</span>

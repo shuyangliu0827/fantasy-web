@@ -117,7 +117,7 @@ export default function ComparePage() {
 
   // Load all players for search modal + seed defaults
   useEffect(() => {
-    fetch("/api/nba-stats")
+    fetch("/api/nba-stats", { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
         const players: PlayerSummary[] = (data.players ?? []).map((p: Record<string, unknown>) => ({
@@ -144,7 +144,7 @@ export default function ComparePage() {
     setError(null);
     try {
       const date = formatDateStr(new Date());
-      const res = await fetch(`/api/compare-stats?players=${ids.join(",")}&timeframe=${tf}&date=${date}`);
+      const res = await fetch(`/api/compare-stats?players=${ids.join(",")}&timeframe=${tf}&date=${date}`, { cache: "no-store" });
       const data = await res.json();
       if (data.status === "error") {
         setError(data.message ?? t("加载失败，请重试", "Failed to load stats. Please try again."));

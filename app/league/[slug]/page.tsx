@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
+import { useLang } from "@/lib/lang";
 import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa, type League } from "@/lib/store";
 
 type FantasyTeam = {
@@ -41,6 +42,7 @@ import DraftRoom from "@/components/DraftRoom";
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
 export default function LeaguePage() {
+  const { t } = useLang();
   const params = useParams();
   const leagueId = params.slug as string;
 
@@ -141,7 +143,7 @@ export default function LeaguePage() {
       setAnnContent("");
       setShowAnnForm(false);
     } else if (error) {
-      alert("发布失败：" + error.message);
+      alert(t("发布失败：", "Failed to post: ") + error.message);
     }
     setAnnPosting(false);
   }
@@ -156,7 +158,7 @@ export default function LeaguePage() {
     setChatSending(true);
     const text = chatInput.trim();
     setChatInput("");
-    const username = myTeam.name || currentUser.email?.split("@")[0] || "用户";
+    const username = myTeam.name || currentUser.email?.split("@")[0] || t("用户", "User");
     // Optimistic update — show message immediately
     const optimistic = { id: `opt-${Date.now()}`, league_id: league.id, user_id: currentUser.id, username, message: text, created_at: new Date().toISOString() };
     setChatMessages((prev) => [...prev, optimistic]);
@@ -169,7 +171,7 @@ export default function LeaguePage() {
     });
     if (error) {
       console.error("Chat insert error:", error);
-      alert("发送失败：" + error.message);
+      alert(t("发送失败：", "Send failed: ") + error.message);
       setChatMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
       setChatInput(text);
     }
@@ -213,19 +215,19 @@ export default function LeaguePage() {
 
   async function handleJoinDraft() {
     if (!teamName.trim()) {
-      alert("请输入队伍名称");
+      alert(t("请输入队伍名称", "Please enter a team name"));
       return;
     }
     setJoining(true);
     try {
       const user = getSessionUser();
-      if (!user) throw new Error("请先登录");
+      if (!user) throw new Error(t("请先登录", "Please log in first"));
       const leagueData = league;
-      if (!leagueData) throw new Error("联赛不存在");
+      if (!leagueData) throw new Error(t("联赛不存在", "League not found"));
 
       // 校验联赛状态：仅 draft_pending 状态允许加入
       if (leagueData.status !== "draft_pending") {
-        throw new Error("选秀已开始或已完成，无法加入");
+        throw new Error(t("选秀已开始或已完成，无法加入", "Draft has started or completed, cannot join"));
       }
 
       // 校验人数上限
@@ -234,7 +236,7 @@ export default function LeaguePage() {
         .select("*", { count: "exact", head: true })
         .eq("league_id", leagueData.id);
       if ((memberCount ?? 0) >= leagueData.max_teams) {
-        throw new Error("联赛已满，无法加入");
+        throw new Error(t("联赛已满，无法加入", "League is full, cannot join"));
       }
 
       const { count } = await storeSupa
@@ -256,14 +258,14 @@ export default function LeaguePage() {
       await loadLeagueInfo();
     } catch (err) {
       console.error("Join error:", err);
-      alert(err instanceof Error ? err.message : "加入失败");
+      alert(err instanceof Error ? err.message : t("加入失败", "Join failed"));
     } finally {
       setJoining(false);
     }
   }
 
   async function handleStartDraft() {
-    if (!confirm("确定开始选秀吗？")) return;
+    if (!confirm(t("确定开始选秀吗？", "Start draft now?"))) return;
     setStarting(true);
     try {
       const { error } = await storeSupa.from("leagues").update({ status: "drafting" }).eq("slug", leagueId);
@@ -271,7 +273,7 @@ export default function LeaguePage() {
       await loadLeagueInfo();
     } catch (err) {
       console.error("Start draft error:", err);
-      alert(err instanceof Error ? err.message : "开始选秀失败");
+      alert(err instanceof Error ? err.message : t("开始选秀失败", "Failed to start draft"));
     } finally {
       setStarting(false);
     }
@@ -283,7 +285,7 @@ export default function LeaguePage() {
         <LightHeader activeHref="/league" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", gap: 12 }}>
           <div style={{ fontSize: 40 }}>🏀</div>
-          <p style={{ color: "#9ca3af", fontSize: 15 }}>加载中...</p>
+          <p style={{ color: "#9ca3af", fontSize: 15 }}>{t("加载中...", "Loading...")}</p>
         </div>
       </div>
     );
@@ -295,7 +297,7 @@ export default function LeaguePage() {
         <LightHeader activeHref="/league" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", gap: 12 }}>
           <div style={{ fontSize: 40 }}>😕</div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>联赛未找到</h2>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>{t("联赛未找到", "League not found")}</h2>
           <p style={{ color: "#9ca3af" }}>League ID: {leagueId}</p>
         </div>
       </div>
@@ -320,9 +322,9 @@ export default function LeaguePage() {
   const canStartDraft = isCommissioner && teams.length >= 2 && teams.length % 2 === 0 && league.status === 'draft_pending';
   const isActive = league.status === 'active';
 
-  const statusLabel = league.status === "draft_pending" ? "准备中"
-    : league.status === "drafting" ? "选秀中"
-    : "进行中";
+  const statusLabel = league.status === "draft_pending" ? t("准备中", "Pending")
+    : league.status === "drafting" ? t("选秀中", "Drafting")
+    : t("进行中", "Active");
   const statusColor = league.status === "draft_pending" ? { color: "#92400e", bg: "#fef3c7" }
     : league.status === "drafting" ? { color: "#065f46", bg: "#d1fae5" }
     : { color: "#1e40af", bg: "#dbeafe" };
@@ -341,11 +343,11 @@ export default function LeaguePage() {
       : null;
 
     const TABS: { key: "standings" | "schedule" | "chat" | "news" | "settings"; label: string; href?: string }[] = [
-      { key: "standings", label: "积分榜" },
-      { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
-      { key: "chat", label: "聊天室" },
-      { key: "news", label: "联赛公告" },
-      { key: "settings", label: "联赛设置" },
+      { key: "standings", label: t("积分榜", "Standings") },
+      { key: "schedule", label: t("赛程", "Schedule"), href: `/league/${leagueId}/schedule` },
+      { key: "chat", label: t("聊天室", "Chat") },
+      { key: "news", label: t("联赛公告", "Announcements") },
+      { key: "settings", label: t("联赛设置", "League Settings") },
     ];
 
     return (
@@ -368,9 +370,9 @@ export default function LeaguePage() {
             <div style={{ flex: 1 }}>
               {/* breadcrumb */}
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18 }}>
-                <Link href="/league" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", textDecoration: "none" }}>← 返回公开联赛</Link>
+                <Link href="/league" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", textDecoration: "none" }}>← {t("返回公开联赛", "Back to Public Leagues")}</Link>
                 <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>公开联赛</span>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t("公开联赛", "Public League")}</span>
                 <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
                 <span style={{ fontSize: 13, color: "#fff" }}>{league.name}</span>
               </div>
@@ -378,10 +380,10 @@ export default function LeaguePage() {
               {/* tag row */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
                 <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.9)", fontWeight: 600 }}>
-                  精选联赛
+                  {t("精选联赛", "Featured League")}
                 </span>
                 <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-                  {league.season} NBA赛季
+                  {league.season} {t("NBA赛季", "NBA Season")}
                 </span>
               </div>
 
@@ -390,16 +392,16 @@ export default function LeaguePage() {
                 {league.name}
               </h1>
               <p style={{ margin: "0 0 28px", fontSize: 14, color: "rgba(255,255,255,0.75)", lineHeight: 1.7, maxWidth: 600 }}>
-                {league.description || `${teams.length}支队伍，${league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}，每周对决出本周胜者，赛季末积分最高者夺冠。`}
+                {league.description || `${teams.length}${t("支队伍", " teams")}, ${league.draft_type === "snake" ? t("蛇形选秀", "Snake Draft") : t("线性选秀", "Linear Draft")}, ${t("每周对决出本周胜者，赛季末积分最高者夺冠。", "weekly head-to-head matchups, season champion by points.")}`}
               </p>
 
               {/* stat badges */}
               <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 32 }}>
                 {[
-                  { value: teams.length, label: "参赛队伍" },
-                  { value: league.draft_type === "snake" ? "蛇形" : "线性", label: "选秀方式" },
-                  { value: league.max_teams, label: "最大队伍" },
-                  { value: league.scoring_categories || "标准", label: "统计类别" },
+                  { value: teams.length, label: t("参赛队伍", "Teams") },
+                  { value: league.draft_type === "snake" ? t("蛇形", "Snake") : t("线性", "Linear"), label: t("选秀方式", "Draft Type") },
+                  { value: league.max_teams, label: t("最大队伍", "Max Teams") },
+                  { value: league.scoring_categories || t("标准", "Standard"), label: t("统计类别", "Scoring") },
                 ].map(s => (
                   <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     <span style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{s.value}</span>
@@ -416,20 +418,20 @@ export default function LeaguePage() {
                     border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
                     cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6,
                   }}>
-                    🏀 管理我的球队
+                    🏀 {t("管理我的球队", "Manage My Team")}
                   </Link>
                 )}
                 <button
                   onClick={() => {
                     const url = window.location.href;
-                    navigator.clipboard.writeText(url).then(() => alert("邀请链接已复制！"));
+                    navigator.clipboard.writeText(url).then(() => alert(t("邀请链接已复制！", "Invite link copied!")));
                   }}
                   style={{
                     padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "#fff",
                     border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14,
                     fontWeight: 600, cursor: "pointer", fontFamily: FONT,
                   }}>
-                  邀请好友
+                  {t("邀请好友", "Invite Friends")}
                 </button>
                 {isCommissioner && (
                   <Link href={`/league/${leagueId}/settings`} style={{
@@ -437,7 +439,7 @@ export default function LeaguePage() {
                     border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14,
                     fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center",
                   }}>
-                    联赛设置
+                    {t("联赛设置", "League Settings")}
                   </Link>
                 )}
               </div>
@@ -450,15 +452,15 @@ export default function LeaguePage() {
                 border: "1px solid rgba(255,255,255,0.2)", borderRadius: 16,
                 padding: "24px 28px", minWidth: 200, flexShrink: 0, textAlign: "center",
               }}>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>你的当前排名</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>{t("你的当前排名", "Your Rank")}</div>
                 <div style={{ fontSize: 56, fontWeight: 900, color: "#fbbf24", lineHeight: 1, marginBottom: 8 }}>
                   {myRank}
                 </div>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 20 }}>
-                  {myTeam.wins}胜 {myTeam.losses}负 · {myWinPct}
+                  {myTeam.wins}{t("胜", "W")} {myTeam.losses}{t("负", "L")} · {myWinPct}
                 </div>
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 16 }}>
-                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>本赛季总得分</div>
+                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>{t("本赛季总得分", "Season Points")}</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: "#fff" }}>
                     {myTeam.total_score != null ? myTeam.total_score.toFixed(1) : "—"}
                   </div>
@@ -498,21 +500,29 @@ export default function LeaguePage() {
             <div style={{ flex: 1 }}>
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14 }}>
                 <div style={{ padding: "18px 24px", borderBottom: "1px solid #f3f4f6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>积分榜</h2>
+                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>{t("积分榜", "Standings")}</h2>
                   <Link href={`/league/${leagueId}/standings`} style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 600, textDecoration: "none" }}>
-                    查看完整排名 →
+                    {t("查看完整排名", "View Full Standings")} →
                   </Link>
                 </div>
-                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+                <div
+                  style={{
+                    overflowX: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    scrollbarWidth: "none",
+                    msOverflowStyle: "none",
+                    touchAction: "pan-x pan-y",
+                  } as React.CSSProperties}
+                >
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 620 : 480 }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
-                      <th style={thStyle}>次名</th>
-                      <th style={{ ...thStyle, textAlign: "left", minWidth: 200 }}>球队</th>
-                      <th style={thStyle}>胜</th>
-                      <th style={thStyle}>负</th>
-                      <th style={thStyle}>胜率</th>
-                      <th style={thStyle}>赛季总分</th>
+                      <th style={thStyle}>{t("排名", "Rank")}</th>
+                      <th style={{ ...thStyle, textAlign: "left", minWidth: 200 }}>{t("球队", "Team")}</th>
+                      <th style={thStyle}>{t("胜", "W")}</th>
+                      <th style={thStyle}>{t("负", "L")}</th>
+                      <th style={thStyle}>{t("胜率", "PCT")}</th>
+                      <th style={thStyle}>{t("赛季总分", "Season Points")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -555,7 +565,7 @@ export default function LeaguePage() {
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
                                   {team.name}
-                                  {isMe && <span style={{ padding: "1px 6px", background: "#1e3a8a", color: "#fff", borderRadius: 5, fontSize: 10, fontWeight: 700 }}>你</span>}
+                                  {isMe && <span style={{ padding: "1px 6px", background: "#1e3a8a", color: "#fff", borderRadius: 5, fontSize: 10, fontWeight: 700 }}>{t("你", "You")}</span>}
                                   {team.user_id === league.commissioner_id && <span style={{ fontSize: 11, color: "#6b7280" }}>👑</span>}
                                 </div>
                               </div>
@@ -583,7 +593,7 @@ export default function LeaguePage() {
                 </div>
                 {sortedTeams.length === 0 && (
                   <div style={{ textAlign: "center", padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>
-                    暂无队伍数据
+                    {t("暂无队伍数据", "No team data")}
                   </div>
                 )}
               </div>
@@ -596,19 +606,19 @@ export default function LeaguePage() {
               {!myTeam ? (
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                   <div style={{ fontSize: 36, marginBottom: 12 }}>🔒</div>
-                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>仅联赛成员可查看聊天室</p>
-                  <p style={{ fontSize: 13, margin: 0 }}>加入联赛后即可参与讨论</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>{t("仅联赛成员可查看聊天室", "Only league members can view chat")}</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>{t("加入联赛后即可参与讨论", "Join the league to participate")}</p>
                 </div>
               ) : (
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, display: "flex", flexDirection: "column", height: 520 }}>
                   {/* Header */}
                   <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", fontWeight: 700, fontSize: 15, color: "#1e3a8a" }}>
-                    聊天室
+                    {t("聊天室", "Chat Room")}
                   </div>
                   {/* Messages */}
                   <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
                     {chatMessages.length === 0 && (
-                      <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, marginTop: 40 }}>暂无消息，来打个招呼吧！</div>
+                      <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, marginTop: 40 }}>{t("暂无消息，来打个招呼吧！", "No messages yet, say hello!")}</div>
                     )}
                     {chatMessages.map((msg) => {
                       const isMe = msg.user_id === currentUser?.id;
@@ -637,7 +647,7 @@ export default function LeaguePage() {
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-                      placeholder="输入消息..."
+                      placeholder={t("输入消息...", "Type a message...")}
                       style={{ flex: 1, border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, outline: "none", fontFamily: FONT }}
                     />
                     <button
@@ -645,7 +655,7 @@ export default function LeaguePage() {
                       disabled={chatSending || !chatInput.trim()}
                       style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 14, fontWeight: 600, cursor: chatSending || !chatInput.trim() ? "not-allowed" : "pointer", opacity: chatSending || !chatInput.trim() ? 0.5 : 1 }}
                     >
-                      发送
+                      {t("发送", "Send")}
                     </button>
                   </div>
                 </div>
@@ -660,19 +670,19 @@ export default function LeaguePage() {
                 <div>
                   {!showAnnForm ? (
                     <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                      + 发布公告
+                      + {t("发布公告", "Post Announcement")}
                     </button>
                   ) : (
                     <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>发布新公告</div>
-                      <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="标题（选填）" style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
-                      <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder="公告内容..." rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{t("发布新公告", "Post Announcement")}</div>
+                      <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder={t("标题（选填）", "Title (optional)")} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
+                      <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder={t("公告内容...", "Announcement content...")} rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
                       <div style={{ display: "flex", gap: 8 }}>
                         <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
-                          {annPosting ? "发布中..." : "发布"}
+                          {annPosting ? t("发布中...", "Posting...") : t("发布", "Post")}
                         </button>
                         <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                          取消
+                          {t("取消", "Cancel")}
                         </button>
                       </div>
                     </div>
@@ -682,8 +692,8 @@ export default function LeaguePage() {
               {announcements.length === 0 ? (
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                   <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
-                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>暂无公告</p>
-                  <p style={{ fontSize: 13, margin: 0 }}>联赛房主可在此发布公告</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>{t("暂无公告", "No announcements")}</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在此发布公告", "Commissioner can post announcements here")}</p>
                 </div>
               ) : (
                 announcements.map((ann) => (
@@ -712,9 +722,9 @@ export default function LeaguePage() {
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>🏗️</div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>
-                  {TABS.find(t => t.key === activeTab)?.label} 功能即将上线
+                  {TABS.find(t => t.key === activeTab)?.label} {t("功能即将上线", "Feature coming soon")}
                 </p>
-                <p style={{ fontSize: 13, margin: 0 }}>敬请期待</p>
+                <p style={{ fontSize: 13, margin: 0 }}>{t("敬请期待", "Stay tuned")}</p>
               </div>
             </div>
           )}
@@ -724,10 +734,10 @@ export default function LeaguePage() {
 
             {/* Season progress */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "20px" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>赛季进度</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("赛季进度", "Season Progress")}</div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-                <span>常规赛</span>
-                <span>{teams.length > 0 ? `${teams.reduce((s, t) => s + t.wins + t.losses, 0) / teams.length | 0} / 22 周` : "—"}</span>
+                <span>{t("常规赛", "Regular Season")}</span>
+                <span>{teams.length > 0 ? `${teams.reduce((s, t) => s + t.wins + t.losses, 0) / teams.length | 0} / 22 ${t("周", "weeks")}` : "—"}</span>
               </div>
               <div style={{ height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
                 <div style={{
@@ -742,7 +752,7 @@ export default function LeaguePage() {
 
             {/* Top scorers */}
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "20px" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>积分榜前三</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("积分榜前三", "Top 3 Standings")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {sortedTeams.slice(0, 3).map((team, idx) => (
                   <div key={team.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -772,7 +782,7 @@ export default function LeaguePage() {
                   </div>
                 ))}
                 {sortedTeams.length === 0 && (
-                  <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center" }}>暂无数据</div>
+                  <div style={{ fontSize: 13, color: "#9ca3af", textAlign: "center" }}>{t("暂无数据", "No data")}</div>
                 )}
               </div>
             </div>
@@ -781,14 +791,14 @@ export default function LeaguePage() {
             <button
               onClick={() => {
                 const url = window.location.href;
-                navigator.clipboard.writeText(url).then(() => alert("邀请链接已复制！"));
+                navigator.clipboard.writeText(url).then(() => alert(t("邀请链接已复制！", "Invite link copied!")));
               }}
               style={{
                 width: "100%", padding: "13px", background: "#fff",
                 border: "2px dashed #1e3a8a", borderRadius: 12, color: "#1e3a8a",
                 fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT,
               }}>
-              + 邀请好友加入联赛
+              + {t("邀请好友加入联赛", "Invite Friends to League")}
             </button>
           </div>
         </div>
@@ -798,8 +808,8 @@ export default function LeaguePage() {
 
   // ─── PRE-DRAFT STATE: same hero layout as active, pre-draft content ─────────
   const PRE_DRAFT_TABS: { key: "standings" | "schedule" | "chat" | "news" | "settings"; label: string }[] = [
-    { key: "standings", label: "参赛队伍" },
-    { key: "news",      label: "联赛公告" },
+    { key: "standings", label: t("参赛队伍", "Teams") },
+    { key: "news",      label: t("联赛公告", "Announcements") },
   ];
 
   return (
@@ -820,9 +830,9 @@ export default function LeaguePage() {
           <div style={{ flex: 1 }}>
             {/* breadcrumb */}
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 18 }}>
-              <Link href="/league" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", textDecoration: "none" }}>← 返回公开联赛</Link>
+              <Link href="/league" style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", textDecoration: "none" }}>← {t("返回公开联赛", "Back to Public Leagues")}</Link>
               <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
-              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>公开联赛</span>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>{t("公开联赛", "Public League")}</span>
               <span style={{ color: "rgba(255,255,255,0.35)", fontSize: 13 }}>/</span>
               <span style={{ fontSize: 13, color: "#fff" }}>{league.name}</span>
             </div>
@@ -833,7 +843,7 @@ export default function LeaguePage() {
                 {statusLabel}
               </span>
               <span style={{ padding: "4px 12px", background: "rgba(255,255,255,0.15)", borderRadius: 20, fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
-                {league.season} NBA赛季
+                {league.season} {t("NBA赛季", "NBA Season")}
               </span>
             </div>
 
@@ -842,16 +852,16 @@ export default function LeaguePage() {
               {league.name}
             </h1>
             <p style={{ margin: "0 0 28px", fontSize: 14, color: "rgba(255,255,255,0.75)", lineHeight: 1.7, maxWidth: 600 }}>
-              {league.description || `${teams.length}支队伍已加入，${league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}，选秀尚未开始。`}
+              {league.description || `${teams.length}${t("支队伍已加入", " teams joined")}, ${league.draft_type === "snake" ? t("蛇形选秀", "Snake Draft") : t("线性选秀", "Linear Draft")}, ${t("选秀尚未开始。", "draft has not started yet.")}`}
             </p>
 
             {/* stat badges */}
             <div style={{ display: "flex", gap: 28, flexWrap: "wrap", marginBottom: 32 }}>
               {[
-                { value: `${teams.length} / ${league.max_teams}`, label: "参赛队伍" },
-                { value: league.draft_type === "snake" ? "蛇形" : "线性", label: "选秀方式" },
-                { value: league.max_teams, label: "最大队伍" },
-                { value: league.scoring_categories || "标准", label: "统计类别" },
+                { value: `${teams.length} / ${league.max_teams}`, label: t("参赛队伍", "Teams") },
+                { value: league.draft_type === "snake" ? t("蛇形", "Snake") : t("线性", "Linear"), label: t("选秀方式", "Draft Type") },
+                { value: league.max_teams, label: t("最大队伍", "Max Teams") },
+                { value: league.scoring_categories || t("标准", "Standard"), label: t("统计类别", "Scoring") },
               ].map(s => (
                 <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <span style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{s.value}</span>
@@ -873,13 +883,13 @@ export default function LeaguePage() {
                         onClick={() => setShowJoinModal(true)}
                         style={{ padding: "11px 22px", background: "#fff", color: "#1e3a8a", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
                       >
-                        + 加入联赛
+                        + {t("加入联赛", "Join League")}
                       </button>
                     );
                   }
                   return (
                     <span style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.75)", borderRadius: 10, fontSize: 14, fontWeight: 600, fontFamily: FONT }}>
-                      {isDraftCompleted ? "选秀已完成，无法再加入" : isFull ? "联赛已满，无法加入" : "暂不可加入"}
+                      {isDraftCompleted ? t("选秀已完成，无法再加入", "Draft complete, cannot join") : isFull ? t("联赛已满，无法加入", "League full, cannot join") : t("暂不可加入", "Unavailable")}
                     </span>
                   );
                 })()
@@ -889,14 +899,14 @@ export default function LeaguePage() {
                   border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700,
                   cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6,
                 }}>
-                  🏀 管理我的球队
+                  🏀 {t("管理我的球队", "Manage My Team")}
                 </Link>
               )}
               <button
-                onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert("邀请链接已复制！")); }}
+                onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert(t("邀请链接已复制！", "Invite link copied!"))); }}
                 style={{ padding: "11px 22px", background: "rgba(255,255,255,0.15)", color: "#fff", border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}
               >
-                邀请好友
+                {t("邀请好友", "Invite Friends")}
               </button>
               {isCommissioner && (
                 <Link href={`/league/${leagueId}/settings`} style={{
@@ -904,7 +914,7 @@ export default function LeaguePage() {
                   border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14,
                   fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center",
                 }}>
-                  联赛设置
+                  {t("联赛设置", "League Settings")}
                 </Link>
               )}
             </div>
@@ -918,29 +928,29 @@ export default function LeaguePage() {
           }}>
             {myTeam ? (
               <>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>你的选秀位</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>{t("你的选秀位", "Your Draft Slot")}</div>
                 <div style={{ fontSize: 56, fontWeight: 900, color: "#fbbf24", lineHeight: 1, marginBottom: 8 }}>
                   #{myTeam.draft_position}
                 </div>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 20 }}>
-                  等待选秀开始
+                  {t("等待选秀开始", "Waiting for draft")}
                 </div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>剩余名额</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", marginBottom: 8 }}>{t("剩余名额", "Open Spots")}</div>
                 <div style={{ fontSize: 56, fontWeight: 900, color: "#fbbf24", lineHeight: 1, marginBottom: 8 }}>
                   {league.max_teams - teams.length}
                 </div>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 20 }}>
-                  等待加入
+                  {t("等待加入", "Waiting to join")}
                 </div>
               </>
             )}
             <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 16 }}>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>选秀状态</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginBottom: 6 }}>{t("选秀状态", "Draft Status")}</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#fff" }}>
-                {canStartDraft ? "✅ 可以开始" : `${teams.length} / ${league.max_teams} 队伍`}
+                {canStartDraft ? t("✅ 可以开始", "✅ Ready") : `${teams.length} / ${league.max_teams} ${t("队伍", "teams")}`}
               </div>
             </div>
           </div>
@@ -979,14 +989,14 @@ export default function LeaguePage() {
             {canStartDraft && (
               <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ fontSize: 14, color: "#15803d", fontWeight: 600 }}>
-                  ✅ 已有 {teams.length} 支队伍加入（偶数），可以开始选秀了！
+                  ✅ {t("已有", "")} {teams.length} {t("支队伍加入（偶数），可以开始选秀了！", "teams joined (even), draft can start!")}
                 </div>
                 <button
                   onClick={handleStartDraft}
                   disabled={starting}
                   style={{ padding: "9px 20px", background: "#15803d", border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, fontSize: 13, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT, whiteSpace: "nowrap", flexShrink: 0 }}
                 >
-                  {starting ? "⏳ 开始中..." : "🎯 开始选秀"}
+                  {starting ? t("⏳ 开始中...", "⏳ Starting...") : t("🎯 开始选秀", "🎯 Start Draft")}
                 </button>
               </div>
             )}
@@ -994,7 +1004,7 @@ export default function LeaguePage() {
             <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, overflow: "hidden" }}>
               <div style={{ padding: "18px 24px", borderBottom: "1px solid #f3f4f6" }}>
                 <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#111827" }}>
-                  参赛队伍 ({teams.length}/{league.max_teams})
+                  {t("参赛队伍", "Teams")} ({teams.length}/{league.max_teams})
                 </h2>
               </div>
 
@@ -1011,10 +1021,10 @@ export default function LeaguePage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3, display: "flex", alignItems: "center", gap: 6, color: "#111827" }}>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
-                        {myTeam?.id === team.id && <span style={{ padding: "1px 6px", background: "#1e3a8a", color: "#fff", borderRadius: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>你</span>}
+                        {myTeam?.id === team.id && <span style={{ padding: "1px 6px", background: "#1e3a8a", color: "#fff", borderRadius: 5, fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{t("你", "You")}</span>}
                         {team.user_id === league.commissioner_id && <span style={{ fontSize: 13 }}>👑</span>}
                       </div>
-                      <div style={{ color: "#9ca3af", fontSize: 12 }}>等待选秀开始</div>
+                      <div style={{ color: "#9ca3af", fontSize: 12 }}>{t("等待选秀开始", "Waiting for draft")}</div>
                     </div>
                   </div>
                 ))}
@@ -1027,7 +1037,7 @@ export default function LeaguePage() {
                     style={{ background: "#f9fafb", border: "2px dashed #d1d5db", padding: "16px", borderRadius: 12, display: "flex", justifyContent: "center", alignItems: "center", cursor: myTeam ? "default" : "pointer", flexDirection: "column", gap: 6, color: "#9ca3af", minHeight: 76 }}
                   >
                     <span style={{ fontSize: 22 }}>+</span>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>等待加入</span>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>{t("等待加入", "Waiting to join")}</span>
                   </div>
                 ))}
               </div>
@@ -1042,19 +1052,19 @@ export default function LeaguePage() {
               <div>
                 {!showAnnForm ? (
                   <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                    + 发布公告
+                    + {t("发布公告", "Post Announcement")}
                   </button>
                 ) : (
                   <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>发布新公告</div>
-                    <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder="标题（选填）" style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
-                    <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder="公告内容..." rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{t("发布新公告", "Post Announcement")}</div>
+                    <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder={t("标题（选填）", "Title (optional)")} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
+                    <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder={t("公告内容...", "Announcement content...")} rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
                     <div style={{ display: "flex", gap: 8 }}>
                       <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
-                        {annPosting ? "发布中..." : "发布"}
+                        {annPosting ? t("发布中...", "Posting...") : t("发布", "Post")}
                       </button>
                       <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                        取消
+                        {t("取消", "Cancel")}
                       </button>
                     </div>
                   </div>
@@ -1064,8 +1074,8 @@ export default function LeaguePage() {
             {announcements.length === 0 ? (
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
-                <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>暂无公告</p>
-                <p style={{ fontSize: 13, margin: 0 }}>联赛房主可在此发布公告</p>
+                <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>{t("暂无公告", "No announcements")}</p>
+                <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在此发布公告", "Commissioner can post announcements here")}</p>
               </div>
             ) : (
               announcements.map((ann) => (
@@ -1093,17 +1103,17 @@ export default function LeaguePage() {
 
           {/* Draft readiness */}
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "20px" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>选秀准备状态</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 14 }}>{t("选秀准备状态", "Draft Readiness")}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#6b7280" }}>
-                <span>已加入队伍</span>
+                <span>{t("已加入队伍", "Joined Teams")}</span>
                 <span style={{ fontWeight: 700, color: "#111827" }}>{teams.length} / {league.max_teams}</span>
               </div>
               <div style={{ height: 6, background: "#f1f5f9", borderRadius: 3, overflow: "hidden" }}>
                 <div style={{ height: "100%", background: "linear-gradient(90deg, #1e3a8a, #3b82f6)", borderRadius: 3, width: `${Math.min(100, (teams.length / league.max_teams) * 100)}%`, transition: "width 0.3s" }} />
               </div>
               <div style={{ fontSize: 12, color: canStartDraft ? "#15803d" : "#6b7280", fontWeight: canStartDraft ? 700 : 400 }}>
-                {canStartDraft ? "✅ 人数充足，可以开始选秀" : `还需 ${Math.max(0, 2 - teams.length % 2 === 0 && teams.length >= 2 ? 0 : 2 - (teams.length % 2 || 2))} 队伍加入（需偶数）`}
+                {canStartDraft ? t("✅ 人数充足，可以开始选秀", "✅ Ready to start draft") : `${t("还需", "Need")} ${Math.max(0, 2 - teams.length % 2 === 0 && teams.length >= 2 ? 0 : 2 - (teams.length % 2 || 2))} ${t("队伍加入（需偶数）", "more teams (must be even)")}`}
               </div>
             </div>
           </div>
@@ -1115,16 +1125,16 @@ export default function LeaguePage() {
               disabled={starting}
               style={{ width: "100%", padding: "13px", background: "#15803d", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 700, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT }}
             >
-              {starting ? "⏳ 开始中..." : "🎯 开始选秀"}
+              {starting ? t("⏳ 开始中...", "⏳ Starting...") : t("🎯 开始选秀", "🎯 Start Draft")}
             </button>
           )}
 
           {/* Invite */}
           <button
-            onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert("邀请链接已复制！")); }}
+            onClick={() => { navigator.clipboard.writeText(window.location.href).then(() => alert(t("邀请链接已复制！", "Invite link copied!"))); }}
             style={{ width: "100%", padding: "13px", background: "#fff", border: "2px dashed #1e3a8a", borderRadius: 12, color: "#1e3a8a", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT }}
           >
-            + 邀请好友加入联赛
+            + {t("邀请好友加入联赛", "Invite Friends to League")}
           </button>
         </div>
       </div>
@@ -1134,14 +1144,14 @@ export default function LeaguePage() {
         <div onClick={() => setShowJoinModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: 16, maxWidth: 480, width: "100%", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", fontFamily: FONT }}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>+ 加入联赛</h3>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#111827" }}>+ {t("加入联赛", "Join League")}</h3>
               <button onClick={() => setShowJoinModal(false)} style={{ width: 32, height: 32, border: "none", background: "#f3f4f6", borderRadius: "50%", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
             </div>
             <div style={{ padding: "24px" }}>
-              <p style={{ margin: "0 0 14px 0", color: "#374151", fontSize: 14 }}>请为你的队伍起个名字</p>
+              <p style={{ margin: "0 0 14px 0", color: "#374151", fontSize: 14 }}>{t("请为你的队伍起个名字", "Choose a team name")}</p>
               <input
                 type="text"
-                placeholder="输入队伍名称..."
+                placeholder={t("输入队伍名称...", "Enter team name...")}
                 value={teamName}
                 onChange={e => setTeamName(e.target.value)}
                 maxLength={50}
@@ -1150,20 +1160,20 @@ export default function LeaguePage() {
                 style={{ width: "100%", padding: "11px 14px", border: "1.5px solid #e5e7eb", borderRadius: 10, fontSize: 15, boxSizing: "border-box", outline: "none", fontFamily: FONT }}
               />
               <div style={{ marginTop: 16, padding: "14px 16px", background: "#f9fafb", borderRadius: 10 }}>
-                <p style={{ margin: "0 0 10px 0", fontWeight: 700, fontSize: 13, color: "#111827" }}>🎁 你将获得:</p>
+                <p style={{ margin: "0 0 10px 0", fontWeight: 700, fontSize: 13, color: "#111827" }}>🎁 {t("你将获得:", "You will get:")}</p>
                 <ul style={{ margin: 0, paddingLeft: 20 }}>
-                  <li style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>一个独特的选秀位置 (#{teams.length + 1})</li>
-                  <li style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>13个球员名额</li>
-                  <li style={{ color: "#374151", fontSize: 13 }}>参与所有周赛</li>
+                  <li style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>{t("一个独特的选秀位置", "A unique draft slot")} (#{teams.length + 1})</li>
+                  <li style={{ marginBottom: 6, color: "#374151", fontSize: 13 }}>{t("13个球员名额", "13 roster spots")}</li>
+                  <li style={{ color: "#374151", fontSize: 13 }}>{t("参与所有周赛", "Access all weekly matchups")}</li>
                 </ul>
               </div>
             </div>
             <div style={{ padding: isMobile ? "14px 12px" : "16px 24px", borderTop: "1px solid #f3f4f6", display: "flex", gap: 12, justifyContent: isMobile ? "stretch" : "flex-end", flexDirection: isMobile ? "column" : "row" }}>
               <button onClick={() => setShowJoinModal(false)} style={{ padding: "10px 22px", border: "1.5px solid #e5e7eb", borderRadius: 10, background: "#fff", color: "#374151", fontWeight: 600, cursor: "pointer", fontSize: 14, fontFamily: FONT }}>
-                取消
+                {t("取消", "Cancel")}
               </button>
               <button onClick={handleJoinDraft} disabled={joining || !teamName.trim()} style={{ padding: "10px 22px", border: "none", borderRadius: 10, background: "#1e3a8a", color: "#fff", fontWeight: 700, cursor: joining || !teamName.trim() ? "not-allowed" : "pointer", opacity: joining || !teamName.trim() ? 0.5 : 1, fontSize: 14, fontFamily: FONT }}>
-                {joining ? "加入中..." : "确认加入"}
+                {joining ? t("加入中...", "Joining...") : t("确认加入", "Confirm Join")}
               </button>
             </div>
           </div>

@@ -529,14 +529,18 @@ const styles = `
   .schedule-table-wrapper {
     padding: 16px 0 0;
     overflow-x: auto;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-x pan-y;
   }
   .schedule-table-wrapper::-webkit-scrollbar { display: none; }
   .schedule-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
+    min-width: 760px;
   }
   .schedule-table thead th {
     text-align: left;

@@ -6,6 +6,7 @@ import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { getPlayers, getWatchlist } from "@/lib/store";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
@@ -62,6 +63,7 @@ function shortName(fullName: string): string {
 
 export default function CheatSheetPage() {
   const { t } = useLang();
+  const isMobile = useIsMobile();
   const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export default function CheatSheetPage() {
 
   async function loadPlayers() {
     try {
-      const res = await fetch("/api/nba-stats");
+      const res = await fetch("/api/nba-stats", { cache: "no-store" });
       const data = await res.json();
       if (data.status === "loading") {
         setTimeout(loadPlayers, 5000);
@@ -191,7 +193,7 @@ export default function CheatSheetPage() {
     <div style={{ minHeight: "100vh", background: "#f3f4f6", fontFamily: FONT }}>
       <LightHeader activeHref="/cheat-sheet" />
 
-      <main style={{ maxWidth: 1300, margin: "0 auto", padding: "32px 24px" }}>
+      <main style={{ maxWidth: 1300, margin: "0 auto", padding: isMobile ? "18px 12px 32px" : "32px 24px" }}>
         {/* Page Header Row */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -275,7 +277,8 @@ export default function CheatSheetPage() {
         </div>
 
         {/* 5-column grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, alignItems: "start" }}>
+        <div style={{ overflowX: isMobile ? "auto" : "visible", WebkitOverflowScrolling: "touch", paddingBottom: isMobile ? 6 : 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(5, minmax(220px, 1fr))" : "repeat(5, 1fr)", minWidth: isMobile ? 1120 : "auto", gap: 12, alignItems: "start" }}>
           {viewMode === "overall"
             ? ROUND_COLS.map((col) => {
                 const colPlayers = players.filter(p => p.rank >= col.from && p.rank <= col.to);
@@ -312,6 +315,7 @@ export default function CheatSheetPage() {
                 );
               })
           }
+          </div>
         </div>
 
         {/* Legend */}
