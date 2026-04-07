@@ -475,7 +475,7 @@ export default function PlayerRankingsPage() {
         </aside>
 
         {/* ── Main Content ── */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, width: isMobile ? "100%" : undefined }}>
 
           {/* Top bar */}
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
