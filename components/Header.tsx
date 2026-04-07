@@ -63,7 +63,7 @@ export default function Header() {
             )}
 
             <button className="lang-toggle" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>
-              <span className={lang === "zh" ? "active" : ""}>中</span>
+              <span className={lang === "zh" ? "active" : ""}>ZH</span>
               <span className="divider">/</span>
               <span className={lang === "en" ? "active" : ""}>EN</span>
             </button>

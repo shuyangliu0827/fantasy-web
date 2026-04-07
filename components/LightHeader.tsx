@@ -78,7 +78,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
 
         {/* Logo */}
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>{t("蓝本", "Blueprint")}</span>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
         </Link>
 
@@ -129,7 +129,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 cursor: "pointer",
               }}
             >
-              中 / EN
+              ZH / EN
             </button>
 
             {!user ? (
@@ -253,7 +253,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer",
               }}
             >
-              中 / EN
+              ZH / EN
             </button>
             {!user ? (
               <>

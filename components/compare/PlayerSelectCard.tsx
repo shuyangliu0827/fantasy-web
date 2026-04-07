@@ -4,6 +4,7 @@
 
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
+import { translateTeam } from "@/lib/i18n";
 import { FONT, COLORS } from "./constants";
 import type { CompareStats } from "@/lib/compare-types";
 
@@ -37,7 +38,7 @@ function DataSourceBadge({ source }: { source: CompareStats["dataSource"] }) {
 export default function PlayerSelectCard({
   player, color, onRemove, onAddClick, isMobile, isLoading,
 }: PlayerSelectCardProps) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   if (!player) {
     return (
@@ -100,7 +101,7 @@ export default function PlayerSelectCard({
       {/* Name / team */}
       <h3 style={{ fontSize: 14, fontWeight: 700, color: COLORS.textPrimary, margin: "0 0 2px 0", fontFamily: FONT, paddingRight: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.playerName}</h3>
       <p style={{ fontSize: 12, color: COLORS.textSecondary, margin: "0 0 8px 0", fontFamily: FONT }}>
-        {player.team} · {player.position}
+        {translateTeam(player.team, lang)} · {player.position}
       </p>
 
       {/* Injury + data source badges */}
