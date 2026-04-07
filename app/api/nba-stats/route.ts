@@ -36,6 +36,7 @@ import { getCurrentSeasonYear } from "@/lib/season";
 import { calcFantasyPoints } from "@/lib/scoring-config";
 import { parseMinutes } from "@/lib/balldontlie";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+import { normalizeTeamCode } from "@/lib/i18n";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
 // call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
@@ -107,7 +108,7 @@ function rowToPlayer(row: CacheRow, index: number) {
   return {
     id: row.player_id,
     name: row.name,
-    team: row.team,
+    team: normalizeTeamCode(row.team),
     position: getCanonicalPlayerPosition(row.name, row.position),
     gamesPlayed: row.games_played,
     totals: {
@@ -253,7 +254,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
       rows.push({
         player_id: playerId,
         name: `${player.first_name} ${player.last_name}`,
-        team: team?.abbreviation || player.team?.abbreviation || "N/A",
+        team: normalizeTeamCode(team?.abbreviation || player.team?.abbreviation || "N/A"),
         position: getCanonicalPlayerPosition(`${player.first_name} ${player.last_name}`, player.position || "N/A"),
         games_played: gp,
         min_avg: avg.min,   pts_avg: avg.pts,   reb_avg: avg.reb,   ast_avg: avg.ast,
@@ -325,7 +326,7 @@ export async function GET() {
       gamesLoaded: 0,
       lastUpdated: null,
       isUpdating: true,
-    });
+    }, { headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 
   // ── Compute cache age ────────────────────────────────────────
@@ -367,7 +368,7 @@ export async function GET() {
     lastUpdated,
     isUpdating: isRefreshing,
     isStale,
-  });
+  }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }
 
 // ──────────────────────────────────────────────

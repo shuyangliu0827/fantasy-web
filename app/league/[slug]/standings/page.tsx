@@ -351,6 +351,8 @@ const styles = `
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-x;
   }
   .standings-scroll-wrapper::-webkit-scrollbar { display: none; }
 

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
-import { useLang } from "@/lib/lang";
+import { useLang } from "@/lib/lang"
+import { translateTeam } from "@/lib/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   DailyLineupMap,
@@ -438,7 +439,7 @@ export default function MatchupDetailPage() {
                           <PlayerAvatar name={row.player.name} size={28} />
                           <div>
                             <strong>{row.player.name}</strong>
-                            <span>{row.player.team} · {getDisplayPosition(row.player)}</span>
+                            <span>{translateTeam(row.player.team, lang)} · {getDisplayPosition(row.player)}</span>
                           </div>
                         </div>
                       </td>
