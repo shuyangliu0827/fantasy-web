@@ -529,6 +529,7 @@ const styles = `
     padding: 16px 0 0;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
     scrollbar-width: none;
   }
   .schedule-table-wrapper::-webkit-scrollbar { display: none; }
