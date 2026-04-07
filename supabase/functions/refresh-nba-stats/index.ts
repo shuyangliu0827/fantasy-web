@@ -38,6 +38,16 @@ async function fetchRaw(url: string): Promise<any> {
 }
 
 // NOTE: mirrors calcFantasyPoints in lib/scoring-config.ts — must stay in sync.
+
+function numOrNull(v: number | undefined): number | null {
+  return typeof v === "number" ? v : null;
+}
+
+function withFallback(incoming: number | null, existing: number | null | undefined): number {
+  if (incoming === null || Number.isNaN(incoming)) return existing ?? 0;
+  return incoming;
+}
+
 function calcFpts(avg: { pts: number; fgm: number; fga: number; fg3m: number; ftm: number; fta: number; reb: number; ast: number; stl: number; blk: number; tov: number }): number {
   return (
     avg.pts  * FANTASY_WEIGHTS.pts  +
@@ -64,6 +74,7 @@ Deno.serve(async () => {
   try {
     // Dynamic: Oct–Dec → next year, Jan–Sep → this year (matches NBA season convention)
     // Evaluate at invocation time to avoid module-load season freeze.
+    const runStartedAt = new Date().toISOString();
     const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
     console.log("[refresh-nba-stats][1] Starting active players fetch", { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON });
     // 1. Get all active players (~6 API calls, sorted by id for stable ordering)
@@ -138,11 +149,11 @@ Deno.serve(async () => {
         : (minRaw || 0);
 
       const avgObj = {
-        pts: avg.pts || 0, fgm: avg.fgm || 0, fga: avg.fga || 0,
-        fg3m: avg.fg3m || 0, ftm: avg.ftm || 0, fta: avg.fta || 0,
-        reb: avg.reb || 0, ast: avg.ast || 0,
-        stl: avg.stl || 0, blk: avg.blk || 0,
-        tov: avg.turnover || 0,
+        pts: avg.pts ?? 0, fgm: avg.fgm ?? 0, fga: avg.fga ?? 0,
+        fg3m: avg.fg3m ?? 0, ftm: avg.ftm ?? 0, fta: avg.fta ?? 0,
+        reb: avg.reb ?? 0, ast: avg.ast ?? 0,
+        stl: avg.stl ?? 0, blk: avg.blk ?? 0,
+        tov: avg.turnover ?? 0,
       };
       const fptsAvg = r1(calcFpts(avgObj));
 
@@ -152,11 +163,11 @@ Deno.serve(async () => {
         team: player.team?.abbreviation || "N/A",
         position: player.position || "N/A",
         games_played: gp,
-        min_avg: minNum,            pts_avg: avg.pts || 0,    reb_avg: avg.reb || 0,
-        ast_avg: avg.ast || 0,      stl_avg: avg.stl || 0,    blk_avg: avg.blk || 0,
-        tov_avg: avg.turnover || 0, fgm_avg: avg.fgm || 0,    fga_avg: avg.fga || 0,
-        fg3m_avg: avg.fg3m || 0,    fg3a_avg: avg.fg3a || 0,
-        ftm_avg: avg.ftm || 0,      fta_avg: avg.fta || 0,
+        min_avg: minNum,            pts_avg: numOrNull(avg.pts),    reb_avg: numOrNull(avg.reb),
+        ast_avg: numOrNull(avg.ast),      stl_avg: numOrNull(avg.stl),    blk_avg: numOrNull(avg.blk),
+        tov_avg: numOrNull(avg.turnover), fgm_avg: numOrNull(avg.fgm),    fga_avg: numOrNull(avg.fga),
+        fg3m_avg: numOrNull(avg.fg3m),    fg3a_avg: numOrNull(avg.fg3a),
+        ftm_avg: numOrNull(avg.ftm),      fta_avg: numOrNull(avg.fta),
         fg_pct:  avg.fg_pct  ? r1(avg.fg_pct  * 100) : 0,
         fg3_pct: avg.fg3_pct ? r1(avg.fg3_pct * 100) : 0,
         ft_pct:  avg.ft_pct  ? r1(avg.ft_pct  * 100) : 0,
@@ -174,10 +185,44 @@ Deno.serve(async () => {
     }
 
     console.log(`[refresh-nba-stats][5] Built ${rows.length} rows for upsert`, { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON, batch: `${Math.floor(startIndex / BATCH_SIZE) + 1}` });
+
+    const existingById = new Map<number, Record<string, number | string | null>>();
+    if (rows.length > 0) {
+      const { data: existingRows } = await supabase
+        .from("player_stats_cache")
+        .select("*")
+        .in("player_id", rows.map((r) => Number(r.player_id)));
+      for (const row of (existingRows ?? [])) existingById.set(row.player_id, row);
+    }
+
+    const mergedRows = rows
+      .map((row) => {
+        const existing = existingById.get(Number(row.player_id));
+        if (!existing) return row;
+        if (existing.updated_at && String(existing.updated_at) > runStartedAt) return null;
+
+        return {
+          ...row,
+          pts_avg: withFallback((row.pts_avg as number | null), existing.pts_avg as number | null | undefined),
+          reb_avg: withFallback((row.reb_avg as number | null), existing.reb_avg as number | null | undefined),
+          ast_avg: withFallback((row.ast_avg as number | null), existing.ast_avg as number | null | undefined),
+          stl_avg: withFallback((row.stl_avg as number | null), existing.stl_avg as number | null | undefined),
+          blk_avg: withFallback((row.blk_avg as number | null), existing.blk_avg as number | null | undefined),
+          tov_avg: withFallback((row.tov_avg as number | null), existing.tov_avg as number | null | undefined),
+          fgm_avg: withFallback((row.fgm_avg as number | null), existing.fgm_avg as number | null | undefined),
+          fga_avg: withFallback((row.fga_avg as number | null), existing.fga_avg as number | null | undefined),
+          fg3m_avg: withFallback((row.fg3m_avg as number | null), existing.fg3m_avg as number | null | undefined),
+          fg3a_avg: withFallback((row.fg3a_avg as number | null), existing.fg3a_avg as number | null | undefined),
+          ftm_avg: withFallback((row.ftm_avg as number | null), existing.ftm_avg as number | null | undefined),
+          fta_avg: withFallback((row.fta_avg as number | null), existing.fta_avg as number | null | undefined),
+        };
+      })
+      .filter((row): row is Record<string, number | string | null> => row !== null);
+
     // 6. Upsert in chunks of 10 to isolate any failing rows
     let upsertErrors = 0;
-    for (let i = 0; i < rows.length; i += 10) {
-      const chunk = rows.slice(i, i + 10);
+    for (let i = 0; i < mergedRows.length; i += 10) {
+      const chunk = mergedRows.slice(i, i + 10);
       try {
         const upsertRes = await supabase
           .from("player_stats_cache")
@@ -194,7 +239,7 @@ Deno.serve(async () => {
         upsertErrors++;
       }
     }
-    console.log(`[refresh-nba-stats][7] Upsert complete`, { source: "edge-refresh", reason: "scheduled", rowsAttempted: rows.length, upsertErrors });
+    console.log(`[refresh-nba-stats][7] Upsert complete`, { source: "edge-refresh", reason: "scheduled", rowsAttempted: mergedRows.length, upsertErrors });
 
     try {
       await supabase
