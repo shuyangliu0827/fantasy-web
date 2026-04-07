@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
+import { useLang } from "@/lib/lang";
 import { listLeagues, getLeagueMemberCount, getSessionUser, supabase } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -11,11 +12,6 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 type LeagueWithCount = { memberCount: number } & Record<string, any>;
 type Tab = "all" | "active" | "pending" | "mine";
 
-const STATUS_LABEL: Record<string, string> = {
-  draft_pending: "即将开始",
-  drafting: "选秀中",
-  active: "进行中",
-};
 const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
   draft_pending: { color: "#92400e", bg: "#fef3c7" },
   drafting:      { color: "#065f46", bg: "#d1fae5" },
@@ -23,6 +19,7 @@ const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
 };
 
 export default function PublicLeaguesPage() {
+  const { t } = useLang();
   const [leagues, setLeagues]         = useState<LeagueWithCount[]>([]);
   const [myLeagueIds, setMyLeagueIds] = useState<Set<string>>(new Set());
   const [loading, setLoading]         = useState(true);
@@ -64,10 +61,10 @@ export default function PublicLeaguesPage() {
   });
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "all",     label: "全部联赛" },
-    { key: "active",  label: "进行中" },
-    { key: "pending", label: "即将开始" },
-    { key: "mine",    label: "我的联赛" },
+    { key: "all",     label: t("全部联赛", "All Leagues") },
+    { key: "active",  label: t("进行中", "Active") },
+    { key: "pending", label: t("即将开始", "Upcoming") },
+    { key: "mine",    label: t("我的联赛", "My Leagues") },
   ];
 
   if (loading) {
@@ -76,7 +73,7 @@ export default function PublicLeaguesPage() {
         <LightHeader activeHref="/league" />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "50vh", gap: 12 }}>
           <div style={{ fontSize: 40 }}>🏀</div>
-          <p style={{ color: "#9ca3af", fontSize: 15 }}>加载中...</p>
+          <p style={{ color: "#9ca3af", fontSize: 15 }}>{t("加载中...", "Loading...")}</p>
         </div>
       </div>
     );
@@ -95,31 +92,31 @@ export default function PublicLeaguesPage() {
         }} />
         <div className="league-hero-inner">
           <h1 className="league-hero-title">
-            加入公开联赛<br />与全国高手竞技
+            {t("加入公开联赛", "Join Public Leagues")}<br />{t("与全国高手竞技", "Compete Nationwide")}
           </h1>
           <p style={{ margin: "0 0 28px", fontSize: 15, color: "rgba(255,255,255,0.78)", lineHeight: 1.7 }}>
-            每周更新赛程，积分制排行，赛季末角逐总冠军荣誉。
+            {t("每周更新赛程，积分制排行，赛季末角逐总冠军荣誉。", "Weekly schedule updates, points rankings, and season championship races.")}
           </p>
           <div className="league-hero-btns">
             <Link href="/league/new" style={{
               padding: "12px 24px", background: "#fff", color: "#1e3a8a",
               borderRadius: 10, fontSize: 14, fontWeight: 800, textDecoration: "none",
             }}>
-              创建我的联赛
+              {t("创建我的联赛", "Create League")}
             </Link>
             <Link href="/guide" style={{
               padding: "12px 24px", background: "rgba(255,255,255,0.15)", color: "#fff",
               border: "1.5px solid rgba(255,255,255,0.35)", borderRadius: 10,
               fontSize: 14, fontWeight: 600, textDecoration: "none",
             }}>
-              了解规则
+              {t("了解规则", "Learn Rules")}
             </Link>
           </div>
           <div className="league-hero-stats">
             {[
-              { value: leagues.length,                             label: "活跃联赛" },
-              { value: leagues.reduce((s, l) => s + l.memberCount, 0), label: "参与球迷" },
-              { value: "S4",                                       label: "当前赛季" },
+              { value: leagues.length,                             label: t("活跃联赛", "Active Leagues") },
+              { value: leagues.reduce((s, l) => s + l.memberCount, 0), label: t("参与球迷", "Participants") },
+              { value: "S4",                                       label: t("当前赛季", "Current Season") },
             ].map(s => (
               <div key={s.label}>
                 <div style={{ fontSize: 26, fontWeight: 900, color: "#fbbf24" }}>{s.value}</div>
@@ -162,7 +159,7 @@ export default function PublicLeaguesPage() {
               type="text"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              placeholder="搜索联赛名称..."
+              placeholder={t("搜索联赛名称...", "Search league name...")}
               style={{ flex: 1, border: "none", outline: "none", fontSize: 14, color: "#374151", background: "transparent", fontFamily: FONT }}
             />
             {searchTerm && (
@@ -170,7 +167,7 @@ export default function PublicLeaguesPage() {
             )}
           </div>
           <div style={{ fontSize: 13, color: "#9ca3af", whiteSpace: "nowrap" }}>
-            共 {filtered.length} 个
+            {t("共", "Total")} {filtered.length} {t("个", "")}
           </div>
         </div>
 
@@ -179,14 +176,14 @@ export default function PublicLeaguesPage() {
           <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 16, padding: "60px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 14 }}>{activeTab === "mine" ? "🏀" : "🔍"}</div>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 8px" }}>
-              {activeTab === "mine" ? "你还没有加入任何联赛" : searchTerm ? "没有找到匹配的联赛" : "暂无联赛"}
+              {activeTab === "mine" ? t("你还没有加入任何联赛", "You have not joined any leagues") : searchTerm ? t("没有找到匹配的联赛", "No matching leagues found") : t("暂无联赛", "No leagues yet")}
             </h3>
             <p style={{ color: "#9ca3af", margin: "0 0 24px", fontSize: 14 }}>
-              {activeTab === "mine" ? "加入或创建一个联赛开始你的征程！" : "试试其他关键词"}
+              {activeTab === "mine" ? t("加入或创建一个联赛开始你的征程！", "Join or create a league to get started!") : t("试试其他关键词", "Try another keyword")}
             </p>
             {activeTab === "mine" && (
               <Link href="/league/new" style={{ display: "inline-block", padding: "11px 28px", fontSize: 14, fontWeight: 700, color: "#fff", background: "#1e3a8a", borderRadius: 10, textDecoration: "none" }}>
-                创建联赛
+                {t("创建联赛", "Create League")}
               </Link>
             )}
           </div>
@@ -194,7 +191,13 @@ export default function PublicLeaguesPage() {
           <div className="league-grid">
             {filtered.map(league => {
               const sc   = STATUS_COLOR[league.status] ?? { color: "#374151", bg: "#f3f4f6" };
-              const sl   = STATUS_LABEL[league.status] ?? league.status;
+              const sl = league.status === "draft_pending"
+                ? t("即将开始", "Upcoming")
+                : league.status === "drafting"
+                  ? t("选秀中", "Drafting")
+                  : league.status === "active"
+                    ? t("进行中", "Active")
+                    : league.status;
               const isFull = league.memberCount >= league.max_teams;
               const isMine = myLeagueIds.has(league.id);
               const pct  = Math.min(100, (league.memberCount / league.max_teams) * 100);
@@ -214,7 +217,7 @@ export default function PublicLeaguesPage() {
                     </span>
                     {isMine && (
                       <span style={{ marginLeft: 6, padding: "3px 9px", background: "#eff6ff", color: "#1e40af", borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
-                        已加入
+                        {t("已加入", "Joined")}
                       </span>
                     )}
                   </div>
@@ -226,13 +229,13 @@ export default function PublicLeaguesPage() {
 
                   {/* description */}
                   <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.6, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as React.CSSProperties}>
-                    {league.description || `${league.season} 赛季 · ${league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}`}
+                    {league.description || `${league.season} ${t("赛季", "Season")} · ${league.draft_type === "snake" ? t("蛇形选秀", "Snake Draft") : t("线性选秀", "Linear Draft")}`}
                   </p>
 
                   {/* team count */}
                   <div style={{ fontSize: 13, color: "#374151", marginBottom: 8 }}>
                     <span style={{ fontWeight: 700, fontSize: 17, color: "#0f172a" }}>{league.max_teams}</span>
-                    <span style={{ marginLeft: 4, color: "#9ca3af" }}>队位</span>
+                    <span style={{ marginLeft: 4, color: "#9ca3af" }}>{t("队位", "teams")}</span>
                   </div>
 
                   {/* progress bar */}
@@ -247,14 +250,14 @@ export default function PublicLeaguesPage() {
                     return (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <span style={{ fontSize: 12, color: "#6b7280" }}>
-                          {league.memberCount}/{league.max_teams} 已加入
+                          {league.memberCount}/{league.max_teams} {t("已加入", "Joined")}
                         </span>
                         {isMine ? (
-                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#eff6ff", color: "#1e3a8a", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>进入联赛</Link>
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#eff6ff", color: "#1e3a8a", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>{t("进入联赛", "Enter")}</Link>
                         ) : canJoin ? (
-                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#1e3a8a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>立即加入</Link>
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#1e3a8a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>{t("立即加入", "Join Now")}</Link>
                         ) : (
-                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#f1f5f9", color: "#374151", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>进入联赛</Link>
+                          <Link href={`/league/${league.slug}`} style={{ padding: "7px 14px", background: "#f1f5f9", color: "#374151", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>{t("进入联赛", "Enter")}</Link>
                         )}
                       </div>
                     );
