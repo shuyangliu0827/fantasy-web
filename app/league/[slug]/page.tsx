@@ -505,8 +505,16 @@ export default function LeaguePage() {
                     {t("查看完整排名", "View Full Standings")} →
                   </Link>
                 </div>
-                <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" } as React.CSSProperties}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 480 }}>
+                <div
+                  style={{
+                    overflowX: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    scrollbarWidth: "none",
+                    msOverflowStyle: "none",
+                    touchAction: "pan-x",
+                  } as React.CSSProperties}
+                >
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 620 : 480 }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
                       <th style={thStyle}>{t("排名", "Rank")}</th>

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
+import { useIsMobile } from "@/lib/useIsMobile";
 import {
   getSessionUser,
   getInsightById,
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
 
 export default function DiscoverPostPage() {
   const { t, lang, setLang } = useLang();
+  const isMobile = useIsMobile();
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
@@ -174,24 +176,36 @@ export default function DiscoverPostPage() {
         borderBottom: "1px solid #e2e8f0",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: "0 24px",
-          height: 64, display: "flex", alignItems: "center", gap: 32,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "10px 12px" : "0 24px",
+          minHeight: 64, display: "flex", alignItems: "center", gap: isMobile ? 10 : 32,
+          flexWrap: isMobile ? "wrap" : "nowrap",
         }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 2, textDecoration: "none", flexShrink: 0 }}>
             <span style={{ fontSize: 22, fontWeight: 800, color: "#1e3a8a", letterSpacing: "-0.5px" }}>蓝本</span>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f59e0b", marginBottom: 8, flexShrink: 0 }} />
           </Link>
-          <nav style={{ display: "flex", gap: 2, flex: 1, overflow: "hidden" }}>
+          <nav
+            style={{
+              display: "flex",
+              gap: 2,
+              flex: 1,
+              overflowX: isMobile ? "auto" : "hidden",
+              width: isMobile ? "100%" : "auto",
+              order: isMobile ? 3 : 0,
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-x",
+            }}
+          >
             {NAV_ITEMS.map(item => (
               <Link key={item.href} href={item.href} style={{
-                padding: "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
+                padding: isMobile ? "7px 10px" : "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
                 color: "#64748b", background: "transparent", textDecoration: "none", whiteSpace: "nowrap",
               }}>
                 {lang === "zh" ? item.labelZh : item.labelEn}
               </Link>
             ))}
           </nav>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{ padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
               中 / EN
@@ -236,7 +250,7 @@ export default function DiscoverPostPage() {
           </Link>
         </div>
       ) : (
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 64px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: isMobile ? "18px 12px 40px" : "32px 24px 64px" }}>
           {/* Back link */}
           <Link href="/discover" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, color: "#64748b", textDecoration: "none", marginBottom: 20, fontWeight: 500 }}>
             ← {t("返回发现", "Back to Discover")}
@@ -245,7 +259,7 @@ export default function DiscoverPostPage() {
           <div style={{
             background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0",
             boxShadow: "0 2px 16px rgba(0,0,0,0.06)", overflow: "hidden",
-            display: "grid", gridTemplateColumns: "1fr 400px",
+            display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 400px",
           }}>
             {/* Left: image viewer */}
             <div style={{ background: "#f8fafc", borderRight: "1px solid #e2e8f0", display: "flex", flexDirection: "column" }}>
@@ -294,7 +308,7 @@ export default function DiscoverPostPage() {
             </div>
 
             {/* Right: content */}
-            <div style={{ display: "flex", flexDirection: "column", padding: 24, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", flexDirection: "column", padding: isMobile ? 14 : 24, maxHeight: isMobile ? "none" : "80vh", overflowY: isMobile ? "visible" : "auto" }}>
               {/* Author */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 16, borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
                 <Link href={`/u/${getAuthorUsername()}`} style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
@@ -374,14 +388,14 @@ export default function DiscoverPostPage() {
                   {t("评论", "Comments")} ({visibleComments.length})
                 </h3>
 
-                <form onSubmit={handleComment} style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <form onSubmit={handleComment} style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 16 }}>
                   <input
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder={user ? t("说点什么...", "Say something...") : t("登录后评论", "Login to comment")}
                     disabled={!user}
                     style={{
-                      flex: 1, padding: "10px 14px", background: "#f8fafc",
+                      width: "100%", flex: 1, padding: "10px 14px", background: "#f8fafc",
                       border: "1.5px solid #e2e8f0", borderRadius: 20, color: "#374151",
                       fontSize: 13, outline: "none", fontFamily: FONT,
                     }}
@@ -396,7 +410,7 @@ export default function DiscoverPostPage() {
                       color: !user || !newComment.trim() ? "#94a3b8" : "#fff",
                       fontWeight: 600, fontSize: 13,
                       cursor: !user || !newComment.trim() ? "not-allowed" : "pointer",
-                      fontFamily: FONT, transition: "all 0.15s",
+                      fontFamily: FONT, transition: "all 0.15s", width: isMobile ? "100%" : "auto",
                     }}
                   >
                     {t("发送", "Send")}

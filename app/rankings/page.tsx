@@ -545,8 +545,15 @@ export default function PlayerRankingsPage() {
           {/* ── Table View ── */}
           {viewMode === "table" && (
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+              <div
+                style={{
+                  overflowX: "auto",
+                  WebkitOverflowScrolling: "touch",
+                  msOverflowStyle: "none",
+                  touchAction: "pan-x",
+                } as React.CSSProperties}
+              >
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 760 : 820 }}>
                   <thead>
                     <tr>
                       {[
