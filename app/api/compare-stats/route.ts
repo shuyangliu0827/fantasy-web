@@ -31,6 +31,7 @@ import { computeStabilityFromLogs, estimateStabilityHeuristic } from "@/lib/comp
 import { generateCompareResult } from "@/lib/compare-engine";
 import type { CompareStats, CompareApiResponse, GameLog, Timeframe } from "@/lib/compare-types";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+import { normalizeTeamCode } from "@/lib/i18n";
 
 // Import ALL_PLAYERS for lastSeason fallback
 import { ALL_PLAYERS } from "@/lib/players-data";
@@ -206,7 +207,7 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
     return {
       playerId: String(row.player_id),
       playerName: row.name,
-      team: row.team,
+      team: normalizeTeamCode(row.team),
       position: getCanonicalPlayerPosition(row.name, row.position),
       timeframe,
       dataSource: 'cache' as const,
@@ -271,7 +272,7 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
 
   const identityMap = new Map<number, { name: string; team: string; position: string; injury: string | null }>();
   for (const row of (cacheRows ?? [])) {
-    identityMap.set(row.player_id, { name: row.name, team: row.team, position: row.position, injury: row.injury ?? null });
+    identityMap.set(row.player_id, { name: row.name, team: normalizeTeamCode(row.team), position: row.position, injury: row.injury ?? null });
   }
 
   return playerIds.map(pid => {
@@ -286,7 +287,7 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
     return {
       playerId: String(pid),
       playerName: identity?.name ?? `Player ${pid}`,
-      team: identity?.team ?? "N/A",
+      team: normalizeTeamCode(identity?.team ?? "N/A"),
       position: getCanonicalPlayerPosition(identity?.name ?? `Player ${pid}`, identity?.position ?? "N/A"),
       timeframe,
       dataSource: 'live' as const,
@@ -373,7 +374,7 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
     return {
       playerId: String(pid),
       playerName: staticPlayer.name,
-      team: staticPlayer.team,
+      team: normalizeTeamCode(staticPlayer.team),
       position: getCanonicalPlayerPosition(staticPlayer.name, staticPlayer.position),
       timeframe: 'lastSeason',
       dataSource: 'static' as const,
@@ -432,7 +433,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CompareApi
 
   const rawIds = playersParam.split(",").map(s => s.trim()).filter(Boolean);
   if (rawIds.length < 2) {
-    return NextResponse.json({ status: "error", message: "Provide at least 2 player IDs via ?players=id1,id2" }, { status: 400 });
+    return NextResponse.json({ status: "error", message: "Provide at least 2 player IDs via ?players=id1,id2" }, { status: 400, headers: { "Cache-Control": "no-store, max-age=0" } });
   }
 
   const playerIds = rawIds.map(Number).filter(n => !isNaN(n) && n > 0);
@@ -465,7 +466,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CompareApi
       fromCache = true;
     } catch (fallbackErr) {
       console.error("[compare-stats] Fallback also failed:", fallbackErr);
-      return NextResponse.json({ status: "error", message: "Unable to fetch player stats. Please try again." }, { status: 500 });
+      return NextResponse.json({ status: "error", message: "Unable to fetch player stats. Please try again." }, { status: 500, headers: { "Cache-Control": "no-store, max-age=0" } });
     }
   }
 
@@ -490,5 +491,5 @@ export async function GET(request: NextRequest): Promise<NextResponse<CompareApi
     meta: { timeframe, date: dateParam, fromCache },
   };
 
-  return NextResponse.json({ status: "success", result });
+  return NextResponse.json({ status: "success", result }, { headers: { "Cache-Control": "no-store, max-age=0" } });
 }
