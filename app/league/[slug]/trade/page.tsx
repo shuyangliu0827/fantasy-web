@@ -5,7 +5,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
-import { useLang } from "@/lib/lang";
+import { useLang } from "@/lib/lang"
+import { translateTeam } from "@/lib/i18n";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import {
   getSessionUser,
@@ -32,7 +33,7 @@ type LivePlayerStats = {
 };
 
 export default function TradePage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const params = useParams();
   const searchParams = useSearchParams();
   const slug = params.slug as string;
@@ -94,7 +95,7 @@ export default function TradePage() {
 
   async function fetchLiveStats() {
     try {
-      const res = await fetch("/api/nba-stats");
+      const res = await fetch("/api/nba-stats", { cache: "no-store" });
       const data = await res.json();
       if (data.status === "success" && data.players) {
         const map = new Map<string, LivePlayerStats>();
@@ -453,7 +454,7 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
+                              <span className="tp-meta">{translateTeam(p.team, lang)} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>
@@ -479,7 +480,7 @@ export default function TradePage() {
                           >
                             <div className="tp-info">
                               <span className="tp-name">{p.name}</span>
-                              <span className="tp-meta">{p.team} · {PLAYER_POSITIONS[p.name] || p.position}</span>
+                              <span className="tp-meta">{translateTeam(p.team, lang)} · {PLAYER_POSITIONS[p.name] || p.position}</span>
                             </div>
                             <div className="tp-stats">
                               <span className="tp-ppg">{getLivePPG(p)} PPG</span>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useLang } from "@/lib/lang";
+import { translateTeam } from "@/lib/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
 
@@ -81,7 +82,7 @@ const QUESTIONABLE_STATUSES = new Set(["Questionable", "Probable", "Day-To-Day"]
 const INJURED_STATUSES = new Set(["Out", "Doubtful"]);
 
 export default function PlayerRankingsPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
 
   // --- existing state ---
   const [players, setPlayers] = useState<PlayerStats[]>([]);
@@ -125,7 +126,7 @@ export default function PlayerRankingsPage() {
 
   async function loadData() {
     try {
-      const response = await fetch("/api/nba-stats");
+      const response = await fetch("/api/nba-stats", { cache: "no-store" });
       const data = await response.json();
 
       if (data.status === "loading") {
@@ -597,7 +598,7 @@ export default function PlayerRankingsPage() {
                                   {abbreviateName(player.name)}
                                 </div>
                                 <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
-                                  {player.team} · {player.position}
+                                  {translateTeam(player.team, lang)} · {player.position}
                                 </div>
                               </div>
                             </div>
@@ -660,7 +661,7 @@ export default function PlayerRankingsPage() {
                         <PlayerAvatar name={player.name} size={38} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{abbreviateName(player.name)}</div>
-                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{player.team} · {player.position}</div>
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{translateTeam(player.team, lang)} · {player.position}</div>
                         </div>
                       </div>
                     </div>

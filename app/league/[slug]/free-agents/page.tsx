@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
-import { useLang } from "@/lib/lang";
+import { useLang } from "@/lib/lang"
+import { translateTeam } from "@/lib/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { PLAYER_POSITIONS } from "@/lib/player-positions";
 import { getCanonicalPlayerPosition, normalizePosition, toCanonicalPlayerKey } from "@/lib/player-metadata";
@@ -45,7 +46,7 @@ const POSITION_OVERRIDE_BY_KEY = new Map(
 );
 
 export default function FreeAgentsPage() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const params = useParams();
   const slug = params.slug as string;
 
@@ -83,7 +84,7 @@ export default function FreeAgentsPage() {
 
   async function fetchLiveStats(): Promise<Map<string, LiveFAStats>> {
     try {
-      const res = await fetch("/api/nba-stats");
+      const res = await fetch("/api/nba-stats", { cache: "no-store" });
       const data = await res.json();
       if (data.status === "success" && data.players) {
         const map = new Map<string, LiveFAStats>();
@@ -391,7 +392,7 @@ export default function FreeAgentsPage() {
                   <PlayerAvatar name={player.name} size={32} />
                   <div className="player-info">
                     <span className="player-name">{player.name}</span>
-                    <span className="player-meta">{row.team} · {row.position}{row.injury ? ` · ${row.injury}` : ""}</span>
+                    <span className="player-meta">{translateTeam(row.team, lang)} · {row.position}{row.injury ? ` · ${row.injury}` : ""}</span>
                   </div>
                 </div>
                 <div className="col-stat">{fmt(row.ppg)}</div>
@@ -466,7 +467,7 @@ export default function FreeAgentsPage() {
             <div className="modal-body">
               <div className="add-player-card">
                 <div className="add-player-name">{showAddModal.name}</div>
-                <div className="add-player-meta">{addRow.team} · {addRow.position}</div>
+                <div className="add-player-meta">{translateTeam(addRow.team, lang)} · {addRow.position}</div>
                 <div className="add-player-stats">
                   {(() => {
                     const ppg = addRow.ppg.toFixed(1);

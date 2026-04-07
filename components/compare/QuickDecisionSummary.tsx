@@ -4,6 +4,7 @@
 
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
+import { translateTeam } from "@/lib/i18n";
 import { COLORS } from "./constants";
 import type { CompareResult } from "@/lib/compare-types";
 
@@ -19,7 +20,7 @@ const CONFIDENCE_LABELS = {
 };
 
 export default function QuickDecisionSummary({ result, isMobile }: QuickDecisionSummaryProps) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const { quickDecision, players } = result;
   const recommended = players.find(p => p.playerId === quickDecision.recommendedPlayerId);
   const other = players.find(p => p.playerId !== quickDecision.recommendedPlayerId);
@@ -48,7 +49,7 @@ export default function QuickDecisionSummary({ result, isMobile }: QuickDecision
               </div>
               <div style={{ fontSize: isMobile ? 17 : 22, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{recommended.playerName}</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 1 }}>
-                {recommended.team} · {recommended.fptsPerGame.toFixed(1)} FPTS/G
+                {translateTeam(recommended.team, lang)} · {recommended.fptsPerGame.toFixed(1)} FPTS/G
               </div>
             </div>
           </div>

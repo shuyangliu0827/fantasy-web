@@ -5,6 +5,7 @@
 import { useState } from "react";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
+import { translateTeam } from "@/lib/i18n";
 import { FONT, COLORS } from "./constants";
 
 export interface PlayerSummary {
@@ -24,7 +25,7 @@ interface PlayerSearchModalProps {
 }
 
 export default function PlayerSearchModal({ isOpen, onClose, onSelect, excludeIds, allPlayers }: PlayerSearchModalProps) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [query, setQuery] = useState("");
 
   if (!isOpen) return null;
@@ -75,7 +76,7 @@ export default function PlayerSearchModal({ isOpen, onClose, onSelect, excludeId
               <PlayerAvatar name={player.name} size={40} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, color: COLORS.textPrimary, fontSize: 14 }}>{player.name}</div>
-                <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{player.team} · {player.position}</div>
+                <div style={{ fontSize: 12, color: COLORS.textSecondary }}>{translateTeam(player.team, lang)} · {player.position}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontWeight: 700, color: COLORS.navy, fontSize: 15 }}>{player.fptsAvg.toFixed(1)}</div>
