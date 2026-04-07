@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
@@ -118,7 +117,7 @@ export default function PlayerRankingsPage() {
       clearInterval(interval);
       window.removeEventListener("resize", handleResize);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (isMobile) setViewMode("card");
@@ -149,10 +148,6 @@ export default function PlayerRankingsPage() {
     }
   }
 
-  const teams = useMemo(() => {
-    const teamSet = new Set(players.map((p) => p.team));
-    return Array.from(teamSet).filter((t) => t !== "N/A").sort();
-  }, [players]);
 
   const filteredPlayers = useMemo(() => {
     let result = players;

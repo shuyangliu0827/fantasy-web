@@ -38,7 +38,7 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
 
   useEffect(() => {
     if (!leagueId) return;
-    loadPendingCount();
+    void loadPendingCount(); // eslint-disable-line react-hooks/set-state-in-effect
 
     // Subscribe to real-time trade updates
     const channel = supabase
@@ -60,7 +60,7 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [leagueId]);
+  }, [leagueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mainNav: { href: string; label: string; badge: number }[] = [
     { href: `/league/${slug}`, label: t("联赛主页", "League Home"), badge: 0 },

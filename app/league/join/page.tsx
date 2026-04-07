@@ -17,7 +17,7 @@ export default function JoinLeaguePage() {
       setUser(getSessionUser());
       // 获取所有公开联赛
       const allLeagues = await listLeagues();
-      setLeagues(allLeagues.filter((l: any) => l.visibility === "public"));
+      setLeagues(allLeagues.filter((l) => l.visibility === "public"));
     };
     loadData();
   }, []);
@@ -78,7 +78,7 @@ export default function JoinLeaguePage() {
               <p>{t("没有找到匹配的联赛", "No leagues found")}</p>
             </div>
           ) : (
-            displayLeagues.map((league: any) => (
+            displayLeagues.map((league) => (
               <div key={league.id || league.slug} className="league-card">
                 <div className="league-card-info">
                   <h3 className="league-card-name">{league.name}</h3>

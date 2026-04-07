@@ -38,10 +38,10 @@ export default function DiscoverPostPage() {
   const router = useRouter();
   const id = params.id as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user, setUser] = useState(() => getSessionUser());
   const [insight, setInsight] = useState<Insight | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [hiddenComments, setHiddenComments] = useState<string[]>([]);
+  const [hiddenComments, setHiddenComments] = useState(() => getHiddenComments());
   const [newComment, setNewComment] = useState("");
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -66,11 +66,8 @@ export default function DiscoverPostPage() {
   }
 
   useEffect(() => {
-    const currentUser = getSessionUser();
-    setUser(currentUser);
-    setHiddenComments(getHiddenComments());
-    loadInsight();
-  }, [id]);
+    void loadInsight(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isAuthor = user && insight && insight.author_id === user.id;
 
@@ -255,6 +252,7 @@ export default function DiscoverPostPage() {
               {allImages.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   <div style={{ aspectRatio: "4/5", display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", overflow: "hidden" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={allImages[currentImageIndex]} alt={insight.title} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", display: "block" }} />
                   </div>
 
@@ -280,6 +278,7 @@ export default function DiscoverPostPage() {
                             border: `2px solid ${idx === currentImageIndex ? "#1e3a8a" : "#e2e8f0"}`,
                             borderRadius: 8, overflow: "hidden", cursor: "pointer", padding: 0, background: "none", flexShrink: 0,
                           }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={img} alt={`${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                           </button>
                         ))}
@@ -300,6 +299,7 @@ export default function DiscoverPostPage() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 16, borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
                 <Link href={`/u/${getAuthorUsername()}`} style={{ display: "flex", alignItems: "center", gap: 12, textDecoration: "none", color: "inherit" }}>
                   {getAuthorAvatar() ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={getAuthorAvatar()!} alt="" style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover" }} />
                   ) : (
                     <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -416,6 +416,7 @@ export default function DiscoverPostPage() {
                       return (
                         <div key={comment.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                           {commentAvatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img src={commentAvatar} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                           ) : (
                             <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

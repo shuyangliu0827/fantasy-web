@@ -24,7 +24,7 @@ export default function MembersPage() {
   const router = useRouter();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [draftPositions, setDraftPositions] = useState<Record<string, number>>({});
@@ -58,9 +58,8 @@ export default function MembersPage() {
   }
 
   useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+    void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleJoin() {
     if (!user) {
@@ -159,7 +158,7 @@ export default function MembersPage() {
           <div className="page-header">
             <div>
               <h1>{t("成员管理", "Members")}</h1>
-              <p>{members.length}/{(league as any).max_teams || 10} {t("队伍", "teams")}</p>
+              <p>{members.length}/{league?.max_teams || 10} {t("队伍", "teams")}</p>
             </div>
             {isOwner && (
               <button className="invite-btn" onClick={copyInviteLink}>

@@ -179,6 +179,7 @@ export default function HeroSection({ player }: Props) {
             animation: entered && !isMobile ? "heroPlayerFloat 7s ease-in-out infinite" : "none",
           }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={player.portraitImage}
             alt={player.name}

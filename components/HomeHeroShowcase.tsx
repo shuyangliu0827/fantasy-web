@@ -15,16 +15,14 @@ function pickRandom(exclude?: string): HeroPlayer {
 }
 
 export default function HomeHeroShowcase() {
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
   const [mounted, setMounted] = useState(false);
-  const [player, setPlayer] = useState<HeroPlayer | null>(null);
+  const [player, setPlayer] = useState<HeroPlayer>(() => pickRandom());
 
   useEffect(() => {
-    setPlayer(pickRandom());
     // Delay mounted to allow entrance animation
     requestAnimationFrame(() => setMounted(true));
     const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -32,19 +30,6 @@ export default function HomeHeroShowcase() {
   const handleImageError = useCallback(() => {
     setPlayer((prev) => pickRandom(prev?.id));
   }, []);
-
-  if (!player) {
-    return (
-      <section
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100vh",
-          background: "linear-gradient(180deg, #f0f2f7 0%, #e4e8f0 100%)",
-        }}
-      />
-    );
-  }
 
   return (
     <section

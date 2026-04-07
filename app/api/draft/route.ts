@@ -7,8 +7,15 @@ import { getCurrentSeasonYear } from "@/lib/season";
 
 // 临时内存存储 - 生产环境应使用真实数据库
 // 这里使用简化的内存结构来演示逻辑
-const leagues: Map<string, any> = new Map();
-const draftRooms: Map<string, any> = new Map();
+
+type RosterEntry = { player_id: string; player_name: string; player_team: string; player_position: string; acquisition_type: string };
+type DraftTeam = { id: string; user_id: string; team_name: string; draft_position: number; roster: RosterEntry[] };
+type DraftLeague = { id: string; name: string; commissioner_id: string; status: string; max_teams: number; draft_type: string; season: string; teams: DraftTeam[] };
+type DraftPick = { team_id: string; team_name: string; player_id: string; player_name: string; player_team: string; player_position: string; round: number; pick_number: number; overall_pick: number; picked_at: string };
+type DraftRoom = { league_id: string; current_round: number; current_pick: number; total_rounds: number; teams: DraftTeam[]; picks: DraftPick[]; is_paused: boolean; started_at: string; seconds_per_pick: number; pick_deadline: string; completed_at?: string };
+
+const leagues: Map<string, DraftLeague> = new Map();
+const draftRooms: Map<string, DraftRoom> = new Map();
 
 // 初始化示例联赛
 if (leagues.size === 0) {
@@ -41,9 +48,9 @@ function getSnakeDraftOrder(round: number, numTeams: number, position: number): 
 }
 
 // 计算当前应该选秀的队伍
-function getCurrentDraftingTeam(leagueId: string): any {
+function getCurrentDraftingTeam(leagueId: string): DraftTeam | undefined {
   const draftRoom = draftRooms.get(leagueId);
-  if (!draftRoom) return null;
+  if (!draftRoom) return undefined;
 
   const { current_round, current_pick, teams } = draftRoom;
   const numTeams = teams.length;
@@ -52,7 +59,7 @@ function getCurrentDraftingTeam(leagueId: string): any {
   const pickPosition = getSnakeDraftOrder(current_round, numTeams, current_pick);
   
   // 找到对应位置的队伍
-  return teams.find((t: any) => t.draft_position === pickPosition);
+  return teams.find((t) => t.draft_position === pickPosition);
 }
 
 // GET: 获取联赛选秀信息
@@ -79,7 +86,7 @@ export async function GET(request: Request) {
           max_teams: league.max_teams,
           current_teams: league.teams.length,
           draft_type: league.draft_type,
-          teams: league.teams.map((t: any) => ({
+          teams: league.teams.map((t) => ({
             id: t.id,
             team_name: t.team_name,
             draft_position: t.draft_position,
@@ -121,7 +128,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "League not found" }, { status: 404 });
       }
 
-      const myTeam = league.teams.find((t: any) => t.user_id === userId);
+      const myTeam = league.teams.find((t) => t.user_id === userId);
       if (!myTeam) {
         return NextResponse.json({ error: "Team not found" }, { status: 404 });
       }
@@ -146,14 +153,14 @@ export async function GET(request: Request) {
 
       return NextResponse.json({
         status: "success",
-        drafted_players: draftRoom.picks.map((p: any) => p.player_id),
+        drafted_players: draftRoom.picks.map((p) => p.player_id),
       });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Draft GET error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
 
@@ -176,7 +183,7 @@ export async function POST(request: Request) {
       }
 
       // 检查用户是否已加入
-      const existingTeam = league.teams.find((t: any) => t.user_id === userId);
+      const existingTeam = league.teams.find((t) => t.user_id === userId);
       if (existingTeam) {
         return NextResponse.json({ error: "Already joined this league" }, { status: 400 });
       }
@@ -262,7 +269,7 @@ export async function POST(request: Request) {
       }
 
       // 检查球员是否已被选
-      const alreadyPicked = draftRoom.picks.find((p: any) => p.player_id === player.id);
+      const alreadyPicked = draftRoom.picks.find((p) => p.player_id === player.id);
       if (alreadyPicked) {
         return NextResponse.json({ error: "Player already drafted" }, { status: 400 });
       }
@@ -287,7 +294,7 @@ export async function POST(request: Request) {
       draftRoom.picks.push(pick);
 
       // 添加到队伍阵容
-      const team = league.teams.find((t: any) => t.id === teamId);
+      const team = league.teams.find((t) => t.id === teamId);
       if (team) {
         team.roster.push({
           player_id: player.id,
@@ -327,8 +334,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Draft POST error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

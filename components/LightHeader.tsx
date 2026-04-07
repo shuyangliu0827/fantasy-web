@@ -18,20 +18,19 @@ const NAV = [
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
   const { t, lang, setLang } = useLang();
-  const [user, setUser] = useState<{ name: string; username: string; avatar_url?: string } | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [user, setUser] = useState<{ name: string; username: string; avatar_url?: string } | null>(() => {
+    const u = getSessionUser();
+    return u ? { name: u.name, username: u.username, avatar_url: u.avatar_url } : null;
+  });
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username, avatar_url: u.avatar_url });
-
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       if (!mobile) setMenuOpen(false);
     };
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -44,6 +43,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
 
   const avatarNode = user && (
     user.avatar_url ? (
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={user.avatar_url}
         alt=""

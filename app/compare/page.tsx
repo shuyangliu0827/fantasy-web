@@ -120,12 +120,12 @@ export default function ComparePage() {
     fetch("/api/nba-stats")
       .then(r => r.json())
       .then(data => {
-        const players: PlayerSummary[] = (data.players ?? []).map((p: any) => ({
+        const players: PlayerSummary[] = (data.players ?? []).map((p: Record<string, unknown>) => ({
           id: String(p.id),
-          name: p.name,
-          team: p.team,
-          position: p.position,
-          fptsAvg: p.fptsAvg ?? 0,
+          name: p.name as string,
+          team: p.team as string,
+          position: p.position as string,
+          fptsAvg: (p.fptsAvg as number) ?? 0,
         }));
         setAllPlayers(players);
         // Seed top 2 players as defaults
@@ -525,7 +525,7 @@ export default function ComparePage() {
       <PlayerSearchModal
         isOpen={showSearch !== null}
         onClose={() => setShowSearch(null)}
-        onSelect={(id, _name) => showSearch !== null && handleSelectPlayer(showSearch, id)}
+        onSelect={(id) => showSearch !== null && handleSelectPlayer(showSearch, id)}
         excludeIds={playerIds.filter(Boolean) as string[]}
         allPlayers={allPlayers}
       />

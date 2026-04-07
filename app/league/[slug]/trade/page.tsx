@@ -11,7 +11,6 @@ import {
   getSessionUser,
   getLeagueBySlug,
   getLeagueTrades,
-  getLeagueRosters,
   fetchTeamRosterFromDB,
   fetchLeagueRostersFromDB,
   proposeTrade,

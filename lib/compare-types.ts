@@ -18,6 +18,7 @@ export interface GameLog {
   min: number;
   fgm: number;
   fga: number;
+  fg3a?: number;
   ftm: number;
   fta: number;
   played: boolean;   // false = DNP / 0-min entry

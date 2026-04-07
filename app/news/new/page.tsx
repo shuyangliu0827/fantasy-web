@@ -15,10 +15,10 @@ type ImageItem = { id: string; file: File; preview: string };
 
 export default function NewNewsPage() {
   const router = useRouter();
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const user = getSessionUser();
 
-  const [authorized, setAuthorized] = useState<boolean | null>(null);
+  const [authorized, setAuthorized] = useState<boolean | null>(() => user ? null : false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -27,25 +27,21 @@ export default function NewNewsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState("");
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // Check permission on mount
   useEffect(() => {
-    if (!user) {
-      setAuthorized(false);
-      return;
-    }
+    if (!user) return;
     canUserPublishNews().then((ok) => setAuthorized(ok));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleFilesSelected(files: FileList | null) {
     if (!files) return;
@@ -252,6 +248,7 @@ export default function NewNewsPage() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {images.map((img, idx) => (
                     <div key={img.id} style={{ position: "relative", width: 80, height: 80, borderRadius: 10, overflow: "hidden", border: `2px solid ${idx === 0 ? "#1e3a8a" : "#e2e8f0"}`, flexShrink: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img.preview} alt={`img-${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                       {idx === 0 && (
                         <div style={{ position: "absolute", top: 4, left: 4, padding: "1px 6px", background: "#1e3a8a", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 3 }}>
@@ -375,6 +372,7 @@ export default function NewNewsPage() {
 
             {images[0] ? (
               <div style={{ aspectRatio: "16/9", background: "#f1f5f9", borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={images[0].preview} alt="cover" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </div>
             ) : (

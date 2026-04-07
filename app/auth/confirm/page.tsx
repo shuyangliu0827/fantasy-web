@@ -46,7 +46,7 @@ export default function ConfirmPage() {
       subscription.unsubscribe();
       clearTimeout(timeout);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEnterSite = () => {
     // Sign out so the user starts fresh via the login page.

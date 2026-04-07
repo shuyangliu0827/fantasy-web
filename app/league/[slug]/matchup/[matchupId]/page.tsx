@@ -291,8 +291,6 @@ export default function MatchupDetailPage() {
     const historicalRoster = filterDate
       ? getHistoricalRosterForDate(roster, filterDate)
       : roster;
-    const historicalRosterIds = new Set(historicalRoster.map(p => p.id));
-
     if (viewMode === "total") {
       const assignmentByPlayer = new Map<string, { slot: string; isStarter: boolean; weight: number }>();
 

@@ -128,6 +128,7 @@ function PlayerCard({ player, isMobile }: { player: HeroPlayer; isMobile: boolea
           zIndex: 3,
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={player.portraitImage}
           alt={player.name}
@@ -267,13 +268,12 @@ function StatCapsule({
   label,
   value,
   accent,
-  accentLight,
   style: wrapStyle,
 }: {
   label: string;
   value: string;
   accent: string;
-  accentLight: string;
+  accentLight?: string;
   style: React.CSSProperties;
 }) {
   return (

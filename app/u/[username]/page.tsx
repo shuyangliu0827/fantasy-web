@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight, supabase } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight } from "@/lib/store";
 
 type DraftHistory = {
   id: string;
@@ -21,10 +21,13 @@ export default function UserProfilePage() {
   const { t } = useLang();
   const params = useParams();
   const username = params.username as string;
-  const [currentUser, setCurrentUser] = useState<ReturnType<typeof getSessionUser>>(null);
-  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [currentUser, setCurrentUser] = useState(() => getSessionUser());
+  const [isOwnProfile] = useState(() => {
+    const u = getSessionUser();
+    return u ? u.username.toLowerCase() === (params.username as string).toLowerCase() : false;
+  });
   const [activeTab, setActiveTab] = useState<"posts" | "leagues" | "drafts" | "stats">("posts");
-  const [userLeagues, setUserLeagues] = useState<League[]>([]);
+  const [userLeagues, setUserLeagues] = useState<(League & { memberCount: number; role: string })[]>([]);
   const [userInsights, setUserInsights] = useState<Insight[]>([]);
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -49,14 +52,11 @@ export default function UserProfilePage() {
   const [profileUser, setProfileUser] = useState<{ id: string; name: string; username: string; avatar_url?: string; bio?: string } | null>(null);
 
   const loadData = async () => {
-    const user = getSessionUser();
-    setCurrentUser(user);
-
+    const user = currentUser;
     const isOwn = user && user.username.toLowerCase() === username.toLowerCase();
-    setIsOwnProfile(!!isOwn);
 
     const allInsights = await listInsights();
-    const filtered = allInsights.filter((i: any) => {
+    const filtered = allInsights.filter((i) => {
       const authorName = typeof i.author === "object" ? i.author?.username : i.author;
       const authorClean = (authorName || "").replace("@", "").toLowerCase();
       const usernameClean = username.toLowerCase();
@@ -66,9 +66,9 @@ export default function UserProfilePage() {
     });
     setUserInsights(
       filtered.sort(
-        (a: any, b: any) =>
-          new Date(b.created_at || b.createdAt).getTime() -
-          new Date(a.created_at || a.createdAt).getTime()
+        (a, b) =>
+          new Date(b.created_at).getTime() -
+          new Date(a.created_at).getTime()
       )
     );
 
@@ -78,13 +78,13 @@ export default function UserProfilePage() {
     setProfileUser(profileUserData);
     if (profileUserData) {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
-      setUserLeagues(joinedLeagues as any);
+      setUserLeagues(joinedLeagues);
       setProfileBio(profileUserData.bio || null);
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
     const allComments = JSON.parse(localStorage.getItem("bp_comments") || "[]");
-    const userComments = allComments.filter((c: any) => {
+    const userComments = allComments.filter((c: { author?: string }) => {
       const commentAuthor = c.author?.replace("@", "").toLowerCase();
       return commentAuthor === username.toLowerCase();
     });
@@ -117,10 +117,10 @@ export default function UserProfilePage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [username]);
+    void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const formatDate = (ts: any) => {
+  const formatDate = (ts: string | number) => {
     const d = new Date(ts);
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
   };
@@ -272,6 +272,7 @@ export default function UserProfilePage() {
           <div className="profile-body">
             <div className="avatar-wrap">
               {profileUser?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={profileUser.avatar_url} alt="avatar" className="avatar-sq" style={{ objectFit: "cover" }} />
               ) : (
                 <div className="avatar-sq">{username[0]?.toUpperCase()}</div>
@@ -384,7 +385,7 @@ export default function UserProfilePage() {
                               <div className="post-category-badge">{t("社区帖子", "Community Post")}</div>
                               <h3 className="post-list-title">{insight.title}</h3>
                               <div className="post-list-meta">
-                                <span>{formatDate((insight as any).created_at || (insight as any).createdAt)} {t("发布", "published")}</span>
+                                <span>{formatDate(insight.created_at)} {t("发布", "published")}</span>
                                 {insight.heat > 0 && <span> · {insight.heat} {t("赞", "likes")}</span>}
                               </div>
                             </div>
@@ -424,7 +425,7 @@ export default function UserProfilePage() {
                         };
                         const sc = STATUS_COLOR_MAP[league.status] ?? { color: "#374151", bg: "#f3f4f6" };
                         const sl = STATUS_LABEL_MAP[league.status] ?? league.status;
-                        const memberCount = (league as any).memberCount ?? 0;
+                        const memberCount = league.memberCount ?? 0;
                         return (
                           <div key={league.id} className="league-list-card">
                             <Link href={`/league/${league.slug}`} className="league-list-info">
@@ -590,6 +591,7 @@ export default function UserProfilePage() {
             {/* Avatar upload */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, marginBottom: 20 }}>
               {currentUser?.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={currentUser.avatar_url}
                   alt="avatar"

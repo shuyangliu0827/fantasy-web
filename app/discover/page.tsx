@@ -25,11 +25,14 @@ export default function DiscoverPage() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; username: string } | null>(() => {
+    const u = getSessionUser();
+    return u ? { name: u.name, username: u.username } : null;
+  });
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isNarrow, setIsNarrow] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== "undefined" ? window.innerWidth < 480 : false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResultPosts, setSearchResultPosts] = useState<Insight[]>([]);
@@ -58,25 +61,20 @@ export default function DiscoverPage() {
     searchTimerRef.current = setTimeout(() => runSearch(value), 300);
   };
 
-  async function loadInsights() {
-    setLoading(true);
-    const data = await listInsights();
-    setInsights(data);
-    setLoading(false);
-  }
+  useEffect(() => {
+    listInsights().then((data) => {
+      setInsights(data);
+      setLoading(false);
+    });
+  }, []);
 
   useEffect(() => {
-    const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username });
-    loadInsights();
-
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
       setIsNarrow(window.innerWidth < 480);
       if (!mobile) setMenuOpen(false);
     };
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -479,6 +477,7 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
           position: "relative",
         }}>
           {coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={coverUrl} alt={insight.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           ) : (
             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -510,6 +509,7 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {authorAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={authorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
               ) : (
                 <div style={{

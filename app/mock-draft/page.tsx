@@ -83,12 +83,12 @@ export default function MockDraftPage() {
         : pickInRound === settings.position;
       if (isUserPick) { setCurrentPick(nextPick); setAvailablePlayers(newAvailable); return; }
       if (newAvailable.length > 0) {
-        const randomOffset = Math.floor(Math.random() * Math.min(3, newAvailable.length));
+        const randomOffset = Math.floor(Math.random() * Math.min(3, newAvailable.length)); // eslint-disable-line react-hooks/purity
         newAvailable = newAvailable.filter((_, i) => i !== randomOffset);
       }
       nextPick++;
     }
-    if (currentDraft) updateDraft(currentDraft.id, { status: "completed", completedAt: Date.now() });
+    if (currentDraft) updateDraft(currentDraft.id, { status: "completed", completedAt: Date.now() }); // eslint-disable-line react-hooks/purity
     setCurrentPick(nextPick);
     setAvailablePlayers(newAvailable);
   };

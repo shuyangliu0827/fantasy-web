@@ -38,15 +38,12 @@ export default function NewPostPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState("");
-  const [loginHovered, setLoginHovered] = useState(false);
-  const [signupHovered, setSignupHovered] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -128,8 +125,6 @@ export default function NewPostPage() {
       setUploadProgress("");
     }
   }
-
-  const handleLogout = () => { localStorage.removeItem("bp_session"); window.location.href = "/"; };
 
   if (!user) {
     return (
@@ -250,6 +245,7 @@ export default function NewPostPage() {
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {images.map((img, idx) => (
                     <div key={img.id} style={{ position: "relative", width: 80, height: 80, borderRadius: 10, overflow: "hidden", border: `2px solid ${idx === 0 ? "#1e3a8a" : "#e2e8f0"}`, flexShrink: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={img.preview} alt={`img-${idx + 1}`} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                       {idx === 0 && (
                         <div style={{ position: "absolute", top: 4, left: 4, padding: "1px 6px", background: "#1e3a8a", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 3 }}>
@@ -396,6 +392,7 @@ export default function NewPostPage() {
             {/* Cover preview */}
             <div style={{ aspectRatio: "4/3", background: "#f1f5f9", borderRadius: 10, overflow: "hidden", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {images[0] ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={images[0].preview} alt="cover" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               ) : (
                 <div style={{ fontSize: 11, color: "#94a3b8" }}>{t("封面预览", "Cover preview")}</div>

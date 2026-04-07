@@ -84,7 +84,7 @@ export default function SettingsPage() {
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
-  }, [slug]);
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -143,8 +143,9 @@ export default function SettingsPage() {
         .getPublicUrl(path);
 
       setLogoUrl(urlData.publicUrl);
-    } catch (err: any) {
-      alert(t(`Logo上传失败: ${err?.message}`, `Logo upload failed: ${err?.message}`));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(t(`Logo上传失败: ${msg}`, `Logo upload failed: ${msg}`));
     } finally {
       setUploadingLogo(false);
     }
@@ -331,6 +332,7 @@ export default function SettingsPage() {
         <div className="league-header-inner">
           <Link href={`/league/${slug}`} className="league-title">
             {logoPreview
+              // eslint-disable-next-line @next/next/no-img-element
               ? <img src={logoPreview} alt="" className="league-logo-sm" />
               : <span className="league-icon">🏀</span>}
             <span>{league.name}</span>
@@ -374,6 +376,7 @@ export default function SettingsPage() {
               <label>{t("联赛徽标", "League Logo")}</label>
               <div className="logo-upload-row">
                 {logoPreview && (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoPreview} alt="Logo preview" className="logo-preview" />
                 )}
                 <div className="logo-upload-controls">

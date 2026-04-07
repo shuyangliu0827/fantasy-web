@@ -2,10 +2,39 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
-import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa } from "@/lib/store";
+import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa, type League } from "@/lib/store";
+
+type FantasyTeam = {
+  id: string;
+  user_id: string;
+  league_id: string;
+  name: string;
+  draft_position: number;
+  wins: number;
+  losses: number;
+  total_score?: number;
+  roster_data?: unknown;
+};
+
+type ChatMessage = {
+  id: string;
+  league_id: string;
+  user_id: string;
+  username: string;
+  message: string;
+  created_at: string;
+};
+
+type Announcement = {
+  id: string;
+  league_id: string;
+  title?: string | null;
+  content: string;
+  created_at: string;
+};
 
 import DraftRoom from "@/components/DraftRoom";
 
@@ -15,21 +44,21 @@ export default function LeaguePage() {
   const params = useParams();
   const leagueId = params.slug as string;
 
-  const [league, setLeague] = useState<any | null>(null);
-  const [teams, setTeams] = useState<any[]>([]);
-  const [myTeam, setMyTeam] = useState<any | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [league, setLeague] = useState<League | null>(null);
+  const [teams, setTeams] = useState<FantasyTeam[]>([]);
+  const [myTeam, setMyTeam] = useState<FantasyTeam | null>(null);
+  const [currentUser, setCurrentUser] = useState<ReturnType<typeof getSessionUser>>(null);
   const [loading, setLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [joining, setJoining] = useState(false);
   const [starting, setStarting] = useState(false);
   const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "chat" | "news" | "settings">("standings");
-  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [annTitle, setAnnTitle] = useState("");
   const [annContent, setAnnContent] = useState("");
   const [annPosting, setAnnPosting] = useState(false);
@@ -42,7 +71,7 @@ export default function LeaguePage() {
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeTab !== "chat" || !myTeam || !league) return;
@@ -68,17 +97,18 @@ export default function LeaguePage() {
         table: "league_chat_messages",
         filter: `league_id=eq.${league.id}`,
       }, (payload) => {
+        const newMsg = payload.new as ChatMessage;
         setChatMessages((prev) => {
           // Replace optimistic message if same user+content, otherwise append
-          const exists = prev.some((m) => m.id === payload.new.id);
+          const exists = prev.some((m) => m.id === newMsg.id);
           if (exists) return prev;
-          const optIdx = prev.findIndex((m) => m.id.startsWith("opt-") && m.user_id === payload.new.user_id && m.message === payload.new.message);
+          const optIdx = prev.findIndex((m) => m.id.startsWith("opt-") && m.user_id === newMsg.user_id && m.message === newMsg.message);
           if (optIdx !== -1) {
             const next = [...prev];
-            next[optIdx] = payload.new;
+            next[optIdx] = newMsg;
             return next;
           }
-          return [...prev, payload.new];
+          return [...prev, newMsg];
         });
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       })
@@ -161,7 +191,7 @@ export default function LeaguePage() {
     try {
       const leagueData = await getLeagueBySlug(leagueId);
       if (!leagueData) return;
-      setLeague(leagueData as any);
+      setLeague(leagueData);
 
       const { data: teamsData } = await storeSupa
         .from('fantasy_teams')
@@ -173,7 +203,7 @@ export default function LeaguePage() {
 
       const user = getSessionUser();
       if (user) {
-        const myTeamData = teamsData?.find((t: any) => t.user_id === user.id);
+        const myTeamData = teamsData?.find((t) => t.user_id === user.id);
         setMyTeam(myTeamData || null);
       }
     } catch (err) {
@@ -224,9 +254,9 @@ export default function LeaguePage() {
       setShowJoinModal(false);
       setTeamName("");
       await loadLeagueInfo();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Join error:", err);
-      alert(err.message || "加入失败");
+      alert(err instanceof Error ? err.message : "加入失败");
     } finally {
       setJoining(false);
     }
@@ -239,9 +269,9 @@ export default function LeaguePage() {
       const { error } = await storeSupa.from("leagues").update({ status: "drafting" }).eq("slug", leagueId);
       if (error) throw error;
       await loadLeagueInfo();
-    } catch (err: any) {
+    } catch (err) {
       console.error("Start draft error:", err);
-      alert(err.message || "开始选秀失败");
+      alert(err instanceof Error ? err.message : "开始选秀失败");
     } finally {
       setStarting(false);
     }
@@ -310,7 +340,7 @@ export default function LeaguePage() {
         : "—"
       : null;
 
-    const TABS: { key: string; label: string; href?: string }[] = [
+    const TABS: { key: "standings" | "schedule" | "chat" | "news" | "settings"; label: string; href?: string }[] = [
       { key: "standings", label: "积分榜" },
       { key: "schedule", label: "赛程", href: `/league/${leagueId}/schedule` },
       { key: "chat", label: "聊天室" },
@@ -444,7 +474,7 @@ export default function LeaguePage() {
             {TABS.map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key as any)}
+                onClick={() => setActiveTab(tab.key)}
                 style={{
                   padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
                   fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,
@@ -767,7 +797,7 @@ export default function LeaguePage() {
   }
 
   // ─── PRE-DRAFT STATE: same hero layout as active, pre-draft content ─────────
-  const PRE_DRAFT_TABS = [
+  const PRE_DRAFT_TABS: { key: "standings" | "schedule" | "chat" | "news" | "settings"; label: string }[] = [
     { key: "standings", label: "参赛队伍" },
     { key: "news",      label: "联赛公告" },
   ];
@@ -923,7 +953,7 @@ export default function LeaguePage() {
           {PRE_DRAFT_TABS.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
+              onClick={() => setActiveTab(tab.key)}
               style={{
                 padding: isMobile ? "12px 14px" : "16px 20px", background: "none", border: "none", cursor: "pointer",
                 fontSize: isMobile ? 13 : 14, fontWeight: 600, fontFamily: FONT,

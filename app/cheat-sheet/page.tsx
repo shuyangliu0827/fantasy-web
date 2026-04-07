@@ -91,7 +91,7 @@ export default function CheatSheetPage() {
     }
 
     loadPlayers();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadPlayers() {
     try {

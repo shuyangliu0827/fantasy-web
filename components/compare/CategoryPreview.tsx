@@ -84,8 +84,8 @@ export default function CategoryPreview({ players, isMobile }: CategoryPreviewPr
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px 24px" }}>
             {CAT_STATS.map(cat => {
               const [pA, pB] = players as [CompareStats, CompareStats];
-              const vA = (pA as any)[cat.key] as number ?? 0;
-              const vB = (pB as any)[cat.key] as number ?? 0;
+              const vA = ((pA as unknown as Record<string, unknown>)[cat.key] as number) ?? 0;
+              const vB = ((pB as unknown as Record<string, unknown>)[cat.key] as number) ?? 0;
               const pctA = Math.min((vA / cat.max) * 100, 100);
               const pctB = Math.min((vB / cat.max) * 100, 100);
               const aWins = cat.higherIsBetter ? vA > vB : vA < vB;

@@ -4,7 +4,7 @@
 
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
-import { FONT, COLORS, PLAYER_COLORS } from "./constants";
+import { COLORS } from "./constants";
 import type { CompareResult } from "@/lib/compare-types";
 
 interface QuickDecisionSummaryProps {
@@ -23,8 +23,6 @@ export default function QuickDecisionSummary({ result, isMobile }: QuickDecision
   const { quickDecision, players } = result;
   const recommended = players.find(p => p.playerId === quickDecision.recommendedPlayerId);
   const other = players.find(p => p.playerId !== quickDecision.recommendedPlayerId);
-  const recIndex = players.findIndex(p => p.playerId === quickDecision.recommendedPlayerId);
-  const recColor = PLAYER_COLORS[recIndex] ?? PLAYER_COLORS[0];
 
   const conf = CONFIDENCE_LABELS[quickDecision.confidence];
 

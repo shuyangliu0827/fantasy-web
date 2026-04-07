@@ -80,7 +80,15 @@ const supabase = createClient(
 // ──────────────────────────────────────────────
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-function rowToPlayer(row: any, index: number) {
+type CacheRow = {
+  player_id: number; name: string; team: string; position: string; games_played: number;
+  pts_avg: number; fgm_avg: number; fga_avg: number; fg3m_avg: number; fg3a_avg: number; ftm_avg: number; fta_avg: number; reb_avg: number; ast_avg: number; stl_avg: number; blk_avg: number; tov_avg: number; min_avg: number;
+  pts_total: number; fgm_total: number; fga_total: number; fg3m_total: number; fg3a_total: number; ftm_total: number; fta_total: number; reb_total: number; ast_total: number; stl_total: number; blk_total: number; tov_total: number; min_total: number;
+  fg_pct: number; ft_pct: number; fg3_pct: number; fpts_avg?: number; fpts?: number; injury?: string | null;
+  rank?: number; updated_at?: string;
+};
+
+function rowToPlayer(row: CacheRow, index: number) {
   const fptsAvg = r1(calcFantasyPoints({
     pts:  row.pts_avg  || 0,
     fgm:  row.fgm_avg  || 0,
@@ -173,7 +181,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
   try {
     // 1. Fetch all stats for the current season (cursor-paginated)
     type Entry = {
-      player: any; team: any; gp: number;
+      player: { id: number; first_name: string; last_name: string; position: string; team?: { abbreviation: string } }; team: { abbreviation: string }; gp: number;
       totals: { min: number; fgm: number; fga: number; fg3m: number; fg3a: number; ftm: number; fta: number; reb: number; ast: number; stl: number; blk: number; tov: number; pts: number };
     };
 
@@ -229,7 +237,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
     } catch { /* non-fatal */ }
 
     // 3. Build cache rows
-    const rows: any[] = [];
+    const rows: CacheRow[] = [];
 
     for (const [playerId, { player, team, gp, totals }] of playerMap.entries()) {
       if (gp < 1) continue;
@@ -267,7 +275,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
       });
     }
 
-    rows.sort((a, b) => b.fpts_avg - a.fpts_avg);
+    rows.sort((a, b) => (b.fpts_avg ?? 0) - (a.fpts_avg ?? 0));
     rows.forEach((r, i) => { r.rank = i + 1; });
 
     const { error } = await supabase

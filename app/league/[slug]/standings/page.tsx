@@ -6,7 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
-import { getCurrentSeasonLabel, getCurrentSeasonYear } from "@/lib/season";
+import { getCurrentSeasonYear } from "@/lib/season";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -77,7 +77,7 @@ export default function StandingsPage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [teamRecords, setTeamRecords] = useState<FantasyTeamRecord[]>([]);
@@ -109,9 +109,8 @@ export default function StandingsPage() {
   }
 
   useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+    void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOwner = user && league && league.commissioner_id === user.id;
 

@@ -48,6 +48,7 @@ export default function PlayerAvatar({ name, size = 28, style }: PlayerAvatarPro
   if (url && !imgError) {
     return (
       <div style={{ ...containerStyle, background: "#f1f5f9" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={url}
           alt=""

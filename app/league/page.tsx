@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
-import { useLang } from "@/lib/lang";
 import { listLeagues, getLeagueMemberCount, getSessionUser, supabase } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -24,7 +23,6 @@ const STATUS_COLOR: Record<string, { color: string; bg: string }> = {
 };
 
 export default function PublicLeaguesPage() {
-  const { t } = useLang();
   const [leagues, setLeagues]         = useState<LeagueWithCount[]>([]);
   const [myLeagueIds, setMyLeagueIds] = useState<Set<string>>(new Set());
   const [loading, setLoading]         = useState(true);
@@ -46,7 +44,7 @@ export default function PublicLeaguesPage() {
         .select("league_id")
         .eq("user_id", user.id);
       const ids = new Set<string>([
-        ...(memberRows || []).map((r: any) => r.league_id),
+        ...(memberRows || []).map((r) => r.league_id),
         ...publicLeagues.filter(l => l.commissioner_id === user.id).map(l => l.id),
       ]);
       setMyLeagueIds(ids);
@@ -54,7 +52,7 @@ export default function PublicLeaguesPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
 
   const filtered = leagues.filter(l => {
     const matchSearch = l.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -222,12 +220,12 @@ export default function PublicLeaguesPage() {
                   </div>
 
                   {/* name */}
-                  <h3 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 800, color: "#0f172a", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any }}>
+                  <h3 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 800, color: "#0f172a", lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as React.CSSProperties}>
                     {league.name}
                   </h3>
 
                   {/* description */}
-                  <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.6, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as any }}>
+                  <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b", lineHeight: 1.6, flex: 1, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as React.CSSProperties}>
                     {league.description || `${league.season} 赛季 · ${league.draft_type === "snake" ? "蛇形选秀" : "线性选秀"}`}
                   </p>
 

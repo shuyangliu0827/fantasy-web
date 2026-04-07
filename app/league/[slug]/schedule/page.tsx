@@ -26,7 +26,7 @@ import {
 /** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
 function formatScheduleDateRange(startStr: string, endStr: string): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const [sy, sm, sd] = startStr.split("-").map(Number);
+  const [, sm, sd] = startStr.split("-").map(Number);
   const [, em, ed] = endStr.split("-").map(Number);
   const startLabel = `${MONTHS[sm - 1]} ${sd}`;
   if (sm === em) return `${startLabel} - ${ed}`;
@@ -52,11 +52,11 @@ export default function SchedulePage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
   const [members, setMembers] = useState<LeagueMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [selectedUserId, setSelectedUserId] = useState<string>(() => getSessionUser()?.id ?? "");
   // Real completed-matchup scores fetched from DB
   const [completedMatchups, setCompletedMatchups] = useState<Record<string, { home_score: number; away_score: number; winner_id: string | null }>>({});
 
@@ -100,11 +100,8 @@ export default function SchedulePage() {
   }
 
   useEffect(() => {
-    const u = getSessionUser();
-    setUser(u);
-    if (u) setSelectedUserId(u.id);
-    loadData();
-  }, [slug]);
+    void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isOwner = user && league && league.commissioner_id === user.id;
 

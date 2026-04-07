@@ -40,16 +40,15 @@ export default function FantasyNewsPage() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const handleSetTag = (tag: string | null) => { setActiveTag(tag); setPage(1); };
   const [page, setPage] = useState(1);
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState(() => getSessionUser());
   const [canPublish, setCanPublish] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 640 : false);
 
   useEffect(() => {
-    setUser(getSessionUser());
     canUserPublishNews().then(setCanPublish);
     const handleResize = () => setIsMobile(window.innerWidth < 640);
-    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -71,8 +70,6 @@ export default function FantasyNewsPage() {
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  // Reset page when tag changes
-  useEffect(() => { setPage(1); }, [activeTag]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#f9fafb", fontFamily: FONT }}>
@@ -117,7 +114,7 @@ export default function FantasyNewsPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "16px 12px 0" : "20px 32px 0" }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
-            onClick={() => setActiveTag(null)}
+            onClick={() => handleSetTag(null)}
             style={{
               padding: "6px 16px",
               borderRadius: 20,
@@ -135,7 +132,7 @@ export default function FantasyNewsPage() {
           {TAGS.map((tag) => (
             <button
               key={tag}
-              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              onClick={() => handleSetTag(activeTag === tag ? null : tag)}
               style={{
                 padding: "6px 16px",
                 borderRadius: 20,
@@ -251,6 +248,7 @@ function ArticleCard({ insight, lang, isMobile }: { insight: Insight; lang: stri
             background: "#f1f5f9",
             overflow: "hidden",
           }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={coverUrl}
               alt=""
@@ -320,6 +318,7 @@ function ArticleCard({ insight, lang, isMobile }: { insight: Insight; lang: stri
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#9ca3af" }}>
             {/* Author avatar */}
             {insight.author?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={insight.author.avatar_url}
                 alt=""

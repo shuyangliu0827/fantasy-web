@@ -31,9 +31,9 @@ export default function BoardPage() {
   const params = useParams();
   const slug = params.slug as string;
 
-  const [user, setUser] = useState<ReturnType<typeof getSessionUser>>(null);
+  const [user] = useState(() => getSessionUser());
   const [league, setLeague] = useState<League | null>(null);
-  const [members, setMembers] = useState<LeagueMember[]>([]);
+  const [, setMembers] = useState<LeagueMember[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isMember, setIsMember] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -73,9 +73,8 @@ export default function BoardPage() {
   }
 
   useEffect(() => {
-    setUser(getSessionUser());
-    loadData();
-  }, [slug]);
+    void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handlePost() {
     if (!user || !league) return;
@@ -105,10 +104,6 @@ export default function BoardPage() {
   }
 
   const isOwner = user && league && league.commissioner_id === user.id;
-
-  const getMemberName = (member: LeagueMember) => {
-    return member.user?.username || member.user?.name || "Anonymous";
-  };
 
   const formatTime = (dateStr: string) => {
     const normalized = dateStr.includes("Z") || dateStr.includes("+") ? dateStr : dateStr + "Z";

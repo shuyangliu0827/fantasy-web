@@ -106,8 +106,8 @@ export async function POST(request: NextRequest) {
 
     const result = await res.json();
     return NextResponse.json({ ok: true, sent: true, emailId: result.id, tradeLink });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[trade-email] Error:", err);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }

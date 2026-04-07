@@ -27,6 +27,10 @@ const REQ_DELAY_MS = 1000;   // 1 s between season_averages calls
 // (Cannot import from lib/ here — this is a Deno edge function.)
 const FANTASY_WEIGHTS = { pts: 1, fgm: 2, fga: -1, fg3m: 1, ftm: 1, fta: -1, reb: 1, ast: 2, stl: 4, blk: 4, tov: -2 };
 
+type BDLPlayer = { id: number; first_name: string; last_name: string; position: string; team?: { abbreviation: string } };
+type SeasonAvg = { player_id: number; games_played?: number; gp?: number; min?: string | number; pts?: number; fgm?: number; fga?: number; fg3m?: number; fg3a?: number; ftm?: number; fta?: number; reb?: number; ast?: number; stl?: number; blk?: number; turnover?: number; fg_pct?: number; fg3_pct?: number; ft_pct?: number };
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchRaw(url: string): Promise<any> {
   const res = await fetch(url, { headers: { Authorization: API_KEY } });
   if (!res.ok) throw new Error(`BDL API Error ${res.status}: ${url}`);
@@ -63,7 +67,7 @@ Deno.serve(async () => {
     const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
     console.log("[refresh-nba-stats][1] Starting active players fetch", { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON });
     // 1. Get all active players (~6 API calls, sorted by id for stable ordering)
-    const allPlayers: any[] = [];
+    const allPlayers: BDLPlayer[] = [];
     let cursor: number | undefined;
     do {
       const qs = `per_page=100${cursor ? `&cursor=${cursor}` : ""}`;
@@ -80,7 +84,7 @@ Deno.serve(async () => {
 
     // Sort by player id for stable, consistent batching across runs
     allPlayers.sort((a, b) => a.id - b.id);
-    const playerMap = new Map<number, any>();
+    const playerMap = new Map<number, BDLPlayer>();
     for (const p of allPlayers) playerMap.set(p.id, p);
     const playerIds = allPlayers.map(p => p.id);
 
@@ -95,7 +99,7 @@ Deno.serve(async () => {
         .single();
       console.log("[3a] cursor result:", JSON.stringify(result));
       startIndex = result.data?.player_index ?? 0;
-    } catch (e: any) { console.log("[3b] cursor error (ok):", e?.message); }
+    } catch (e) { console.log("[3b] cursor error (ok):", (e as Error)?.message); }
     const batchPlayerIds = playerIds.slice(startIndex, startIndex + BATCH_SIZE);
     const nextIndex = (startIndex + BATCH_SIZE) >= playerIds.length ? 0 : startIndex + BATCH_SIZE;
 
@@ -104,7 +108,7 @@ Deno.serve(async () => {
     //    BDL season_averages fields: pts, reb, ast, stl, blk, min ("MM:SS"),
     //    fg3m, turnover (not tov!), fgm, fga, fg3a, ftm, fta,
     //    fg_pct, fg3_pct, ft_pct, games_played
-    const seasonAvgMap = new Map<number, any>();
+    const seasonAvgMap = new Map<number, SeasonAvg>();
     for (const playerId of batchPlayerIds) {
       try {
         const res = await fetchRaw(`${API_BASE}/season_averages?season=${CURRENT_SEASON}&player_id=${playerId}`);
@@ -121,7 +125,7 @@ Deno.serve(async () => {
     } catch { /* non-fatal */ }
 
     // 5. Build rows for this batch
-    const rows: any[] = [];
+    const rows: Record<string, number | string | null>[] = [];
 
     for (const [playerId, avg] of seasonAvgMap.entries()) {
       const player = playerMap.get(playerId);
@@ -185,8 +189,8 @@ Deno.serve(async () => {
         } else {
           console.log(`[6-ok] chunk ${i}-${i+10} upserted ${upsertRes?.data?.length} rows`);
         }
-      } catch (e: any) {
-        console.error(`[6-throw] chunk ${i}-${i+10}: ${e?.message}`);
+      } catch (e) {
+        console.error(`[6-throw] chunk ${i}-${i+10}: ${(e as Error)?.message}`);
         upsertErrors++;
       }
     }
@@ -213,8 +217,8 @@ Deno.serve(async () => {
       }),
       { headers: { "Content-Type": "application/json" } }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("refresh-nba-stats error:", err);
-    return new Response(JSON.stringify({ status: "error", message: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ status: "error", message: err instanceof Error ? err.message : String(err) }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 });

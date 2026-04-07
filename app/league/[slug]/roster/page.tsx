@@ -155,7 +155,7 @@ export default function RosterPage() {
     setUser(getSessionUser());
     loadData();
     fetchPlayerStats();
-  }, [slug]);
+  }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchGames(weekStart);

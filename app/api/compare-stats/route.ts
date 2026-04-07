@@ -150,7 +150,7 @@ function aggregateLogs(logs: GameLog[]): {
     totFpts += l.fpts; totPts += l.pts; totReb += l.reb; totAst += l.ast;
     totStl += l.stl;   totBlk += l.blk; totFg3m += l.fg3m; totTov += l.tov;
     totMin += l.min;   totFgm += l.fgm; totFga += l.fga;   totFtm += l.ftm;
-    totFta += l.fta;   totFg3a += (l as any).fg3a || 0;
+    totFta += l.fta;   totFg3a += l.fg3a || 0;
   }
 
   return {
@@ -194,7 +194,7 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
   // Fetch game logs for stability (season games) — parallel for both players
   const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] }, "season_stability");
 
-  return rows.map((row: any) => {
+  return (rows as StatsCacheRow[]).map((row) => {
     const logs = logMap.get(row.player_id) ?? [];
     const stability = logs.length >= 3
       ? computeStabilityFromLogs(logs, row.fpts_avg ?? 0)
@@ -337,13 +337,24 @@ async function buildDateRangeStats(playerIds: number[], timeframe: 'last7' | 'la
 // Strategy: lastSeason — ALL_PLAYERS static data
 // ─────────────────────────────────────────────────────────────
 
+type StaticPlayer = typeof ALL_PLAYERS[0] & { fg3m?: number; fg3pct?: number; mpg?: number };
+
+type StatsCacheRow = {
+  player_id: number; name: string; team: string; position: string;
+  fpts_avg: number; fpts: number; pts_avg: number; reb_avg: number; ast_avg: number;
+  stl_avg: number; blk_avg: number; fg3m_avg: number; fgm_avg: number; fga_avg: number;
+  ftm_avg: number; fta_avg: number; tov_avg: number; min_avg: number;
+  fg_pct: number; ft_pct: number; fg3_pct: number; games_played: number;
+  injury?: string | null;
+};
+
 function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, string>): CompareStats[] {
   return playerIds.map(pid => {
     // Try name lookup: match by BDL numeric ID if stored, or fall back to name
     const cachedName = cacheNames.get(pid) ?? "";
-    const staticPlayer = ALL_PLAYERS.find(p =>
+    const staticPlayer = (ALL_PLAYERS.find(p =>
       p.name.toLowerCase() === cachedName.toLowerCase()
-    ) ?? ALL_PLAYERS[0]; // ultimate fallback
+    ) ?? ALL_PLAYERS[0]) as StaticPlayer; // ultimate fallback
 
     const fptsPerGame = r1(
       staticPlayer.ppg                  * ESPN_DEFAULT_WEIGHTS.pts  +
@@ -351,12 +362,12 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
       staticPlayer.apg                  * ESPN_DEFAULT_WEIGHTS.ast  +
       staticPlayer.spg                  * ESPN_DEFAULT_WEIGHTS.stl  +
       staticPlayer.bpg                  * ESPN_DEFAULT_WEIGHTS.blk  +
-      ((staticPlayer as any).fg3m || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
+      (staticPlayer.fg3m || 0) * ESPN_DEFAULT_WEIGHTS.fg3m +
       staticPlayer.tov                  * ESPN_DEFAULT_WEIGHTS.tov
       // fgm/fga/ftm/fta not available in static lastSeason data → 0
     );
 
-    const stability = estimateStabilityHeuristic(fptsPerGame, (staticPlayer as any).mpg ?? 32);
+    const stability = estimateStabilityHeuristic(fptsPerGame, staticPlayer.mpg ?? 32);
     const schedule = getScheduleMock(staticPlayer.team);
 
     return {
@@ -374,17 +385,17 @@ function buildLastSeasonStats(playerIds: number[], cacheNames: Map<number, strin
       apg: staticPlayer.apg,
       spg: staticPlayer.spg,
       bpg: staticPlayer.bpg,
-      fg3mPg: (staticPlayer as any).fg3m ?? 0,
+      fg3mPg: staticPlayer.fg3m ?? 0,
       fgmPg: 0,
       fgaPg: 0,
       ftmPg: 0,
       ftaPg: 0,
       tov: staticPlayer.tov,
-      mpg: (staticPlayer as any).mpg ?? 0,
+      mpg: staticPlayer.mpg ?? 0,
       gp: staticPlayer.gp,
       fgPct: staticPlayer.fg,
       ftPct: staticPlayer.ft,
-      fg3Pct: (staticPlayer as any).fg3pct ?? 0,
+      fg3Pct: staticPlayer.fg3pct ?? 0,
 
       recentTrend: stability.recentTrend,
       last5FptsAvg: stability.last5FptsAvg,
@@ -436,7 +447,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CompareApi
         .from("player_stats_cache")
         .select("player_id, name")
         .in("player_id", playerIds);
-      const cacheNames = new Map<number, string>((cacheRows ?? []).map((r: any) => [r.player_id, r.name]));
+      const cacheNames = new Map<number, string>((cacheRows ?? []).map((r: { player_id: number; name: string }) => [r.player_id, r.name]));
       players = buildLastSeasonStats(playerIds, cacheNames);
       fromCache = false;
     } else if (timeframe === 'last7' || timeframe === 'last15') {
@@ -464,7 +475,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<CompareApi
       .from("player_stats_cache")
       .select("player_id, name")
       .in("player_id", playerIds);
-    const cacheNames = new Map<number, string>((cacheRows ?? []).map((r: any) => [r.player_id, r.name]));
+    const cacheNames = new Map<number, string>((cacheRows ?? []).map((r: { player_id: number; name: string }) => [r.player_id, r.name]));
     const foundIds = new Set(players.map(p => Number(p.playerId)));
     const missingIds = playerIds.filter(id => !foundIds.has(id));
     const fallback = buildLastSeasonStats(missingIds, cacheNames);

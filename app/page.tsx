@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
-import { getCurrentSeasonLabel } from "@/lib/season";
 import HeroSection from "@/components/HeroSection";
 import DraftWinsSection from "@/components/DraftWinsSection";
 import BrandCurtain from "@/components/BrandCurtain";
@@ -61,7 +60,10 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 
 export default function HomePage() {
   const { t, lang, setLang } = useLang();
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; username: string } | null>(() => {
+    const u = getSessionUser();
+    return u ? { name: u.name, username: u.username } : null;
+  });
   const [hovered, setHovered] = useState<number | null>(null);
   const [loginHovered, setLoginHovered] = useState(false);
   const [signupHovered, setSignupHovered] = useState(false);
@@ -70,9 +72,6 @@ export default function HomePage() {
   const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
 
   useEffect(() => {
-    const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username });
-
     // Pick random player with live stats from rankings API
     fetch("/api/nba-stats")
       .then(r => r.json())

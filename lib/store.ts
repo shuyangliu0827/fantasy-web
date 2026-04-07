@@ -44,6 +44,11 @@
      rules_locked: boolean;
      created_at: string;
      draft_completed_at?: string | null; // Set when draft finishes; earliest valid lineup date
+     season?: string | null;
+     scoring_categories?: string | null;
+     format?: string | null;
+     members?: number;
+     maxMembers?: number;
    };
    
    export type Insight = {

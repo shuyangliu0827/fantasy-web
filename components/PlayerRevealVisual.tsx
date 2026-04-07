@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
 import type { HeroPlayer } from "@/lib/heroPlayers";
 
 interface Props {
@@ -75,7 +75,9 @@ export default function PlayerRevealVisual({
 
     rafRef.current = requestAnimationFrame(loopRef.current);
   }, []);
-  loopRef.current = animate;
+  useLayoutEffect(() => {
+    loopRef.current = animate;
+  }, [animate]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(animate);
@@ -225,6 +227,7 @@ export default function PlayerRevealVisual({
           transition: "opacity 1s ease 0.4s",
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={player.portraitImage}
           alt=""
@@ -317,6 +320,7 @@ export default function PlayerRevealVisual({
           transition: "opacity 0.7s ease 0.2s, filter 0.8s ease 0.2s",
         }}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={player.portraitImage}
           alt={player.name}

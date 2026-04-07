@@ -2,19 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 
 export default function Header() {
   const { lang, setLang, t } = useLang();
   const pathname = usePathname();
-  const [user, setUser] = useState<{ name: string; username: string } | null>(null);
-
-  useEffect(() => {
+  const [user, setUser] = useState<{ name: string; username: string } | null>(() => {
     const u = getSessionUser();
-    if (u) setUser({ name: u.name, username: u.username });
-  }, []);
+    return u ? { name: u.name, username: u.username } : null;
+  });
 
   const navItems = [
     { href: "/", label: t("首页", "Home") },
