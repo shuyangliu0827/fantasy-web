@@ -648,6 +648,10 @@ const styles = `
     display: grid;
     gap: 20px;
   }
+  .layout-stack > * { min-width: 0; }
+  .summary-card > * { min-width: 0; }
+  .tables-grid > * { min-width: 0; }
+  .table-scroll { min-width: 0; }
   .hero-card,
   .summary-card,
   .table-card,

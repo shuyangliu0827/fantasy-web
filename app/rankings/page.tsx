@@ -551,7 +551,7 @@ export default function PlayerRankingsPage() {
                   WebkitOverflowScrolling: "touch",
                   msOverflowStyle: "none",
                   touchAction: "auto",
-                  maxHeight: isMobile ? "60svh" : undefined,
+                  maxHeight: isMobile ? "60vh" : undefined,
                 } as React.CSSProperties}
               >
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 760 : 820 }}>
