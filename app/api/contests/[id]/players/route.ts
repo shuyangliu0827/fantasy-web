@@ -50,15 +50,16 @@ function db() {
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const supabase = db();
 
   // Verify contest exists
   const { data: contest, error: contestErr } = await supabase
     .from("contests")
     .select("id, status")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (contestErr) return NextResponse.json({ error: contestErr.message }, { status: 500 });
@@ -68,12 +69,12 @@ export async function GET(
   const { data: pool, error: poolErr } = await supabase
     .from("contest_players")
     .select("player_id, tier, fpts_scored")
-    .eq("contest_id", params.id)
+    .eq("contest_id", id)
     .order("tier", { ascending: true });
 
   if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
   if (!pool || pool.length === 0) {
-    return NextResponse.json({ contest_id: params.id, status: contest.status, players: [] });
+    return NextResponse.json({ contest_id: id, status: contest.status, players: [] });
   }
 
   // Enrich with display metadata from player_stats_cache.
@@ -107,5 +108,5 @@ export async function GET(
     };
   });
 
-  return NextResponse.json({ contest_id: params.id, status: contest.status, players });
+  return NextResponse.json({ contest_id: id, status: contest.status, players });
 }

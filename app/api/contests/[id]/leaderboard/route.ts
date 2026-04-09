@@ -62,7 +62,8 @@ function db() {
   );
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const supabase = db();
   const url    = new URL(req.url);
   const limit  = Math.min(Math.max(parseInt(url.searchParams.get("limit")  ?? String(DEFAULT_LIMIT)), 1), MAX_LIMIT);
@@ -72,7 +73,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const { data: contest, error: cErr } = await supabase
     .from("contests")
     .select("id, status")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (cErr)    return NextResponse.json({ error: cErr.message }, { status: 500 });
@@ -87,7 +88,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       "rank, user_id, status, total_fpts, submitted_at, users!inner(username)",
       { count: "exact" },
     )
-    .eq("contest_id", params.id)
+    .eq("contest_id", id)
     .in("status", ["submitted", "locked", "scored"])
     .order("rank",         { ascending: true,  nullsFirst: false })
     .order("submitted_at", { ascending: true,  nullsFirst: false })
@@ -105,7 +106,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }));
 
   return NextResponse.json({
-    contest_id: params.id,
+    contest_id: id,
     status:     contest.status,
     total:      count ?? 0,
     entries:    shaped,

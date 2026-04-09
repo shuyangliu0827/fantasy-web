@@ -43,7 +43,8 @@ function db() {
   );
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -53,7 +54,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: contest, error: cErr } = await supabase
     .from("contests")
     .select("status, lineup_lock_at")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (cErr)     return NextResponse.json({ error: cErr.message }, { status: 500 });
@@ -71,7 +72,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { data: lineup, error: lErr } = await supabase
     .from("user_lineups")
     .select("id, status")
-    .eq("contest_id", params.id)
+    .eq("contest_id", id)
     .eq("user_id", userId)
     .maybeSingle();
 
