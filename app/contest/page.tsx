@@ -125,10 +125,15 @@ export default function ContestPage() {
       // 1. Today's contest
       const cr = await fetch("/api/contests/today");
       if (!cr.ok) {
-        const b = await cr.json();
-        setPageError(b.error === "no_contest_today"
-          ? "No contest is scheduled for today. Check back tomorrow."
-          : "Failed to load contest.");
+        // Parse error body if possible; fall back gracefully if the server
+        // returned a non-JSON response (e.g. HTML crash page from Vercel).
+        let errorCode = "";
+        try { errorCode = (await cr.json())?.error ?? ""; } catch { /* non-JSON */ }
+        setPageError(
+          errorCode === "no_contest_today"
+            ? "No contest is scheduled for today. Check back tomorrow."
+            : "Failed to load contest."
+        );
         return;
       }
       const c: Contest = await cr.json();
