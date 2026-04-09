@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
 // 2. Query player_stats_cache filtered to ONLY those teams.
 // 3. Exclude players whose injury starts with "Out".
 // 4. No cap — include ALL non-injured players with a game today.
-// 5. Sort by fpts_avg DESC, assign tiers by quartile (T1=top 25%, T2=next 25%,
+// 5. Compute fpts via calcFantasyPoints() from avg stat columns, sort DESC,
+//    then assign tiers by quartile (T1=top 25%, T2=next 25%,
 //    T3=next 25%, T4=bottom 25%).
 //
 // ── Force-rebuild ─────────────────────────────────────────────
@@ -61,6 +62,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
+import { calcFantasyPoints } from "@/lib/scoring-config";
 
 // Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
@@ -174,17 +176,32 @@ async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
 async function buildPool(supabase: ReturnType<typeof db>, playingTeams: Set<string>) {
   const { data: cacheRows, error } = await supabase
     .from("player_stats_cache")
-    .select("player_id, fpts_avg, injury, team")
-    .in("team", [...playingTeams])
-    .order("fpts_avg", { ascending: false });
+    .select("player_id, injury, team, pts_avg, fgm_avg, fga_avg, fg3m_avg, ftm_avg, fta_avg, reb_avg, ast_avg, stl_avg, blk_avg, tov_avg")
+    .in("team", [...playingTeams]);
 
   if (error) return { poolRows: null, error };
 
   // Filter out "Out*" injuries in JS — PostgREST NOT ILIKE drops NULLs.
   // No cap: ALL non-injured players on a playing team enter the pool.
-  const poolRows = (cacheRows ?? []).filter(
-    (r) => !r.injury?.toLowerCase().startsWith("out"),
-  );
+  const poolRows = (cacheRows ?? [])
+    .filter((r) => !r.injury?.toLowerCase().startsWith("out"))
+    .map((r) => ({
+      ...r,
+      computed_fpts_avg: calcFantasyPoints({
+        pts: r.pts_avg || 0,
+        fgm: r.fgm_avg || 0,
+        fga: r.fga_avg || 0,
+        fg3m: r.fg3m_avg || 0,
+        ftm: r.ftm_avg || 0,
+        fta: r.fta_avg || 0,
+        reb: r.reb_avg || 0,
+        ast: r.ast_avg || 0,
+        stl: r.stl_avg || 0,
+        blk: r.blk_avg || 0,
+        tov: r.tov_avg || 0,
+      }),
+    }))
+    .sort((a, b) => b.computed_fpts_avg - a.computed_fpts_avg);
 
   return { poolRows, error: null };
 }

@@ -72,7 +72,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUserId } from "@/lib/contest-auth";
+import { ensurePublicUserRow, getAuthUser } from "@/lib/contest-auth";
 import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/contest-positions";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
@@ -87,8 +87,9 @@ function db() {
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const userId = await getAuthUserId(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = authUser.id;
 
   const supabase = db();
 
@@ -126,8 +127,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const userId = await getAuthUserId(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = authUser.id;
 
   let body: { players: { slot: number; player_id: string }[] };
   try {
@@ -153,6 +155,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const supabase = db();
+  try {
+    await ensurePublicUserRow(supabase, authUser);
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "failed_to_ensure_user_profile" }, { status: 500 });
+  }
 
   // ── Guard: contest must be open and before lock time ─────
   const { data: contest, error: cErr } = await supabase
@@ -186,7 +193,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Tier composition constraints ─────────────────────────
-  // Required: exactly 1 T1, 1 T2, 1 T3, 2 T4.
+  // Required:
+  //   - Max 2 T1 players
+  //   - Min 1 player from T3/T4
   const tierMap = new Map<string, number>((poolRows ?? []).map((r) => [r.player_id, r.tier]));
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   for (const pid of playerIds) {
@@ -194,9 +203,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     tierCounts[t] = (tierCounts[t] ?? 0) + 1;
   }
 
-  if (tierCounts[1] !== 1 || tierCounts[2] !== 1 || tierCounts[3] !== 1 || tierCounts[4] !== 2) {
+  if (tierCounts[1] > 2 || (tierCounts[3] + tierCounts[4]) < 1) {
     return NextResponse.json(
-      { error: "lineup must have exactly 1 Elite (T1), 1 Solid (T2), 1 Value (T3), and 2 Deep Cut (T4) players" },
+      { error: "lineup must have at most 2 Elite (T1) players and at least 1 Value/Deep Cut (T3/T4) player" },
       { status: 400 },
     );
   }

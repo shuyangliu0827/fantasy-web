@@ -164,9 +164,10 @@ export default function ContestPage() {
   }
 
   // ── Tier rules ───────────────────────────────────────────────
-  // Exact requirement: 1 T1, 1 T2, 1 T3, 2 T4.
+  // Required:
+  //   - Max 2 T1 players
+  //   - Min 1 T3/T4 player
   // Mirrored server-side in app/api/contests/[id]/lineup/route.ts.
-  const TIER_REQUIRED: Record<number, number> = { 1: 1, 2: 1, 3: 1, 4: 2 };
 
   // ── Derived ─────────────────────────────────────────────────
 
@@ -189,11 +190,9 @@ export default function ContestPage() {
       tierCounts[t] = (tierCounts[t] ?? 0) + 1;
     }
   }
-  const tierOk = filledCount === 5 &&
-    tierCounts[1] === TIER_REQUIRED[1] &&
-    tierCounts[2] === TIER_REQUIRED[2] &&
-    tierCounts[3] === TIER_REQUIRED[3] &&
-    tierCounts[4] === TIER_REQUIRED[4];
+  const t1MaxOk = tierCounts[1] <= 2;
+  const t34MinOk = (tierCounts[3] + tierCounts[4]) >= 1;
+  const tierOk = filledCount === 5 && t1MaxOk && t34MinOk;
 
   // Base positions for the filter pills — always the five canonical slots,
   // independent of what combo strings are stored in player_stats_cache.
@@ -229,11 +228,9 @@ export default function ContestPage() {
     if (!player) return;
 
     // ── Tier constraint checks ─────────────────────────────
-    // Block adding if this tier is already at its quota.
-    const tierQuota = TIER_REQUIRED[player.tier] ?? 0;
-    if ((tierCounts[player.tier] ?? 0) >= tierQuota) {
-      const labels: Record<number, string> = { 1: "Elite (T1)", 2: "Solid (T2)", 3: "Value (T3)", 4: "Deep Cut (T4)" };
-      showFlash("err", `Only ${tierQuota} ${labels[player.tier]} player${tierQuota === 1 ? "" : "s"} allowed.`);
+    // Max 2 T1 players.
+    if (player.tier === 1 && (tierCounts[1] ?? 0) >= 2) {
+      showFlash("err", "At most 2 Elite (T1) players allowed.");
       return;
     }
 
@@ -282,7 +279,7 @@ export default function ContestPage() {
       return;
     }
     if (!tierOk) {
-      showFlash("err", "Lineup must have exactly 1 Elite, 1 Solid, 1 Value, and 2 Deep Cut players.");
+      showFlash("err", "Lineup must have at most 2 T1 players and at least 1 T3/T4 player.");
       return;
     }
     setSaving(true);
@@ -553,21 +550,12 @@ export default function ContestPage() {
                 display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
               }}>
                 <span style={{ color: "#6b7280", fontWeight: 600 }}>Required:</span>
-                {([1, 2, 3, 4] as const).map((t) => {
-                  const required = TIER_REQUIRED[t];
-                  const current  = tierCounts[t] ?? 0;
-                  const over  = current > required;
-                  const met   = current === required;
-                  const label = ["", "T1", "T2", "T3", "T4"][t];
-                  return (
-                    <span key={t} style={{
-                      fontWeight: 700,
-                      color: over ? "#991b1b" : met ? "#15803d" : "#6b7280",
-                    }}>
-                      {label}: {current}/{required}
-                    </span>
-                  );
-                })}
+                <span style={{ fontWeight: 700, color: t1MaxOk ? "#15803d" : "#991b1b" }}>
+                  T1: {tierCounts[1]}/2 max
+                </span>
+                <span style={{ fontWeight: 700, color: t34MinOk ? "#15803d" : "#991b1b" }}>
+                  T3/T4: {tierCounts[3] + tierCounts[4]}/1 min
+                </span>
               </div>
             )}
 

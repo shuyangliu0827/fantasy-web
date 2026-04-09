@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 // casting: player_stats_cache.player_id = contest_players.player_id::integer
 //
 // ── Pool size ─────────────────────────────────────────────────
-// MVP pool is capped at the top 80 players by rank (4 tiers),
-// excluding 'Out' injuries.  Populated at contest creation time.
+// MVP pool includes the full same-day slate (all non-Out players from teams
+// with games today), populated at contest creation time.
 // This route simply reads what is stored — no dynamic filtering.
 //
 // ── Sample response 200 ──────────────────────────────────────

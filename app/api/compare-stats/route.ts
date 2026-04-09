@@ -196,10 +196,23 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
   const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] }, "season_stability");
 
   return (rows as StatsCacheRow[]).map((row) => {
+    const seasonFptsPerGame = r1(calcFantasyPoints({
+      pts: row.pts_avg ?? 0,
+      fgm: row.fgm_avg ?? 0,
+      fga: row.fga_avg ?? 0,
+      fg3m: row.fg3m_avg ?? 0,
+      ftm: row.ftm_avg ?? 0,
+      fta: row.fta_avg ?? 0,
+      reb: row.reb_avg ?? 0,
+      ast: row.ast_avg ?? 0,
+      stl: row.stl_avg ?? 0,
+      blk: row.blk_avg ?? 0,
+      tov: row.tov_avg ?? 0,
+    }, ESPN_DEFAULT_WEIGHTS));
     const logs = logMap.get(row.player_id) ?? [];
     const stability = logs.length >= 3
-      ? computeStabilityFromLogs(logs, row.fpts_avg ?? 0)
-      : estimateStabilityHeuristic(row.fpts_avg ?? 0, row.min_avg ?? 30);
+      ? computeStabilityFromLogs(logs, seasonFptsPerGame)
+      : estimateStabilityHeuristic(seasonFptsPerGame, row.min_avg ?? 30);
 
     const gp = row.games_played ?? 0;
     const schedule = getScheduleMock(row.team ?? "");
@@ -212,8 +225,8 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
       timeframe,
       dataSource: 'cache' as const,
 
-      fptsPerGame: r1(row.fpts_avg ?? 0),
-      totalFpts: r1(row.fpts ?? 0),
+      fptsPerGame: seasonFptsPerGame,
+      totalFpts: r1(seasonFptsPerGame * gp),
       ppg: r1(row.pts_avg ?? 0),
       rpg: r1(row.reb_avg ?? 0),
       apg: r1(row.ast_avg ?? 0),

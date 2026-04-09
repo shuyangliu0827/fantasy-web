@@ -50,11 +50,12 @@ export const SLOT_LABEL: Record<number, string> = {
  */
 export function parsePositions(position: string): string[] {
   if (!position || position === "N/A") return [];
+  const canonical = new Set(["pg", "sg", "sf", "pf", "c"]);
   return position
     .toLowerCase()
     .split("/")
     .map((p) => p.trim())
-    .filter(Boolean);
+    .filter((p) => canonical.has(p));
 }
 
 /**

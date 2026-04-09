@@ -12,6 +12,7 @@ import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
+  { href: "/contest", labelZh: "今日竞赛", labelEn: "Daily Contest" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
@@ -28,6 +29,14 @@ const FEATURES = [
     descZh: "综合30+数据维度，每日更新，精准量化每个球员的范特西价值。",
     descEn: "30+ data dimensions updated daily to quantify every player's fantasy value.",
     href: "/rankings",
+  },
+  {
+    accentColor: "#fef3c7",
+    titleZh: "今日竞赛",
+    titleEn: "Daily Contest",
+    descZh: "只用当天比赛球员组5人阵容，提交后实时比拼当日范特西得分。",
+    descEn: "Build a 5-player lineup from today's slate and compete on live fantasy points.",
+    href: "/contest",
   },
   {
     accentColor: "#fef3c7",
