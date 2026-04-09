@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic";
 //
 // GET /api/contests/create-today
 //
-// Idempotent daily contest bootstrap. Safe to call multiple times.
-// If a contest already exists for today (UTC), returns it unchanged.
-// If not, creates the contest and populates the player pool.
+// Daily contest bootstrap. Safe to call multiple times (idempotent by default).
+// If a contest already exists for today (UTC), returns it unchanged
+// UNLESS ?force=true is passed, which rebuilds the player pool in-place
+// without deleting user lineups.
 //
 // ── Authorization ─────────────────────────────────────────────
 // Requires CRON_SECRET env var.  Accepted as:
@@ -13,13 +14,20 @@ export const dynamic = "force-dynamic";
 //   ?secret=<CRON_SECRET>                 ← manual testing via browser/curl
 //
 // ── Player pool logic ─────────────────────────────────────────
-// 1. Fetch today's BDL games → extract playing team abbreviations.
-// 2. Filter player_stats_cache to ONLY players on those teams.
+// 1. Fetch today's BDL games → collect playing team abbreviations.
+// 2. Query player_stats_cache filtered to ONLY those teams.
 // 3. Exclude players whose injury starts with "Out".
-// 4. Sort by fpts_avg DESC, take top 80 survivors → four tiers of 20.
+// 4. No cap — include ALL non-injured players with a game today.
+// 5. Sort by fpts_avg DESC, assign tiers by quartile (T1=top 25%, T2=next 25%,
+//    T3=next 25%, T4=bottom 25%).
 //
-// Step 1 is the key change from the naive top-80-overall approach:
-// players not scheduled to play today are excluded from the pool.
+// ── Force-rebuild ─────────────────────────────────────────────
+// ?force=true  Deletes contest_players for today's contest and rebuilds
+//              the pool from scratch. The contest header and user lineups
+//              are preserved. Use this whenever the pool needs to be
+//              rebuilt (e.g. after the old capped pool was created with
+//              stale code).
+// Example: GET /api/contests/create-today?secret=X&force=true
 //
 // ── lineup_lock_at logic ──────────────────────────────────────
 // Parses the earliest "H:MM pm ET"-style game status string.
@@ -27,13 +35,8 @@ export const dynamic = "force-dynamic";
 //
 // ── Trigger options ───────────────────────────────────────────
 // Manual:  GET /api/contests/create-today?secret=<CRON_SECRET>
+// Rebuild: GET /api/contests/create-today?secret=<CRON_SECRET>&force=true
 // Cron:    Vercel calls this at 14:00 UTC (10 AM ET) daily via vercel.json
-//
-// ── Tier rules (MVP) ──────────────────────────────────────────
-// T1 (Elite):   rank  1-20   max 2 per lineup
-// T2 (Solid):   rank 21-40
-// T3 (Value):   rank 41-60   ┐ at least 1 from T3 or T4 required
-// T4 (Deep Cut): rank 61-80  ┘
 //
 // ── Sample response — already exists ─────────────────────────
 // { "created": false, "contest": { "id": "...", "date": "2026-04-09", ... } }
@@ -41,6 +44,10 @@ export const dynamic = "force-dynamic";
 // ── Sample response — freshly created ────────────────────────
 // { "created": true, "contest": {...}, "pool_size": 74, "lock_source": "bdl",
 //   "playing_teams": 14 }
+//
+// ── Sample response — force-rebuilt ──────────────────────────
+// { "rebuilt": true, "contest": {...}, "pool_size": 74, "playing_teams": 14,
+//   "lock_source": "bdl" }
 //
 // ── Sample response — no games today ─────────────────────────
 // { "created": false, "reason": "no_games_today" }
@@ -54,11 +61,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
-
-// ── Config ────────────────────────────────────────────────────
-
-// No static pool size cap — include ALL non-injured players with a game today.
-// Tiers are assigned by quartile of the full pool (25% each).
 
 // Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
@@ -84,15 +86,15 @@ function isAuthorized(req: Request): boolean {
 
 /**
  * Assigns tier by quartile of the full pool.
- * rank is 1-based; total is pool size.
- * Each quartile is 25% of the pool — if pool doesn't divide evenly,
- * extra players fall into the next tier.
+ * rank is 1-based; total is the pool size.
+ * Quartile boundaries use the exact count / 4 so uneven pools
+ * distribute extra players into the next tier.
  */
 function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
   const q = total / 4;
-  if (rank <= q)       return 1;
-  if (rank <= q * 2)   return 2;
-  if (rank <= q * 3)   return 3;
+  if (rank <= q)     return 1;
+  if (rank <= q * 2) return 2;
+  if (rank <= q * 3) return 3;
   return 4;
 }
 
@@ -118,14 +120,16 @@ function parseEtStatusToUtc(status: string, dateStr: string): string | null {
 }
 
 interface TodaySlate {
-  lineupLockAt:  string;
-  lockSource:    "bdl" | "fallback";
-  playingTeams:  Set<string>; // normalized team abbreviations from TEAM_MAP
+  lineupLockAt: string;
+  lockSource:   "bdl" | "fallback";
+  playingTeams: Set<string>; // normalized team abbreviations (same as player_stats_cache.team)
 }
 
 /**
  * Fetches today's BDL games.
- * Returns playing team abbreviations (normalized) and the earliest tip-off time.
+ * Returns playing team abbreviations (normalized via normalizeTeamCode, matching
+ * how player_stats_cache.team is written by nba-stats/route.ts) and the
+ * earliest tip-off time as a UTC ISO string.
  * playingTeams is empty if BDL is unavailable or no games are scheduled.
  */
 async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
@@ -135,8 +139,9 @@ async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
       return { lineupLockAt: `${dateStr}${FALLBACK_LOCK_SUFFIX}`, lockSource: "fallback", playingTeams: new Set() };
     }
 
-    // Collect playing teams — apply normalizeTeamCode so abbreviations match
-    // what player_stats_cache.team stores (also written via normalizeTeamCode).
+    // Both player_stats_cache.team (written by nba-stats) and these game team
+    // abbreviations come from BDL via normalizeTeamCode — so the filter is
+    // self-consistent regardless of what abbreviation BDL uses.
     const playingTeams = new Set<string>();
     for (const g of games) {
       if (g.home_team?.abbreviation)    playingTeams.add(normalizeTeamCode(g.home_team.abbreviation));
@@ -161,6 +166,29 @@ async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
   }
 }
 
+/**
+ * Build the contest player pool for a given set of playing teams.
+ * Returns all non-injured players on those teams, sorted by fpts_avg DESC.
+ * No cap — the full same-day slate is the pool.
+ */
+async function buildPool(supabase: ReturnType<typeof db>, playingTeams: Set<string>) {
+  const { data: cacheRows, error } = await supabase
+    .from("player_stats_cache")
+    .select("player_id, fpts_avg, injury, team")
+    .in("team", [...playingTeams])
+    .order("fpts_avg", { ascending: false });
+
+  if (error) return { poolRows: null, error };
+
+  // Filter out "Out*" injuries in JS — PostgREST NOT ILIKE drops NULLs.
+  // No cap: ALL non-injured players on a playing team enter the pool.
+  const poolRows = (cacheRows ?? []).filter(
+    (r) => !r.injury?.toLowerCase().startsWith("out"),
+  );
+
+  return { poolRows, error: null };
+}
+
 // ── Handler ───────────────────────────────────────────────────
 
 async function handler(req: Request) {
@@ -168,8 +196,10 @@ async function handler(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const url    = new URL(req.url);
+  const force  = url.searchParams.get("force") === "true";
   const supabase = db();
-  const today    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  const today  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 
   // ── 1. Idempotency check ─────────────────────────────────────
   const { data: existing, error: checkErr } = await supabase
@@ -179,40 +209,68 @@ async function handler(req: Request) {
     .maybeSingle();
 
   if (checkErr) return NextResponse.json({ error: checkErr.message }, { status: 500 });
-  if (existing) return NextResponse.json({ created: false, contest: existing });
+
+  if (existing && !force) {
+    // Normal idempotent path — contest already exists, nothing to do.
+    return NextResponse.json({ created: false, contest: existing });
+  }
 
   // ── 2. Fetch today's slate from BDL ──────────────────────────
   const { lineupLockAt, lockSource, playingTeams } = await getTodaySlate(today);
 
-  // No games scheduled today → no contest.
   if (playingTeams.size === 0) {
     return NextResponse.json({ created: false, reason: "no_games_today" });
   }
 
-  // ── 3. Build player pool: only players with a game today ──────
-  // player_stats_cache.team uses the same normalized abbreviations as
-  // game.home_team.abbreviation after normalizeTeamCode().
-  const { data: cacheRows, error: cacheErr } = await supabase
-    .from("player_stats_cache")
-    .select("player_id, fpts_avg, injury, team")
-    .in("team", [...playingTeams])          // ← game-day filter
-    .order("fpts_avg", { ascending: false });
-
-  if (cacheErr) return NextResponse.json({ error: cacheErr.message }, { status: 500 });
-
-  // Filter out "Out*" injuries in JS (PostgREST NOT ILIKE drops NULLs).
-  // No cap — include ALL non-injured players with a game today.
-  const poolRows = (cacheRows ?? [])
-    .filter((r) => !r.injury?.toLowerCase().startsWith("out"));
-
-  if (poolRows.length === 0) {
+  // ── 3. Build pool: all non-injured players on playing teams ───
+  const { poolRows, error: poolErr } = await buildPool(supabase, playingTeams);
+  if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
+  if (!poolRows || poolRows.length === 0) {
     return NextResponse.json(
       { error: "player pool is empty — run /api/nba-stats first to populate player_stats_cache" },
       { status: 422 },
     );
   }
 
-  // ── 4. Insert contest header ─────────────────────────────────
+  const contestPlayers = poolRows.map((row, i) => ({
+    player_id: String(row.player_id),
+    tier:      tierFor(i + 1, poolRows.length),
+  }));
+
+  // ── Force-rebuild path ────────────────────────────────────────
+  // Drop existing contest_players and replace them. The contest header
+  // and any user lineups are preserved (they reference contest.id which
+  // stays the same).
+  if (existing && force) {
+    const { error: delErr } = await supabase
+      .from("contest_players")
+      .delete()
+      .eq("contest_id", existing.id);
+
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+    const { error: insErr } = await supabase
+      .from("contest_players")
+      .insert(contestPlayers.map((cp) => ({ ...cp, contest_id: existing.id })));
+
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+
+    // Update lineup_lock_at in case BDL now has accurate tip-off times.
+    await supabase
+      .from("contests")
+      .update({ lineup_lock_at: lineupLockAt })
+      .eq("id", existing.id);
+
+    return NextResponse.json({
+      rebuilt:       true,
+      contest:       { ...existing, lineup_lock_at: lineupLockAt },
+      pool_size:     contestPlayers.length,
+      playing_teams: playingTeams.size,
+      lock_source:   lockSource,
+    });
+  }
+
+  // ── Fresh creation path ───────────────────────────────────────
   const { data: contest, error: contestErr } = await supabase
     .from("contests")
     .insert({ date: today, status: "open", lineup_lock_at: lineupLockAt })
@@ -221,17 +279,9 @@ async function handler(req: Request) {
 
   if (contestErr) return NextResponse.json({ error: contestErr.message }, { status: 500 });
 
-  // ── 5. Insert contest_players ────────────────────────────────
-  // player_id stored as TEXT = String(bdl_integer_id), matching player_day_stats.
-  const contestPlayers = poolRows.map((row, i) => ({
-    contest_id: contest.id,
-    player_id:  String(row.player_id),
-    tier:       tierFor(i + 1, poolRows.length),
-  }));
-
   const { error: cpErr } = await supabase
     .from("contest_players")
-    .insert(contestPlayers);
+    .insert(contestPlayers.map((cp) => ({ ...cp, contest_id: contest.id })));
 
   if (cpErr) return NextResponse.json({ error: cpErr.message }, { status: 500 });
 
