@@ -74,9 +74,9 @@ CREATE INDEX IF NOT EXISTS idx_contests_status ON contests (status);
 --   ORDER BY rank ASC
 --
 -- tier is derived from rank at creation time (display/filter only):
---   1 → rank  1-10   (elite)
---   2 → rank 11-30
---   3 → rank 31-60
+--   1 → rank  1-20   (elite)
+--   2 → rank 21-40
+--   3 → rank 41-60
 --   4 → rank 61-80
 --
 -- fpts_scored is NULL until the scoring job runs after contest.date games.
