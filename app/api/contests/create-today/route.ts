@@ -57,8 +57,8 @@ import { normalizeTeamCode } from "@/lib/i18n";
 
 // ── Config ────────────────────────────────────────────────────
 
-const POOL_SIZE  = 80;
-const TIER_SIZE  = 20; // four even tiers of 20
+// No static pool size cap — include ALL non-injured players with a game today.
+// Tiers are assigned by quartile of the full pool (25% each).
 
 // Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
@@ -82,10 +82,17 @@ function isAuthorized(req: Request): boolean {
   return false;
 }
 
-function tierFor(rank: number): 1 | 2 | 3 | 4 {
-  if (rank <= TIER_SIZE)     return 1;
-  if (rank <= TIER_SIZE * 2) return 2;
-  if (rank <= TIER_SIZE * 3) return 3;
+/**
+ * Assigns tier by quartile of the full pool.
+ * rank is 1-based; total is pool size.
+ * Each quartile is 25% of the pool — if pool doesn't divide evenly,
+ * extra players fall into the next tier.
+ */
+function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
+  const q = total / 4;
+  if (rank <= q)       return 1;
+  if (rank <= q * 2)   return 2;
+  if (rank <= q * 3)   return 3;
   return 4;
 }
 
@@ -189,15 +196,14 @@ async function handler(req: Request) {
     .from("player_stats_cache")
     .select("player_id, fpts_avg, injury, team")
     .in("team", [...playingTeams])          // ← game-day filter
-    .order("fpts_avg", { ascending: false })
-    .limit(POOL_SIZE + 40);                 // headroom for injury exclusions
+    .order("fpts_avg", { ascending: false });
 
   if (cacheErr) return NextResponse.json({ error: cacheErr.message }, { status: 500 });
 
   // Filter out "Out*" injuries in JS (PostgREST NOT ILIKE drops NULLs).
+  // No cap — include ALL non-injured players with a game today.
   const poolRows = (cacheRows ?? [])
-    .filter((r) => !r.injury?.toLowerCase().startsWith("out"))
-    .slice(0, POOL_SIZE);
+    .filter((r) => !r.injury?.toLowerCase().startsWith("out"));
 
   if (poolRows.length === 0) {
     return NextResponse.json(
@@ -220,7 +226,7 @@ async function handler(req: Request) {
   const contestPlayers = poolRows.map((row, i) => ({
     contest_id: contest.id,
     player_id:  String(row.player_id),
-    tier:       tierFor(i + 1),
+    tier:       tierFor(i + 1, poolRows.length),
   }));
 
   const { error: cpErr } = await supabase

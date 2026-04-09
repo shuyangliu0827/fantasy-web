@@ -186,21 +186,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Tier composition constraints ─────────────────────────
-  // Rule 1: at most 2 Tier 1 (Elite) players per lineup.
-  // Rule 2: at least 1 Tier 3 or Tier 4 (value pick) player.
+  // Required: exactly 1 T1, 1 T2, 1 T3, 2 T4.
   const tierMap = new Map<string, number>((poolRows ?? []).map((r) => [r.player_id, r.tier]));
-  const t1Count    = playerIds.filter((pid) => tierMap.get(pid) === 1).length;
-  const valuePicks = playerIds.filter((pid) => (tierMap.get(pid) ?? 0) >= 3).length;
-
-  if (t1Count > 2) {
-    return NextResponse.json(
-      { error: "lineup may contain at most 2 Tier 1 (Elite) players" },
-      { status: 400 },
-    );
+  const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  for (const pid of playerIds) {
+    const t = tierMap.get(pid) ?? 4;
+    tierCounts[t] = (tierCounts[t] ?? 0) + 1;
   }
-  if (valuePicks < 1) {
+
+  if (tierCounts[1] !== 1 || tierCounts[2] !== 1 || tierCounts[3] !== 1 || tierCounts[4] !== 2) {
     return NextResponse.json(
-      { error: "lineup must include at least 1 Tier 3 or Tier 4 player" },
+      { error: "lineup must have exactly 1 Elite (T1), 1 Solid (T2), 1 Value (T3), and 2 Deep Cut (T4) players" },
       { status: 400 },
     );
   }

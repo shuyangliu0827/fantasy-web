@@ -163,12 +163,10 @@ export default function ContestPage() {
     }
   }
 
-  // ── Tier rules (MVP) ────────────────────────────────────────
-  // Rule 1: at most 2 Tier 1 (Elite) players per lineup.
-  // Rule 2: at least 1 Tier 3 or Tier 4 (value pick) player.
+  // ── Tier rules ───────────────────────────────────────────────
+  // Exact requirement: 1 T1, 1 T2, 1 T3, 2 T4.
   // Mirrored server-side in app/api/contests/[id]/lineup/route.ts.
-  const TIER_MAX_T1    = 2;
-  const TIER_MIN_VALUE = 1;
+  const TIER_REQUIRED: Record<number, number> = { 1: 1, 2: 1, 3: 1, 4: 2 };
 
   // ── Derived ─────────────────────────────────────────────────
 
@@ -183,10 +181,19 @@ export default function ContestPage() {
   const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
   const canEdit       = !!user && !isReadOnly;
 
-  // Tier composition of the current lineup slots
-  const t1Count    = slots.filter((pid) => pid && playerMap.get(pid)?.tier === 1).length;
-  const valuePicks = slots.filter((pid) => pid && (playerMap.get(pid)?.tier ?? 0) >= 3).length;
-  const tierOk     = t1Count <= TIER_MAX_T1 && valuePicks >= TIER_MIN_VALUE;
+  // Tier counts of the current lineup slots
+  const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  for (const pid of slots) {
+    if (pid) {
+      const t = playerMap.get(pid)?.tier ?? 4;
+      tierCounts[t] = (tierCounts[t] ?? 0) + 1;
+    }
+  }
+  const tierOk = filledCount === 5 &&
+    tierCounts[1] === TIER_REQUIRED[1] &&
+    tierCounts[2] === TIER_REQUIRED[2] &&
+    tierCounts[3] === TIER_REQUIRED[3] &&
+    tierCounts[4] === TIER_REQUIRED[4];
 
   // Base positions for the filter pills — always the five canonical slots,
   // independent of what combo strings are stored in player_stats_cache.
@@ -222,8 +229,11 @@ export default function ContestPage() {
     if (!player) return;
 
     // ── Tier constraint checks ─────────────────────────────
-    if (player.tier === 1 && t1Count >= TIER_MAX_T1) {
-      showFlash("err", `Max ${TIER_MAX_T1} Elite (T1) players allowed.`);
+    // Block adding if this tier is already at its quota.
+    const tierQuota = TIER_REQUIRED[player.tier] ?? 0;
+    if ((tierCounts[player.tier] ?? 0) >= tierQuota) {
+      const labels: Record<number, string> = { 1: "Elite (T1)", 2: "Solid (T2)", 3: "Value (T3)", 4: "Deep Cut (T4)" };
+      showFlash("err", `Only ${tierQuota} ${labels[player.tier]} player${tierQuota === 1 ? "" : "s"} allowed.`);
       return;
     }
 
@@ -271,12 +281,8 @@ export default function ContestPage() {
       showFlash("err", "Fill all 5 slots to save.");
       return;
     }
-    if (t1Count > TIER_MAX_T1) {
-      showFlash("err", `Max ${TIER_MAX_T1} Elite (T1) players allowed.`);
-      return;
-    }
-    if (valuePicks < TIER_MIN_VALUE) {
-      showFlash("err", "Include at least 1 Tier 3 or Tier 4 player.");
+    if (!tierOk) {
+      showFlash("err", "Lineup must have exactly 1 Elite, 1 Solid, 1 Value, and 2 Deep Cut players.");
       return;
     }
     setSaving(true);
@@ -544,21 +550,24 @@ export default function ContestPage() {
                 margin: "10px 16px 0", padding: "10px 14px",
                 background: "#f8fafc", border: "1px solid #e5e7eb",
                 borderRadius: 8, fontSize: 12,
-                display: "flex", gap: 16, flexWrap: "wrap",
+                display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
               }}>
-                <span style={{ color: "#6b7280", fontWeight: 600 }}>Lineup rules:</span>
-                <span style={{
-                  fontWeight: 700,
-                  color: t1Count > TIER_MAX_T1 ? "#991b1b" : t1Count === TIER_MAX_T1 ? "#92400e" : "#15803d",
-                }}>
-                  Elite (T1): {t1Count}/{TIER_MAX_T1} max
-                </span>
-                <span style={{
-                  fontWeight: 700,
-                  color: filledCount === 5 && valuePicks < TIER_MIN_VALUE ? "#991b1b" : valuePicks >= TIER_MIN_VALUE ? "#15803d" : "#6b7280",
-                }}>
-                  Value (T3/T4): {valuePicks} needed ≥ {TIER_MIN_VALUE}
-                </span>
+                <span style={{ color: "#6b7280", fontWeight: 600 }}>Required:</span>
+                {([1, 2, 3, 4] as const).map((t) => {
+                  const required = TIER_REQUIRED[t];
+                  const current  = tierCounts[t] ?? 0;
+                  const over  = current > required;
+                  const met   = current === required;
+                  const label = ["", "T1", "T2", "T3", "T4"][t];
+                  return (
+                    <span key={t} style={{
+                      fontWeight: 700,
+                      color: over ? "#991b1b" : met ? "#15803d" : "#6b7280",
+                    }}>
+                      {label}: {current}/{required}
+                    </span>
+                  );
+                })}
               </div>
             )}
 
