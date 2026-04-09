@@ -173,16 +173,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Guard: every player_id must be in the contest pool ───
-  // contest_players.player_id is TEXT; players array already has TEXT ids.
+  // Also fetch tier for each player — used for lineup constraint validation.
   const { data: poolRows, error: poolErr } = await supabase
     .from("contest_players")
-    .select("player_id")
+    .select("player_id, tier")
     .eq("contest_id", id)
     .in("player_id", playerIds);
 
   if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
   if ((poolRows?.length ?? 0) !== 5) {
     return NextResponse.json({ error: "one or more players not in contest pool" }, { status: 400 });
+  }
+
+  // ── Tier composition constraints ─────────────────────────
+  // Rule 1: at most 2 Tier 1 (Elite) players per lineup.
+  // Rule 2: at least 1 Tier 3 or Tier 4 (value pick) player.
+  const tierMap = new Map<string, number>((poolRows ?? []).map((r) => [r.player_id, r.tier]));
+  const t1Count    = playerIds.filter((pid) => tierMap.get(pid) === 1).length;
+  const valuePicks = playerIds.filter((pid) => (tierMap.get(pid) ?? 0) >= 3).length;
+
+  if (t1Count > 2) {
+    return NextResponse.json(
+      { error: "lineup may contain at most 2 Tier 1 (Elite) players" },
+      { status: 400 },
+    );
+  }
+  if (valuePicks < 1) {
+    return NextResponse.json(
+      { error: "lineup must include at least 1 Tier 3 or Tier 4 player" },
+      { status: 400 },
+    );
   }
 
   // ── Position-slot eligibility ─────────────────────────────

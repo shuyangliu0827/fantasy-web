@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/store";
 
 const NAV = [
   { href: "/",            zh: "首页",   en: "Home" },
+  { href: "/contest",     zh: "今日竞赛", en: "Daily Contest" },
   { href: "/discover",    zh: "发现",   en: "Discover" },
   { href: "/rankings",    zh: "球员排名", en: "Rankings" },
   { href: "/league",      zh: "公开联赛", en: "Leagues" },

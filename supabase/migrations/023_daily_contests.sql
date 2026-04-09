@@ -108,7 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_cp_contest ON contest_players (contest_id);
 CREATE TABLE IF NOT EXISTS user_lineups (
   id           uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
   contest_id   uuid        NOT NULL REFERENCES contests(id) ON DELETE CASCADE,
-  user_id      uuid        NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+  user_id      uuid        NOT NULL,  -- Supabase Auth user ID; validated via Bearer token, no FK to public.users
   status       text        NOT NULL DEFAULT 'draft'
                            CHECK (status IN ('draft','submitted','locked','scored')),
   total_fpts   numeric,

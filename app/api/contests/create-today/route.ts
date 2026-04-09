@@ -13,24 +13,37 @@ export const dynamic = "force-dynamic";
 //   ?secret=<CRON_SECRET>                 ← manual testing via browser/curl
 //
 // ── Player pool logic ─────────────────────────────────────────
-// Reads player_stats_cache, sorted by fpts_avg DESC.
-// Excludes players whose injury starts with "Out".
-// Takes the top 80 survivors, split into four tiers of 20.
+// 1. Fetch today's BDL games → extract playing team abbreviations.
+// 2. Filter player_stats_cache to ONLY players on those teams.
+// 3. Exclude players whose injury starts with "Out".
+// 4. Sort by fpts_avg DESC, take top 80 survivors → four tiers of 20.
+//
+// Step 1 is the key change from the naive top-80-overall approach:
+// players not scheduled to play today are excluded from the pool.
 //
 // ── lineup_lock_at logic ──────────────────────────────────────
-// Fetches today's games from BDL, parses the earliest "H:MM pm ET"-style
-// status string into UTC.  Falls back to 23:00 UTC (7 PM ET) if BDL is
-// unavailable or no scheduled games are found.
+// Parses the earliest "H:MM pm ET"-style game status string.
+// Falls back to 23:00 UTC (7 PM ET) if BDL is unavailable.
 //
 // ── Trigger options ───────────────────────────────────────────
 // Manual:  GET /api/contests/create-today?secret=<CRON_SECRET>
-// Cron:    Vercel calls this at 14:00 UTC (10 AM ET) every day via vercel.json
+// Cron:    Vercel calls this at 14:00 UTC (10 AM ET) daily via vercel.json
+//
+// ── Tier rules (MVP) ──────────────────────────────────────────
+// T1 (Elite):   rank  1-20   max 2 per lineup
+// T2 (Solid):   rank 21-40
+// T3 (Value):   rank 41-60   ┐ at least 1 from T3 or T4 required
+// T4 (Deep Cut): rank 61-80  ┘
 //
 // ── Sample response — already exists ─────────────────────────
 // { "created": false, "contest": { "id": "...", "date": "2026-04-09", ... } }
 //
 // ── Sample response — freshly created ────────────────────────
-// { "created": true,  "contest": { ... }, "pool_size": 78, "lineup_lock_at_source": "bdl" }
+// { "created": true, "contest": {...}, "pool_size": 74, "lock_source": "bdl",
+//   "playing_teams": 14 }
+//
+// ── Sample response — no games today ─────────────────────────
+// { "created": false, "reason": "no_games_today" }
 //
 // Error responses:
 //   401 { "error": "unauthorized" }
@@ -40,14 +53,14 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
+import { normalizeTeamCode } from "@/lib/i18n";
 
 // ── Config ────────────────────────────────────────────────────
 
-const POOL_SIZE     = 80;
-const TIER_SIZE     = 20; // 20 players per tier
+const POOL_SIZE  = 80;
+const TIER_SIZE  = 20; // four even tiers of 20
 
-// Fallback lock time: 23:00 UTC = 7 PM ET (EDT, UTC-4).
-// Covers the typical NBA prime-time slate during April–June.
+// Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -61,18 +74,14 @@ function db() {
 
 function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // no secret configured → locked down
-
+  if (!secret) return false;
   const auth = req.headers.get("Authorization");
   if (auth === `Bearer ${secret}`) return true;
-
   const url = new URL(req.url);
   if (url.searchParams.get("secret") === secret) return true;
-
   return false;
 }
 
-/** Returns tier 1–4 for a 1-based rank within the pool. */
 function tierFor(rank: number): 1 | 2 | 3 | 4 {
   if (rank <= TIER_SIZE)     return 1;
   if (rank <= TIER_SIZE * 2) return 2;
@@ -82,53 +91,66 @@ function tierFor(rank: number): 1 | 2 | 3 | 4 {
 
 /**
  * Parses a BDL game status like "7:30 pm ET" into a UTC ISO string.
- *
- * NBA games in April–June use Eastern Daylight Time (EDT = UTC-4).
- * Returns null if the status doesn't match the expected format.
+ * NBA games April–June use EDT (UTC-4).
  */
 function parseEtStatusToUtc(status: string, dateStr: string): string | null {
   const m = status.trim().match(/^(\d{1,2}):(\d{2})\s+(am|pm)\s+ET$/i);
   if (!m) return null;
-
   let hour = parseInt(m[1], 10);
   const min  = parseInt(m[2], 10);
   const ampm = m[3].toLowerCase();
-
   if (ampm === "pm" && hour !== 12) hour += 12;
   if (ampm === "am" && hour === 12) hour = 0;
-
-  // EDT = UTC-4. Adding 4 hours may roll into the next calendar day.
   const utcHour   = hour + 4;
   const dayOffset = utcHour >= 24 ? 1 : 0;
   const finalHour = utcHour % 24;
-
   const base = new Date(`${dateStr}T00:00:00Z`);
   base.setUTCDate(base.getUTCDate() + dayOffset);
   base.setUTCHours(finalHour, min, 0, 0);
   return base.toISOString();
 }
 
+interface TodaySlate {
+  lineupLockAt:  string;
+  lockSource:    "bdl" | "fallback";
+  playingTeams:  Set<string>; // normalized team abbreviations from TEAM_MAP
+}
+
 /**
- * Fetches today's games from BDL and returns the ISO timestamp of the
- * earliest scheduled tip-off.  Returns null if BDL is unavailable or no
- * scheduled games are found.
+ * Fetches today's BDL games.
+ * Returns playing team abbreviations (normalized) and the earliest tip-off time.
+ * playingTeams is empty if BDL is unavailable or no games are scheduled.
  */
-async function getFirstTipoffUtc(dateStr: string): Promise<string | null> {
+async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
   try {
     const { data: games } = await getGames({ dates: [dateStr] });
-    if (!games || games.length === 0) return null;
-
-    const candidates: string[] = [];
-    for (const g of games) {
-      const parsed = parseEtStatusToUtc(g.status ?? "", dateStr);
-      if (parsed) candidates.push(parsed);
+    if (!games || games.length === 0) {
+      return { lineupLockAt: `${dateStr}${FALLBACK_LOCK_SUFFIX}`, lockSource: "fallback", playingTeams: new Set() };
     }
 
-    if (candidates.length === 0) return null;
+    // Collect playing teams — apply normalizeTeamCode so abbreviations match
+    // what player_stats_cache.team stores (also written via normalizeTeamCode).
+    const playingTeams = new Set<string>();
+    for (const g of games) {
+      if (g.home_team?.abbreviation)    playingTeams.add(normalizeTeamCode(g.home_team.abbreviation));
+      if (g.visitor_team?.abbreviation) playingTeams.add(normalizeTeamCode(g.visitor_team.abbreviation));
+    }
+
+    // Earliest tip-off from BDL status strings ("7:30 pm ET")
+    const candidates: string[] = [];
+    for (const g of games) {
+      const t = parseEtStatusToUtc(g.status ?? "", dateStr);
+      if (t) candidates.push(t);
+    }
     candidates.sort();
-    return candidates[0]; // earliest tip-off
+
+    return {
+      lineupLockAt: candidates[0] ?? `${dateStr}${FALLBACK_LOCK_SUFFIX}`,
+      lockSource:   candidates.length > 0 ? "bdl" : "fallback",
+      playingTeams,
+    };
   } catch {
-    return null; // BDL unavailable — caller falls back to default
+    return { lineupLockAt: `${dateStr}${FALLBACK_LOCK_SUFFIX}`, lockSource: "fallback", playingTeams: new Set() };
   }
 }
 
@@ -150,27 +172,29 @@ async function handler(req: Request) {
     .maybeSingle();
 
   if (checkErr) return NextResponse.json({ error: checkErr.message }, { status: 500 });
-  if (existing) {
-    return NextResponse.json({ created: false, contest: existing });
+  if (existing) return NextResponse.json({ created: false, contest: existing });
+
+  // ── 2. Fetch today's slate from BDL ──────────────────────────
+  const { lineupLockAt, lockSource, playingTeams } = await getTodaySlate(today);
+
+  // No games scheduled today → no contest.
+  if (playingTeams.size === 0) {
+    return NextResponse.json({ created: false, reason: "no_games_today" });
   }
 
-  // ── 2. Determine lineup_lock_at ──────────────────────────────
-  const firstTipoff = await getFirstTipoffUtc(today);
-  const lineupLockAt      = firstTipoff ?? `${today}${FALLBACK_LOCK_SUFFIX}`;
-  const lineupLockAtSource = firstTipoff ? "bdl" : "fallback";
-
-  // ── 3. Build player pool from player_stats_cache ─────────────
-  // Fetch more rows than needed to survive Out-injury exclusions.
+  // ── 3. Build player pool: only players with a game today ──────
+  // player_stats_cache.team uses the same normalized abbreviations as
+  // game.home_team.abbreviation after normalizeTeamCode().
   const { data: cacheRows, error: cacheErr } = await supabase
     .from("player_stats_cache")
-    .select("player_id, fpts_avg, injury")
+    .select("player_id, fpts_avg, injury, team")
+    .in("team", [...playingTeams])          // ← game-day filter
     .order("fpts_avg", { ascending: false })
-    .limit(POOL_SIZE + 50); // headroom for excluded players
+    .limit(POOL_SIZE + 40);                 // headroom for injury exclusions
 
   if (cacheErr) return NextResponse.json({ error: cacheErr.message }, { status: 500 });
 
-  // Filter out "Out*" in JS so NULL injuries are correctly retained.
-  // PostgREST NOT ILIKE excludes NULLs; JS filter does not.
+  // Filter out "Out*" injuries in JS (PostgREST NOT ILIKE drops NULLs).
   const poolRows = (cacheRows ?? [])
     .filter((r) => !r.injury?.toLowerCase().startsWith("out"))
     .slice(0, POOL_SIZE);
@@ -206,10 +230,11 @@ async function handler(req: Request) {
   if (cpErr) return NextResponse.json({ error: cpErr.message }, { status: 500 });
 
   return NextResponse.json({
-    created:              true,
+    created:       true,
     contest,
-    pool_size:            contestPlayers.length,
-    lineup_lock_at_source: lineupLockAtSource,
+    pool_size:     contestPlayers.length,
+    playing_teams: playingTeams.size,
+    lock_source:   lockSource,
   });
 }
 

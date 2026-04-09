@@ -41,6 +41,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+import { calcFantasyPoints } from "@/lib/scoring-config";
 
 function db() {
   return createClient(
@@ -83,9 +84,12 @@ export async function GET(
   // Cast TEXT → integer for the IN query.
   const intIds = pool.map((r) => parseInt(r.player_id, 10)).filter(Number.isFinite);
 
+  // Select all 11 per-game average columns so fpts_avg is computed at
+  // read time via calcFantasyPoints — identical to how nba-stats/route.ts
+  // produces its fpts_avg, ensuring consistent values across pages.
   const { data: statsRows, error: statsErr } = await supabase
     .from("player_stats_cache")
-    .select("player_id, name, team, position, fpts_avg, injury")
+    .select("player_id, name, team, position, pts_avg, fgm_avg, fga_avg, fg3m_avg, ftm_avg, fta_avg, reb_avg, ast_avg, stl_avg, blk_avg, tov_avg, injury")
     .in("player_id", intIds);
 
   if (statsErr) return NextResponse.json({ error: statsErr.message }, { status: 500 });
@@ -104,7 +108,21 @@ export async function GET(
       name:        meta?.name     ?? "",
       team:        meta?.team     ?? "",
       position:    getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
-      fpts_avg:    meta?.fpts_avg ?? 0,
+      // Compute fpts_avg from the 11 avg stat fields, matching the nba-stats
+      // read path exactly (same calcFantasyPoints call, same ESPN_DEFAULT_WEIGHTS).
+      fpts_avg:    meta ? Math.round(calcFantasyPoints({
+        pts:  meta.pts_avg  || 0,
+        fgm:  meta.fgm_avg  || 0,
+        fga:  meta.fga_avg  || 0,
+        fg3m: meta.fg3m_avg || 0,
+        ftm:  meta.ftm_avg  || 0,
+        fta:  meta.fta_avg  || 0,
+        reb:  meta.reb_avg  || 0,
+        ast:  meta.ast_avg  || 0,
+        stl:  meta.stl_avg  || 0,
+        blk:  meta.blk_avg  || 0,
+        tov:  meta.tov_avg  || 0,
+      }) * 10) / 10 : 0,
       injury:      meta?.injury   ?? null,
     };
   });

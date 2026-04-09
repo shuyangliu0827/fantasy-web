@@ -163,6 +163,13 @@ export default function ContestPage() {
     }
   }
 
+  // ── Tier rules (MVP) ────────────────────────────────────────
+  // Rule 1: at most 2 Tier 1 (Elite) players per lineup.
+  // Rule 2: at least 1 Tier 3 or Tier 4 (value pick) player.
+  // Mirrored server-side in app/api/contests/[id]/lineup/route.ts.
+  const TIER_MAX_T1    = 2;
+  const TIER_MIN_VALUE = 1;
+
   // ── Derived ─────────────────────────────────────────────────
 
   const filledCount   = slots.filter(Boolean).length;
@@ -175,6 +182,11 @@ export default function ContestPage() {
   const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
   const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
   const canEdit       = !!user && !isReadOnly;
+
+  // Tier composition of the current lineup slots
+  const t1Count    = slots.filter((pid) => pid && playerMap.get(pid)?.tier === 1).length;
+  const valuePicks = slots.filter((pid) => pid && (playerMap.get(pid)?.tier ?? 0) >= 3).length;
+  const tierOk     = t1Count <= TIER_MAX_T1 && valuePicks >= TIER_MIN_VALUE;
 
   // Base positions for the filter pills — always the five canonical slots,
   // independent of what combo strings are stored in player_stats_cache.
@@ -208,6 +220,12 @@ export default function ContestPage() {
 
     const player = playerMap.get(pid);
     if (!player) return;
+
+    // ── Tier constraint checks ─────────────────────────────
+    if (player.tier === 1 && t1Count >= TIER_MAX_T1) {
+      showFlash("err", `Max ${TIER_MAX_T1} Elite (T1) players allowed.`);
+      return;
+    }
 
     // slots is current state — safe to read here (no stale closure risk since
     // we call setSlots with a direct value, not a functional update that depends on prev).
@@ -251,6 +269,14 @@ export default function ContestPage() {
       .filter(Boolean) as { slot: number; player_id: string }[];
     if (picks.length !== 5) {
       showFlash("err", "Fill all 5 slots to save.");
+      return;
+    }
+    if (t1Count > TIER_MAX_T1) {
+      showFlash("err", `Max ${TIER_MAX_T1} Elite (T1) players allowed.`);
+      return;
+    }
+    if (valuePicks < TIER_MIN_VALUE) {
+      showFlash("err", "Include at least 1 Tier 3 or Tier 4 player.");
       return;
     }
     setSaving(true);
@@ -512,19 +538,43 @@ export default function ContestPage() {
               })}
             </div>
 
+            {/* ── Tier rules bar ────────────────────────────── */}
+            {user && !isReadOnly && (
+              <div style={{
+                margin: "10px 16px 0", padding: "10px 14px",
+                background: "#f8fafc", border: "1px solid #e5e7eb",
+                borderRadius: 8, fontSize: 12,
+                display: "flex", gap: 16, flexWrap: "wrap",
+              }}>
+                <span style={{ color: "#6b7280", fontWeight: 600 }}>Lineup rules:</span>
+                <span style={{
+                  fontWeight: 700,
+                  color: t1Count > TIER_MAX_T1 ? "#991b1b" : t1Count === TIER_MAX_T1 ? "#92400e" : "#15803d",
+                }}>
+                  Elite (T1): {t1Count}/{TIER_MAX_T1} max
+                </span>
+                <span style={{
+                  fontWeight: 700,
+                  color: filledCount === 5 && valuePicks < TIER_MIN_VALUE ? "#991b1b" : valuePicks >= TIER_MIN_VALUE ? "#15803d" : "#6b7280",
+                }}>
+                  Value (T3/T4): {valuePicks} needed ≥ {TIER_MIN_VALUE}
+                </span>
+              </div>
+            )}
+
             {/* ── Action buttons ────────────────────────────── */}
             {user && !isReadOnly && (
               <div style={{ padding: "12px 16px 0", display: "flex", gap: 8 }}>
                 <button
                   onClick={handleSave}
-                  disabled={saving || filledCount !== 5}
+                  disabled={saving || filledCount !== 5 || !tierOk}
                   style={{
                     flex: 1, padding: "11px 0",
                     background: "#fff", border: "1px solid #d1d5db",
                     borderRadius: 10, fontSize: 14, fontWeight: 600,
-                    color: filledCount === 5 ? "#374151" : "#9ca3af",
-                    cursor: filledCount === 5 && !saving ? "pointer" : "not-allowed",
-                    opacity: filledCount === 5 ? 1 : 0.5,
+                    color: filledCount === 5 && tierOk ? "#374151" : "#9ca3af",
+                    cursor: filledCount === 5 && tierOk && !saving ? "pointer" : "not-allowed",
+                    opacity: filledCount === 5 && tierOk ? 1 : 0.5,
                     transition: "all 0.15s",
                   }}
                 >
@@ -533,16 +583,16 @@ export default function ContestPage() {
 
                 <button
                   onClick={handleSubmit}
-                  disabled={!canEdit || filledCount !== 5 || submitting}
+                  disabled={!canEdit || filledCount !== 5 || !tierOk || submitting}
                   style={{
                     flex: 2, padding: "11px 0",
-                    background: canEdit && filledCount === 5
+                    background: canEdit && filledCount === 5 && tierOk
                       ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
                       : "#e5e7eb",
                     border: "none", borderRadius: 10,
                     fontSize: 14, fontWeight: 700,
-                    color: canEdit && filledCount === 5 ? "#000" : "#9ca3af",
-                    cursor: canEdit && filledCount === 5 && !submitting ? "pointer" : "not-allowed",
+                    color: canEdit && filledCount === 5 && tierOk ? "#000" : "#9ca3af",
+                    cursor: canEdit && filledCount === 5 && tierOk && !submitting ? "pointer" : "not-allowed",
                     transition: "all 0.15s",
                   }}
                 >
