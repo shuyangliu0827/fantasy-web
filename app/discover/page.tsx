@@ -10,6 +10,7 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
+  { href: "/contest", labelZh: "每日挑战赛", labelEn: "Daily Contest" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
@@ -247,6 +248,28 @@ export default function DiscoverPage() {
               + {t("发布笔记", "New Post")}
             </Link>
           )}
+        </div>
+      </div>
+
+      {/* Daily contest discoverability CTA */}
+      <div style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "14px 12px" : "16px 24px" }}>
+          <Link
+            href="/contest"
+            style={{
+              display: "block",
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              borderRadius: 12,
+              padding: isMobile ? "12px 14px" : "14px 16px",
+              textDecoration: "none",
+            }}
+          >
+            <strong style={{ color: "#1e3a8a" }}>{t("每日挑战赛", "Daily Contest")}</strong>
+            <span style={{ marginLeft: 8, color: "#334155", fontSize: 14 }}>
+              {t("基于真实当日赛程的公开赛入口 →", "Enter today’s real-slate public contest →")}
+            </span>
+          </Link>
         </div>
       </div>
 

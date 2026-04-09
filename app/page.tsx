@@ -12,6 +12,7 @@ import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
+  { href: "/contest", labelZh: "每日挑战赛", labelEn: "Daily Contest" },
   { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
   { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
@@ -36,6 +37,14 @@ const FEATURES = [
     descZh: "加入全国玩家的公开联赛，展示你的选秀实力，赢取排行榜荣耀。",
     descEn: "Join leagues nationwide and prove your draft skills on the leaderboard.",
     href: "/league",
+  },
+  {
+    accentColor: "#e0f2fe",
+    titleZh: "每日挑战赛",
+    titleEn: "Daily Contest",
+    descZh: "基于真实当日赛程的全局公开赛，按分层规则组阵并实时比拼。",
+    descEn: "A global same-day public contest built from the real slate with tier-based lineup rules.",
+    href: "/contest",
   },
   {
     accentColor: "#dbeafe",
