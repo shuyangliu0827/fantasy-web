@@ -34,7 +34,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUserId } from "@/lib/contest-auth";
+import { ensurePublicUserRow, getAuthUser } from "@/lib/contest-auth";
 
 function db() {
   return createClient(
@@ -45,10 +45,17 @@ function db() {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const userId = await getAuthUserId(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const authUser = await getAuthUser(req);
+  if (!authUser) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const supabase = db();
+  let contestUserId = authUser.id;
+  try {
+    const resolved = await ensurePublicUserRow(supabase, authUser);
+    contestUserId = resolved.id;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "failed_to_ensure_user_profile" }, { status: 500 });
+  }
 
   // ── Guard: contest must be open and before lock ───────────
   const { data: contest, error: cErr } = await supabase
@@ -73,7 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .from("user_lineups")
     .select("id, status")
     .eq("contest_id", id)
-    .eq("user_id", userId)
+    .eq("user_id", contestUserId)
     .maybeSingle();
 
   if (lErr)    return NextResponse.json({ error: lErr.message }, { status: 500 });

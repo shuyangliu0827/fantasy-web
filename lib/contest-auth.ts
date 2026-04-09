@@ -55,7 +55,7 @@ export async function getAuthUser(req: Request): Promise<ContestAuthUser | null>
 export async function ensurePublicUserRow(
   supabase: SupabaseClient,
   authUser: ContestAuthUser,
-): Promise<void> {
+): Promise<{ id: string }> {
   const { data: existing, error: selectErr } = await supabase
     .from("users")
     .select("id")
@@ -63,20 +63,41 @@ export async function ensurePublicUserRow(
     .maybeSingle();
 
   if (selectErr) throw new Error(selectErr.message);
-  if (existing?.id) return;
+  if (existing?.id) return { id: existing.id };
 
-  const email = authUser.email?.trim().toLowerCase() || `${authUser.id}@auth.local`;
-  const fallbackName = email.split("@")[0] || "user";
+  const email = authUser.email?.trim().toLowerCase() || null;
+  if (email) {
+    const { data: byEmail, error: emailErr } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (emailErr) throw new Error(emailErr.message);
+    if (byEmail?.id) return { id: byEmail.id };
+  }
+
+  const fallbackEmail = email || `${authUser.id}@auth.local`;
+  const fallbackName = fallbackEmail.split("@")[0] || "user";
   const name = (authUser.name?.trim() || fallbackName).slice(0, 80);
   const slugBase = name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "").slice(0, 20) || "user";
   const username = `${slugBase}_${authUser.id.slice(0, 8)}`;
 
-  const { error: upsertErr } = await supabase
+  const { error: insertErr } = await supabase
     .from("users")
-    .upsert(
-      { id: authUser.id, email, name, username },
-      { onConflict: "id", ignoreDuplicates: false },
-    );
+    .insert({ id: authUser.id, email: fallbackEmail, name, username });
 
-  if (upsertErr) throw new Error(upsertErr.message);
+  if (insertErr) {
+    // Race-safe fallback: if another request inserted same email first, reuse it.
+    if (email && insertErr.code === "23505" && String(insertErr.message).includes("users_email_key")) {
+      const { data: raced, error: racedErr } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (racedErr) throw new Error(racedErr.message);
+      if (raced?.id) return { id: raced.id };
+    }
+    throw new Error(insertErr.message);
+  }
+  return { id: authUser.id };
 }
