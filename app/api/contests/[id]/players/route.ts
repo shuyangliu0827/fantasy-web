@@ -40,6 +40,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 function db() {
   return createClient(
@@ -102,7 +103,7 @@ export async function GET(
       fpts_scored: cp.fpts_scored ?? null,  // null until scoring job runs
       name:        meta?.name     ?? "",
       team:        meta?.team     ?? "",
-      position:    meta?.position ?? "N/A",
+      position:    getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
       fpts_avg:    meta?.fpts_avg ?? 0,
       injury:      meta?.injury   ?? null,
     };

@@ -74,6 +74,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/contest-positions";
+import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 
 function db() {
   return createClient(
@@ -190,14 +191,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const intIds = playerIds.map((id) => parseInt(id, 10));
   const { data: posRows, error: posErr } = await supabase
     .from("player_stats_cache")
-    .select("player_id, position")
+    .select("player_id, name, position")
     .in("player_id", intIds);
 
   if (posErr) return NextResponse.json({ error: posErr.message }, { status: 500 });
 
   // Build TEXT-keyed map so lookup matches contest_players.player_id format.
+  // Normalize via getCanonicalPlayerPosition — same as nba-stats read path — so
+  // raw BDL values in the DB ("G", "F-G", etc.) resolve to canonical before
+  // being passed to isEligibleForContestSlot.
   const posMap = new Map<string, string>(
-    (posRows ?? []).map((r) => [String(r.player_id), r.position ?? "N/A"]),
+    (posRows ?? []).map((r) => [
+      String(r.player_id),
+      getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
+    ]),
   );
 
   for (const pick of players) {
