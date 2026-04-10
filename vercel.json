@@ -3,6 +3,10 @@
     {
       "path": "/api/contests/create-today",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/contests/sync-lifecycle",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

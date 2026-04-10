@@ -28,17 +28,52 @@ function db() {
   );
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  const supabase = db();
 
-  const { data, error } = await db()
+  const { data: initialData, error } = await supabase
     .from("contests")
     .select("id, date, status, lineup_lock_at")
     .eq("date", today)
     .maybeSingle();
+  let data = initialData;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data)  return NextResponse.json({ error: "no_contest_today" }, { status: 404 });
+
+  // Reliability fallback: if cron hasn't created today's contest yet, trigger
+  // create-today once server-side (same env, authenticated by CRON_SECRET).
+  if (!data) {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return NextResponse.json({ error: "no_contest_today" }, { status: 404 });
+
+    try {
+      const url = new URL(req.url);
+      const createUrl = `${url.origin}/api/contests/create-today?secret=${encodeURIComponent(secret)}`;
+      const cr = await fetch(createUrl, { cache: "no-store" });
+      const payload = await cr.json();
+      if (payload?.contest) data = payload.contest;
+      if (!data && payload?.reason === "no_games_today") {
+        return NextResponse.json({ error: "no_contest_today" }, { status: 404 });
+      }
+    } catch {
+      // ignore and fall through to no_contest_today
+    }
+  }
+
+  if (!data) return NextResponse.json({ error: "no_contest_today" }, { status: 404 });
+
+  // Soft lifecycle transition: open -> locked when deadline passes.
+  // Full scoring/ranking is handled by /api/contests/sync-lifecycle cron.
+  if (data.status === "open" && new Date() >= new Date(data.lineup_lock_at)) {
+    const { data: updated, error: updErr } = await supabase
+      .from("contests")
+      .update({ status: "locked" })
+      .eq("id", data.id)
+      .select("id, date, status, lineup_lock_at")
+      .single();
+    if (!updErr && updated) data = updated;
+  }
 
   return NextResponse.json(data);
 }

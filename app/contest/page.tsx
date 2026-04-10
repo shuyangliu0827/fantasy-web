@@ -29,6 +29,15 @@ type ContestPlayer = {
   injury: string | null;
 };
 
+type LeaderboardEntry = {
+  rank: number | null;
+  user_id: string;
+  username: string;
+  total_fpts: number | null;
+  status: string;
+  submitted_at: string | null;
+};
+
 // ── Constants ─────────────────────────────────────────────────
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
@@ -94,6 +103,10 @@ export default function ContestPage() {
   // Lineup: array of 5 player_ids (null = empty slot)
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null, null]);
   const [lineupStatus, setLineupStatus] = useState<string>("draft");
+  const [lineupTotalFpts, setLineupTotalFpts] = useState<number | null>(null);
+  const [lineupRank, setLineupRank] = useState<number | null>(null);
+  const [lineupSubmittedAt, setLineupSubmittedAt] = useState<string | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -146,6 +159,13 @@ export default function ContestPage() {
         setPlayers(pool ?? []);
       }
 
+      // 2b. Leaderboard snapshot
+      const lr = await fetch(`/api/contests/${c.id}/leaderboard?limit=10`);
+      if (lr.ok) {
+        const payload = await lr.json();
+        setLeaderboard(payload.entries ?? []);
+      }
+
       // 3. Existing lineup (requires auth; 404 = no lineup yet = fine)
       if (user) {
         const { data } = await getMyLineup(c.id);
@@ -154,6 +174,9 @@ export default function ContestPage() {
           for (const p of data.players) next[p.slot - 1] = p.player_id;
           setSlots(next);
           setLineupStatus(data.status);
+          setLineupTotalFpts(data.total_fpts ?? null);
+          setLineupRank(data.rank ?? null);
+          setLineupSubmittedAt(data.submitted_at ?? null);
         }
       }
     } catch {
@@ -330,7 +353,14 @@ export default function ContestPage() {
       showFlash("err", msgs[subResult.error] ?? subResult.error);
     } else {
       setLineupStatus("submitted");
+      setLineupSubmittedAt(new Date().toISOString());
       showFlash("ok", "Lineup submitted! Good luck 🎯");
+      fetch(`/api/contests/${contest.id}/leaderboard?limit=10`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((payload) => {
+          if (payload?.entries) setLeaderboard(payload.entries);
+        })
+        .catch(() => null);
     }
   }
 
@@ -510,10 +540,10 @@ export default function ContestPage() {
                           </span>
                         )}
 
-                        {/* Score (if contest is scored) */}
-                        {contest.status === "scored" && p.fpts_scored !== null && (
+                        {/* Score progress (locked/live + scored/final) */}
+                        {(contest.status === "locked" || contest.status === "scored") && (
                           <span style={{ fontSize: 12, fontWeight: 700, color: "#059669", flexShrink: 0 }}>
-                            {p.fpts_scored.toFixed(1)}
+                            {(p.fpts_scored ?? 0).toFixed(1)}
                           </span>
                         )}
 
@@ -618,6 +648,63 @@ export default function ContestPage() {
                 borderRadius: 8, fontSize: 12, color: "#15803d", fontWeight: 500,
               }}>
                 ✓ Lineup submitted — you can still update it until lock time.
+              </div>
+            )}
+
+            {/* ── Status & results ─────────────────────────── */}
+            {user && (
+              <div style={{
+                margin: "12px 16px 0",
+                padding: "12px 14px",
+                background: "#fff",
+                border: "1px solid #e5e7eb",
+                borderRadius: 10,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 8 }}>
+                  Contest Status & Results
+                </div>
+                <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>
+                  {contest.status === "open" && "Open — lineup editable, countdown active."}
+                  {contest.status === "locked" && "Locked/Live — lineup frozen, scores updating."}
+                  {contest.status === "scored" && "Final — scores and ranks are complete."}
+                </div>
+                <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                  <StatCell label="My Status" value={lineupStatus || "draft"} />
+                  <StatCell
+                    label="My Score"
+                    value={lineupTotalFpts !== null
+                      ? lineupTotalFpts.toFixed(1)
+                      : slots.reduce((sum, pid) => sum + ((pid ? playerMap.get(pid)?.fpts_scored : 0) ?? 0), 0).toFixed(1)}
+                  />
+                  <StatCell label="My Rank" value={lineupRank ? `#${lineupRank}` : "—"} />
+                </div>
+                {lineupSubmittedAt && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+                    Submitted: {new Date(lineupSubmittedAt).toLocaleString()}
+                  </div>
+                )}
+                {leaderboard.length > 0 && (
+                  <div style={{ marginTop: 10, borderTop: "1px solid #f3f4f6", paddingTop: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 6 }}>Top Entries</div>
+                    {leaderboard.slice(0, 5).map((e, i) => (
+                      <div key={`${e.user_id}-${i}`} style={{
+                        display: "grid",
+                        gridTemplateColumns: "44px 1fr 72px",
+                        gap: 8,
+                        alignItems: "center",
+                        padding: "4px 0",
+                        fontSize: 12,
+                        color: "#374151",
+                      }}>
+                        <span style={{ fontWeight: 700 }}>{e.rank ? `#${e.rank}` : "—"}</span>
+                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.username}</span>
+                        <span style={{ textAlign: "right", fontWeight: 700 }}>
+                          {e.total_fpts !== null ? e.total_fpts.toFixed(1) : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -771,6 +858,19 @@ function FilterPill({
     >
       {label}
     </button>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 6px" }}>
+      <div style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", fontWeight: 700 }}>
+        {label}
+      </div>
+      <div style={{ marginTop: 3, fontSize: 13, color: "#111827", fontWeight: 700 }}>
+        {value}
+      </div>
+    </div>
   );
 }
 
