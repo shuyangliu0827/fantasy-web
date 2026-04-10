@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/contests/sync-lifecycle",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }
