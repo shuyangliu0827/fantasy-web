@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
+import { LANGUAGE_LABELS } from "@/lib/language-labels";
 
 const NAV = [
   { href: "/",            zh: "首页",   en: "Home" },
@@ -130,7 +131,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 cursor: "pointer",
               }}
             >
-              ZH / EN
+              {LANGUAGE_LABELS.zh} / {LANGUAGE_LABELS.en}
             </button>
 
             {!user ? (
@@ -254,7 +255,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer",
               }}
             >
-              ZH / EN
+              {LANGUAGE_LABELS.zh} / {LANGUAGE_LABELS.en}
             </button>
             {!user ? (
               <>

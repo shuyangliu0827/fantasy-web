@@ -27,7 +27,8 @@ import {
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr, getLocalDateStr, localToUtcMidnight } from "@/lib/week-utils";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { buildLineupPostDraft } from "@/lib/lineup-post-draft";
+import { buildLineupInsight, renderLineupPostDraft, type LineupInsight } from "@/lib/lineup-post-insight";
+import { LANGUAGE_LABELS, type AppLanguage } from "@/lib/language-labels";
 
 // ── Types ──
 
@@ -143,6 +144,9 @@ export default function RosterPage() {
   const [lineupPostBody, setLineupPostBody] = useState("");
   const [lineupPostPublishing, setLineupPostPublishing] = useState(false);
   const [lineupPostError, setLineupPostError] = useState<string | null>(null);
+  const [lineupPostLang, setLineupPostLang] = useState<AppLanguage>("zh");
+  const [lineupInsight, setLineupInsight] = useState<LineupInsight | null>(null);
+  const [showLineupDetails, setShowLineupDetails] = useState(false);
 
   // ── Historical-aware roster view ──
   // For the current date, show only active players (no releasedAt).
@@ -189,6 +193,10 @@ export default function RosterPage() {
     const dateLineup = dailyLineups[selectedDate] || {};
     setLineup(dateLineup);
   }, [selectedDate, dailyLineups]);
+
+  useEffect(() => {
+    setLineupPostLang(lang === "zh" ? "zh" : "en");
+  }, [lang]);
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -752,7 +760,7 @@ export default function RosterPage() {
     return calcFantasyPoints(seasonStats.averages, leagueWeights);
   }
 
-  function openLineupPostDraft() {
+  function buildCurrentLineupInsight(): LineupInsight {
     const starters = starterSlots
       .map((slot) => {
         const player = getPlayerInSlot(slot);
@@ -761,6 +769,7 @@ export default function RosterPage() {
           id: player.id,
           name: player.name,
           slot,
+          position: getPlayerPosition(player),
           projectedPoints: getProjectedPointsForDraft(player),
         };
       })
@@ -774,24 +783,37 @@ export default function RosterPage() {
           id: player.id,
           name: player.name,
           slot,
+          position: getPlayerPosition(player),
           projectedPoints: getProjectedPointsForDraft(player),
         };
       })
       .filter((player): player is NonNullable<typeof player> => !!player);
 
-    const draft = buildLineupPostDraft({
-      userId: user?.id,
-      leagueId: league?.id,
+    return buildLineupInsight({
       lineupDate: selectedDate,
       starters,
       bench,
     });
+  }
 
+  function openLineupPostDraft() {
+    const insight = buildCurrentLineupInsight();
+    const draft = renderLineupPostDraft(insight, lineupPostLang);
+    setLineupInsight(insight);
     setLineupPostTitle(draft.title);
     setLineupPostBody(draft.body);
+    setShowLineupDetails(false);
     setLineupPostError(null);
     setShowLineupPostSheet(true);
     // TODO(analytics): track("lineup_post_draft_opened")
+  }
+
+  function handleLineupPostLangChange(nextLang: AppLanguage) {
+    setLineupPostLang(nextLang);
+    if (!lineupInsight) return;
+    const nextDraft = renderLineupPostDraft(lineupInsight, nextLang);
+    setLineupPostTitle(nextDraft.title);
+    setLineupPostBody(nextDraft.body);
   }
 
   async function publishLineupPost() {
@@ -800,47 +822,14 @@ export default function RosterPage() {
       return;
     }
 
-    const starters = starterSlots
-      .map((slot) => {
-        const player = getPlayerInSlot(slot);
-        if (!player) return null;
-        return {
-          id: player.id,
-          name: player.name,
-          slot,
-          projectedPoints: getProjectedPointsForDraft(player),
-        };
-      })
-      .filter((player): player is NonNullable<typeof player> => !!player);
-
-    const bench = benchSlots
-      .map((slot) => {
-        const player = getPlayerInSlot(slot);
-        if (!player) return null;
-        return {
-          id: player.id,
-          name: player.name,
-          slot,
-          projectedPoints: getProjectedPointsForDraft(player),
-        };
-      })
-      .filter((player): player is NonNullable<typeof player> => !!player);
-
-    const draft = buildLineupPostDraft({
-      userId: user?.id,
-      leagueId: league?.id,
-      lineupDate: selectedDate,
-      starters,
-      bench,
-    });
+    const insight = lineupInsight ?? buildCurrentLineupInsight();
+    const fallbackDraft = renderLineupPostDraft(insight, lineupPostLang);
 
     setLineupPostPublishing(true);
     setLineupPostError(null);
     const result = await createInsight({
       title: lineupPostTitle,
-      body: lineupPostBody.trim() || draft.body,
-      post_type: "lineup",
-      lineup_context: draft.metadata,
+      body: lineupPostBody.trim() || fallbackDraft.body,
     });
     setLineupPostPublishing(false);
 
@@ -1165,6 +1154,17 @@ export default function RosterPage() {
             <p className="lineup-post-note">
               {t("快速编辑后发布到 Insights。", "Quickly edit and publish to Insights.")}
             </p>
+            <div className="lineup-post-lang-toggle" role="tablist" aria-label="language toggle">
+              {(["zh", "en"] as const).map((option) => (
+                <button
+                  key={option}
+                  className={`lineup-post-lang-btn ${lineupPostLang === option ? "active" : ""}`}
+                  onClick={() => handleLineupPostLangChange(option)}
+                >
+                  {LANGUAGE_LABELS[option]}
+                </button>
+              ))}
+            </div>
             <label className="lineup-post-label">{t("标题", "Title")}</label>
             <input
               value={lineupPostTitle}
@@ -1180,6 +1180,18 @@ export default function RosterPage() {
               rows={8}
               maxLength={2000}
             />
+            {lineupInsight && (
+              <div className="lineup-post-details">
+                <button className="lineup-post-details-toggle" onClick={() => setShowLineupDetails((prev) => !prev)}>
+                  {showLineupDetails ? t("隐藏阵容摘要", "Hide lineup summary") : t("查看阵容摘要", "View lineup summary")}
+                </button>
+                {showLineupDetails && (
+                  <pre className="lineup-post-details-body">
+                    {renderLineupPostDraft(lineupInsight, lineupPostLang).lineupSummary}
+                  </pre>
+                )}
+              </div>
+            )}
             {lineupPostError && <div className="lineup-post-error">{lineupPostError}</div>}
             <div className="lineup-post-actions">
               <button
@@ -1633,6 +1645,26 @@ const styles = `
     color: #6b7280;
     font-size: 13px;
   }
+  .lineup-post-lang-toggle {
+    display: inline-flex;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .lineup-post-lang-btn {
+    border: none;
+    background: #fff;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .lineup-post-lang-btn.active {
+    background: #1e3a8a;
+    color: #fff;
+  }
   .lineup-post-label {
     display: block;
     margin: 0 0 6px 0;
@@ -1654,6 +1686,31 @@ const styles = `
   .lineup-post-textarea {
     resize: vertical;
     min-height: 140px;
+  }
+  .lineup-post-details {
+    margin-bottom: 12px;
+  }
+  .lineup-post-details-toggle {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 8px;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .lineup-post-details-body {
+    margin: 8px 0 0;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #475569;
+    white-space: pre-wrap;
   }
   .lineup-post-error {
     background: #fef2f2;

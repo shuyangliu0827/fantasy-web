@@ -15,6 +15,7 @@
    export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
    import { getTodayStr, formatDateStr, addUtcDays, getLocalDateStr } from "./week-utils";
    import { resolveBdlIds } from "./player-identity";
+   import { buildInsightInsertPayload } from "./insight-insert";
    
    // ==================== Types ====================
    
@@ -60,8 +61,6 @@
      images?: string[];      // 多图支持
      tags?: string[];
      content_type?: string;  // 'community' | 'news'
-     post_type?: string;     // 'standard' | 'lineup'
-     lineup_context?: Record<string, unknown> | null;
      author_id: string;
      author?: User;
      heat: number;
@@ -609,26 +608,19 @@
      cover_url?: string;
      images?: string[];      // 多图支持
      tags?: string[];
-     post_type?: string;
-     lineup_context?: Record<string, unknown>;
    }) {
      const user = getSessionUser();
      if (!user) return { ok: false as const, error: "Login required" };
    
      const { data, error } = await supabase
        .from("insights")
-       .insert({
-         title: input.title.trim(),
-         body: input.body.trim(),
-         league_slug: input.league_slug,
+       .insert(buildInsightInsertPayload({
+         title: input.title,
+         body: input.body,
          cover_url: input.cover_url,
-         images: input.images,      // 多图支持
+         images: input.images,
          tags: input.tags,
-         post_type: input.post_type ?? "standard",
-         lineup_context: input.lineup_context,
-         author_id: user.id,
-         heat: 0,  // 初始点赞数为 0
-       })
+       }, user.id))
        .select(`*, author:users(id, name, username, avatar_url)`)
        .single();
    
