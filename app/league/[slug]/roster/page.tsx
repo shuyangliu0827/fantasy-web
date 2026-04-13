@@ -11,6 +11,7 @@ import {
   getSessionUser,
   getLeagueBySlug,
   createInsight,
+  uploadImage,
   autoSetLineup,
   isEligibleForSlot,
   fetchTeamRosterFromDB,
@@ -147,6 +148,9 @@ export default function RosterPage() {
   const [lineupPostLang, setLineupPostLang] = useState<AppLanguage>("zh");
   const [lineupInsight, setLineupInsight] = useState<LineupInsight | null>(null);
   const [showLineupDetails, setShowLineupDetails] = useState(false);
+  const [lineupPostImageFile, setLineupPostImageFile] = useState<File | null>(null);
+  const [lineupPostImagePreview, setLineupPostImagePreview] = useState<string | null>(null);
+  const [lineupPostImageUploading, setLineupPostImageUploading] = useState(false);
 
   // ── Historical-aware roster view ──
   // For the current date, show only active players (no releasedAt).
@@ -197,6 +201,12 @@ export default function RosterPage() {
   useEffect(() => {
     setLineupPostLang(lang === "zh" ? "zh" : "en");
   }, [lang]);
+
+  useEffect(() => {
+    return () => {
+      if (lineupPostImagePreview) URL.revokeObjectURL(lineupPostImagePreview);
+    };
+  }, [lineupPostImagePreview]);
 
   async function loadData() {
     const leagueData = await getLeagueBySlug(slug);
@@ -803,6 +813,7 @@ export default function RosterPage() {
     setLineupPostTitle(draft.title);
     setLineupPostBody(draft.body);
     setShowLineupDetails(false);
+    removeLineupPostImage();
     setLineupPostError(null);
     setShowLineupPostSheet(true);
     // TODO(analytics): track("lineup_post_draft_opened")
@@ -827,9 +838,24 @@ export default function RosterPage() {
 
     setLineupPostPublishing(true);
     setLineupPostError(null);
+    let uploadedImageUrl: string | undefined;
+    if (lineupPostImageFile) {
+      setLineupPostImageUploading(true);
+      const uploadResult = await uploadImage(lineupPostImageFile, "posts");
+      setLineupPostImageUploading(false);
+      if (!uploadResult.ok) {
+        setLineupPostPublishing(false);
+        setLineupPostError(uploadResult.error || t("图片上传失败", "Image upload failed"));
+        return;
+      }
+      uploadedImageUrl = uploadResult.url;
+    }
+
     const result = await createInsight({
       title: lineupPostTitle,
       body: lineupPostBody.trim() || fallbackDraft.body,
+      cover_url: uploadedImageUrl,
+      images: uploadedImageUrl ? [uploadedImageUrl] : undefined,
     });
     setLineupPostPublishing(false);
 
@@ -838,9 +864,34 @@ export default function RosterPage() {
       return;
     }
 
+    removeLineupPostImage();
     setShowLineupPostSheet(false);
     // TODO(analytics): track("lineup_post_published")
     alert(t("阵容帖子已发布", "Lineup post published"));
+  }
+
+  function onLineupPostImageSelected(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setLineupPostError(t("请选择图片文件", "Please select an image file"));
+      return;
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setLineupPostError(t("图片大小不能超过 30MB", "Image must be under 30MB"));
+      return;
+    }
+    if (lineupPostImagePreview) URL.revokeObjectURL(lineupPostImagePreview);
+    const preview = URL.createObjectURL(file);
+    setLineupPostImageFile(file);
+    setLineupPostImagePreview(preview);
+    setLineupPostError(null);
+  }
+
+  function removeLineupPostImage() {
+    if (lineupPostImagePreview) URL.revokeObjectURL(lineupPostImagePreview);
+    setLineupPostImageFile(null);
+    setLineupPostImagePreview(null);
   }
 
   function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {
@@ -1134,6 +1185,7 @@ export default function RosterPage() {
         <div
           className="lineup-post-overlay"
           onClick={() => {
+            removeLineupPostImage();
             setShowLineupPostSheet(false);
             // TODO(analytics): track("lineup_post_cancelled")
           }}
@@ -1144,6 +1196,7 @@ export default function RosterPage() {
               <button
                 className="lineup-post-close"
                 onClick={() => {
+                  removeLineupPostImage();
                   setShowLineupPostSheet(false);
                   // TODO(analytics): track("lineup_post_cancelled")
                 }}
@@ -1180,6 +1233,24 @@ export default function RosterPage() {
               rows={8}
               maxLength={2000}
             />
+            <div className="lineup-post-image-block">
+              <label className="lineup-post-label">{t("可选配图", "Optional image")}</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => onLineupPostImageSelected(e.target.files)}
+                className="lineup-post-image-input"
+              />
+              {lineupPostImagePreview && (
+                <div className="lineup-post-image-preview-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={lineupPostImagePreview} alt="lineup-post-preview" className="lineup-post-image-preview" />
+                  <button className="lineup-post-image-remove" onClick={removeLineupPostImage}>
+                    {t("移除图片", "Remove image")}
+                  </button>
+                </div>
+              )}
+            </div>
             {lineupInsight && (
               <div className="lineup-post-details">
                 <button className="lineup-post-details-toggle" onClick={() => setShowLineupDetails((prev) => !prev)}>
@@ -1197,14 +1268,19 @@ export default function RosterPage() {
               <button
                 className="lineup-post-cancel"
                 onClick={() => {
+                  removeLineupPostImage();
                   setShowLineupPostSheet(false);
                   // TODO(analytics): track("lineup_post_cancelled")
                 }}
               >
                 {t("取消", "Cancel")}
               </button>
-              <button className="lineup-post-submit" onClick={publishLineupPost} disabled={lineupPostPublishing}>
-                {lineupPostPublishing ? t("发布中...", "Publishing...") : t("发布", "Publish")}
+              <button className="lineup-post-submit" onClick={publishLineupPost} disabled={lineupPostPublishing || lineupPostImageUploading}>
+                {lineupPostImageUploading
+                  ? t("上传图片中...", "Uploading image...")
+                  : lineupPostPublishing
+                  ? t("发布中...", "Publishing...")
+                  : t("发布", "Publish")}
               </button>
             </div>
           </div>
@@ -1689,6 +1765,42 @@ const styles = `
   }
   .lineup-post-details {
     margin-bottom: 12px;
+  }
+  .lineup-post-image-block {
+    margin-bottom: 12px;
+  }
+  .lineup-post-image-input {
+    display: block;
+    width: 100%;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 8px;
+    background: #f8fafc;
+    font-size: 12px;
+    color: #475569;
+    box-sizing: border-box;
+  }
+  .lineup-post-image-preview-wrap {
+    margin-top: 8px;
+  }
+  .lineup-post-image-preview {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    display: block;
+  }
+  .lineup-post-image-remove {
+    margin-top: 6px;
+    border: none;
+    border-radius: 6px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
   }
   .lineup-post-details-toggle {
     border: 1px solid #e2e8f0;

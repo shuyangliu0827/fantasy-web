@@ -30,3 +30,18 @@ test("buildInsightInsertPayload keeps only supported insert fields", () => {
   assert.equal("post_type" in payload, false);
   assert.equal("lineup_context" in payload, false);
 });
+
+test("buildInsightInsertPayload preserves uploaded image url fields", () => {
+  const payload = buildInsightInsertPayload(
+    {
+      title: "Lineup post",
+      body: "Body",
+      cover_url: "https://cdn.example.com/pic.jpg",
+      images: ["https://cdn.example.com/pic.jpg"],
+    },
+    "user-2"
+  );
+
+  assert.equal(payload.cover_url, "https://cdn.example.com/pic.jpg");
+  assert.deepEqual(payload.images, ["https://cdn.example.com/pic.jpg"]);
+});
