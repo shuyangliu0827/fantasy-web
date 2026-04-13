@@ -10,6 +10,7 @@ import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   getSessionUser,
   getLeagueBySlug,
+  createInsight,
   autoSetLineup,
   isEligibleForSlot,
   fetchTeamRosterFromDB,
@@ -26,6 +27,7 @@ import {
 import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
 import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr, getLocalDateStr, localToUtcMidnight } from "@/lib/week-utils";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+import { buildLineupPostDraft } from "@/lib/lineup-post-draft";
 
 // ── Types ──
 
@@ -136,6 +138,11 @@ export default function RosterPage() {
   const [gameDayStats, setGameDayStats] = useState<DateStatsMap>({});
   const [gamesLoading, setGamesLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [showLineupPostSheet, setShowLineupPostSheet] = useState(false);
+  const [lineupPostTitle, setLineupPostTitle] = useState("");
+  const [lineupPostBody, setLineupPostBody] = useState("");
+  const [lineupPostPublishing, setLineupPostPublishing] = useState(false);
+  const [lineupPostError, setLineupPostError] = useState<string | null>(null);
 
   // ── Historical-aware roster view ──
   // For the current date, show only active players (no releasedAt).
@@ -736,6 +743,117 @@ export default function RosterPage() {
     return <div className="col-fpts">{calcFantasyPoints(stats.averages, leagueWeights).toFixed(1)}</div>;
   }
 
+  function getProjectedPointsForDraft(player: RosterPlayer): number | undefined {
+    const dayStats = getGameDayStatsForPlayer(player);
+    if (dayStats) return calcFantasyPoints(dayStats, leagueWeights);
+    if (selectedDate === todayStr || isPastDate) return undefined;
+    const seasonStats = getStatsForPlayer(player);
+    if (!seasonStats) return undefined;
+    return calcFantasyPoints(seasonStats.averages, leagueWeights);
+  }
+
+  function openLineupPostDraft() {
+    const starters = starterSlots
+      .map((slot) => {
+        const player = getPlayerInSlot(slot);
+        if (!player) return null;
+        return {
+          id: player.id,
+          name: player.name,
+          slot,
+          projectedPoints: getProjectedPointsForDraft(player),
+        };
+      })
+      .filter((player): player is NonNullable<typeof player> => !!player);
+
+    const bench = benchSlots
+      .map((slot) => {
+        const player = getPlayerInSlot(slot);
+        if (!player) return null;
+        return {
+          id: player.id,
+          name: player.name,
+          slot,
+          projectedPoints: getProjectedPointsForDraft(player),
+        };
+      })
+      .filter((player): player is NonNullable<typeof player> => !!player);
+
+    const draft = buildLineupPostDraft({
+      userId: user?.id,
+      leagueId: league?.id,
+      lineupDate: selectedDate,
+      starters,
+      bench,
+    });
+
+    setLineupPostTitle(draft.title);
+    setLineupPostBody(draft.body);
+    setLineupPostError(null);
+    setShowLineupPostSheet(true);
+    // TODO(analytics): track("lineup_post_draft_opened")
+  }
+
+  async function publishLineupPost() {
+    if (!lineupPostTitle.trim()) {
+      setLineupPostError(t("请输入标题", "Please enter a title"));
+      return;
+    }
+
+    const starters = starterSlots
+      .map((slot) => {
+        const player = getPlayerInSlot(slot);
+        if (!player) return null;
+        return {
+          id: player.id,
+          name: player.name,
+          slot,
+          projectedPoints: getProjectedPointsForDraft(player),
+        };
+      })
+      .filter((player): player is NonNullable<typeof player> => !!player);
+
+    const bench = benchSlots
+      .map((slot) => {
+        const player = getPlayerInSlot(slot);
+        if (!player) return null;
+        return {
+          id: player.id,
+          name: player.name,
+          slot,
+          projectedPoints: getProjectedPointsForDraft(player),
+        };
+      })
+      .filter((player): player is NonNullable<typeof player> => !!player);
+
+    const draft = buildLineupPostDraft({
+      userId: user?.id,
+      leagueId: league?.id,
+      lineupDate: selectedDate,
+      starters,
+      bench,
+    });
+
+    setLineupPostPublishing(true);
+    setLineupPostError(null);
+    const result = await createInsight({
+      title: lineupPostTitle,
+      body: lineupPostBody.trim() || draft.body,
+      post_type: "lineup",
+      lineup_context: draft.metadata,
+    });
+    setLineupPostPublishing(false);
+
+    if (!result.ok) {
+      setLineupPostError(result.error || t("发布失败", "Publish failed"));
+      return;
+    }
+
+    setShowLineupPostSheet(false);
+    // TODO(analytics): track("lineup_post_published")
+    alert(t("阵容帖子已发布", "Lineup post published"));
+  }
+
   function renderRow(slot: string, badgeType: "starter" | "bench" | "unassigned", player: RosterPlayer | undefined) {
     const slotInfo = SLOT_LABELS[slot];
     const isSwapTarget = swapSource === slot;
@@ -822,9 +940,14 @@ export default function RosterPage() {
                 <p>{t("设置阵容 · 查看赛程和数据", "Set Lineup · Schedule & Stats")}</p>
               </div>
               {isMyTeam && !isPastDate && (
-                <button className="auto-btn" onClick={handleAutoLineup}>
-                  {t("自动排阵", "Auto Set")}
-                </button>
+                <div className="header-actions">
+                  <button className="share-btn" onClick={openLineupPostDraft}>
+                    {t("发布阵容", "Post Lineup")}
+                  </button>
+                  <button className="auto-btn" onClick={handleAutoLineup}>
+                    {t("自动排阵", "Auto Set")}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1018,6 +1141,64 @@ export default function RosterPage() {
         </div>
       </main>
 
+      {showLineupPostSheet && (
+        <div
+          className="lineup-post-overlay"
+          onClick={() => {
+            setShowLineupPostSheet(false);
+            // TODO(analytics): track("lineup_post_cancelled")
+          }}
+        >
+          <div className="lineup-post-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="lineup-post-header">
+              <h3>{t("发布阵容", "Post Lineup")}</h3>
+              <button
+                className="lineup-post-close"
+                onClick={() => {
+                  setShowLineupPostSheet(false);
+                  // TODO(analytics): track("lineup_post_cancelled")
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <p className="lineup-post-note">
+              {t("快速编辑后发布到 Insights。", "Quickly edit and publish to Insights.")}
+            </p>
+            <label className="lineup-post-label">{t("标题", "Title")}</label>
+            <input
+              value={lineupPostTitle}
+              onChange={(e) => setLineupPostTitle(e.target.value)}
+              className="lineup-post-input"
+              maxLength={80}
+            />
+            <label className="lineup-post-label">{t("正文", "Body")}</label>
+            <textarea
+              value={lineupPostBody}
+              onChange={(e) => setLineupPostBody(e.target.value)}
+              className="lineup-post-textarea"
+              rows={8}
+              maxLength={2000}
+            />
+            {lineupPostError && <div className="lineup-post-error">{lineupPostError}</div>}
+            <div className="lineup-post-actions">
+              <button
+                className="lineup-post-cancel"
+                onClick={() => {
+                  setShowLineupPostSheet(false);
+                  // TODO(analytics): track("lineup_post_cancelled")
+                }}
+              >
+                {t("取消", "Cancel")}
+              </button>
+              <button className="lineup-post-submit" onClick={publishLineupPost} disabled={lineupPostPublishing}>
+                {lineupPostPublishing ? t("发布中...", "Publishing...") : t("发布", "Publish")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{styles}</style>
     </div>
   );
@@ -1058,6 +1239,11 @@ const styles = `
     justify-content: space-between;
     align-items: flex-start;
   }
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
   .page-header h1 {
     font-size: 24px;
     font-weight: 700;
@@ -1080,6 +1266,17 @@ const styles = `
     cursor: pointer;
   }
   .auto-btn:hover { opacity: 0.9; }
+  .share-btn {
+    padding: 10px 16px;
+    background: #fff;
+    color: #1e3a8a;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .share-btn:hover { background: #eff6ff; }
 
   /* Team selector */
   .team-selector {
@@ -1390,6 +1587,110 @@ const styles = `
     font-size: 13px;
   }
 
+  .lineup-post-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 1200;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 12px;
+  }
+  .lineup-post-sheet {
+    width: min(560px, 100%);
+    max-height: 85vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e5e7eb;
+    padding: 16px;
+  }
+  .lineup-post-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .lineup-post-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: #111827;
+  }
+  .lineup-post-close {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #111827;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .lineup-post-note {
+    margin: 0 0 12px 0;
+    color: #6b7280;
+    font-size: 13px;
+  }
+  .lineup-post-label {
+    display: block;
+    margin: 0 0 6px 0;
+    color: #374151;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .lineup-post-input,
+  .lineup-post-textarea {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+  }
+  .lineup-post-textarea {
+    resize: vertical;
+    min-height: 140px;
+  }
+  .lineup-post-error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    border-radius: 8px;
+    font-size: 13px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+  }
+  .lineup-post-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .lineup-post-cancel,
+  .lineup-post-submit {
+    border-radius: 8px;
+    border: none;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .lineup-post-cancel {
+    background: #f3f4f6;
+    color: #374151;
+  }
+  .lineup-post-submit {
+    background: #1e3a8a;
+    color: #fff;
+  }
+  .lineup-post-submit:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
+  }
+
   /* Empty & error states */
   .empty-state {
     text-align: center;
@@ -1435,5 +1736,8 @@ const styles = `
     .player-meta { font-size: 8px; }
     .page-content { padding: 16px 8px 48px; }
     .page-header-top { flex-direction: column; gap: 8px; }
+    .header-actions { width: 100%; }
+    .share-btn,
+    .auto-btn { flex: 1; }
   }
 `;

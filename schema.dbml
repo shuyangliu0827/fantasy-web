@@ -225,6 +225,8 @@ Table insights {
   cover_url varchar
   images text[]
   tags text[]
+  post_type text [not null, default: 'standard']
+  lineup_context json [note: 'Metadata for lineup-derived posts']
   heat int [default: 0, note: 'Like count']
   created_at timestamp [default: `now()`]
 }
