@@ -781,6 +781,7 @@ export default function RosterPage() {
           slot,
           position: getPlayerPosition(player),
           projectedPoints: getProjectedPointsForDraft(player),
+          hasGame: !!getGameForPlayer(player),
         };
       })
       .filter((player): player is NonNullable<typeof player> => !!player);
@@ -795,6 +796,7 @@ export default function RosterPage() {
           slot,
           position: getPlayerPosition(player),
           projectedPoints: getProjectedPointsForDraft(player),
+          hasGame: !!getGameForPlayer(player),
         };
       })
       .filter((player): player is NonNullable<typeof player> => !!player);
