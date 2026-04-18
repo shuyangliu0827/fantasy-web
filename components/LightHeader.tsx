@@ -125,7 +125,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 cursor: "pointer",
               }}
             >
-              ZH / EN
+              中文 / EN
             </button>
 
             {!user ? (
@@ -249,7 +249,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer",
               }}
             >
-              ZH / EN
+              中文 / EN
             </button>
             {!user ? (
               <>
