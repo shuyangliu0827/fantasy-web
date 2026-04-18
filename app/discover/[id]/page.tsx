@@ -25,12 +25,8 @@ const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Not
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
-  { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
-  { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
-  { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
-  { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
 ];
 
 export default function DiscoverPostPage() {
@@ -196,19 +192,25 @@ export default function DiscoverPostPage() {
               touchAction: "pan-x",
             }}
           >
-            {NAV_ITEMS.map(item => (
+            {NAV_ITEMS.map(item => {
+              const isActive = item.href === "/discover";
+              return (
               <Link key={item.href} href={item.href} style={{
-                padding: isMobile ? "7px 10px" : "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-                color: "#64748b", background: "transparent", textDecoration: "none", whiteSpace: "nowrap",
+                padding: isMobile ? "7px 10px" : "7px 13px", borderRadius: 8, fontSize: 14,
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? "#0f172a" : "#64748b",
+                background: isActive ? "#f1f5f9" : "transparent",
+                textDecoration: "none", whiteSpace: "nowrap", transition: "all 0.15s",
               }}>
                 {lang === "zh" ? item.labelZh : item.labelEn}
               </Link>
-            ))}
+              );
+            })}
           </nav>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{ padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-              中 / EN
+              中文 / EN
             </button>
             {!user ? (
               <>

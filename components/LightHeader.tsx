@@ -6,15 +6,10 @@ import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 
 const NAV = [
-  { href: "/",            zh: "首页",   en: "Home" },
-  { href: "/contest",     zh: "今日竞赛", en: "Daily Contest" },
-  { href: "/discover",    zh: "发现",   en: "Discover" },
-  { href: "/rankings",    zh: "球员排名", en: "Rankings" },
-  { href: "/league",      zh: "公开联赛", en: "Leagues" },
-  { href: "/compare",     zh: "球员对比", en: "Compare" },
-  { href: "/draft-guide", zh: "Fantasy新闻", en: "Fantasy News" },
-  { href: "/cheat-sheet", zh: "备忘单",  en: "Cheat Sheet" },
-  { href: "/how-to-play", zh: "新手入门", en: "How To Play" },
+  { href: "/",         zh: "首页",         en: "Home" },
+  { href: "/discover", zh: "发现",         en: "Discover" },
+  { href: "/league",   zh: "公开联赛",      en: "Leagues" },
+  { href: "/contest",  zh: "每日竞赛", en: "Daily Fantasy" },
 ];
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
@@ -130,7 +125,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 cursor: "pointer",
               }}
             >
-              ZH / EN
+              中文 / EN
             </button>
 
             {!user ? (
@@ -254,7 +249,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
                 background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer",
               }}
             >
-              ZH / EN
+              中文 / EN
             </button>
             {!user ? (
               <>

@@ -104,12 +104,12 @@ export default function PublicLeaguesPage() {
             }}>
               {t("创建我的联赛", "Create League")}
             </Link>
-            <Link href="/guide" style={{
+            <Link href="/how-to-play" style={{
               padding: "12px 24px", background: "rgba(255,255,255,0.15)", color: "#fff",
               border: "1.5px solid rgba(255,255,255,0.35)", borderRadius: 10,
               fontSize: 14, fontWeight: 600, textDecoration: "none",
             }}>
-              {t("了解规则", "Learn Rules")}
+              {t("新手入门", "How To Play")}
             </Link>
           </div>
           <div className="league-hero-stats">

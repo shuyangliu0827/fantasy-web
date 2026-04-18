@@ -95,22 +95,19 @@ export default function LoginPage() {
         {/* Hero text */}
         <div style={{ marginTop: 48 }}>
           <h1 style={{
-            fontSize: 52,
+            fontSize: 44,
             fontWeight: 800,
             color: "#fff",
-            lineHeight: 1.1,
+            lineHeight: 1.15,
             margin: 0,
+            whiteSpace: "nowrap",
           }}>
-            欢迎
-            <br />
-            <span style={{
+            欢迎回来，<span style={{
               fontStyle: "italic",
               textDecoration: "underline",
               textDecorationColor: "rgba(255,255,255,0.5)",
               textUnderlineOffset: 6,
-            }}>回来</span>
-            <br />
-            球迷
+            }}>球迷</span>
           </h1>
           <p style={{
             marginTop: 20,
@@ -129,22 +126,30 @@ export default function LoginPage() {
         {/* Feature bullets */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 40 }}>
           {[
-            { icon: "", label: t("实时NBA数据更新", "Real-time NBA stats") },
-            { icon: "", label: t("智能选手排名系统", "Smart player rankings") },
-            { icon: "", label: t("多联赛同时参与", "Join multiple leagues") },
+            {
+              svg: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2.2" strokeLinecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+              label: t("实时NBA数据更新", "Real-time NBA stats"),
+            },
+            {
+              svg: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2.2" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+              label: t("智能选手排名系统", "Smart player rankings"),
+            },
+            {
+              svg: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>,
+              label: t("多联赛同时参与", "Join multiple leagues"),
+            },
           ].map((item) => (
             <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{
-                fontSize: 18,
                 width: 36,
                 height: 36,
                 background: "rgba(255,255,255,0.2)",
-                borderRadius: 10,
+                borderRadius: "50%",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
-              }}>{item.icon}</span>
+              }}>{item.svg}</span>
               <span style={{ fontSize: 14, color: "rgba(255,255,255,0.9)", fontWeight: 500 }}>
                 {item.label}
               </span>

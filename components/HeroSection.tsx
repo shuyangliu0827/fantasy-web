@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import type { HeroPlayer } from "@/lib/heroPlayers";
 
@@ -17,8 +16,6 @@ export default function HeroSection({ player }: Props) {
   const [mounted, setMounted] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [ctaHover, setCtaHover] = useState(false);
-
   useEffect(() => {
     requestAnimationFrame(() => setMounted(true));
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -365,43 +362,6 @@ export default function HeroSection({ player }: Props) {
             >
               DRAFT INTELLIGENCE
             </div>
-          </div>
-
-          {/* -- CTA button -- */}
-          <div
-            style={{
-              opacity: entered ? 1 : 0,
-              transform: entered ? "translateY(0)" : "translateY(8px)",
-              transition: "opacity 0.6s ease 1s, transform 0.6s ease 1s",
-              marginBottom: "clamp(8px, 1.2vh, 14px)",
-            }}
-          >
-            <Link
-              href="/auth/signup"
-              onMouseEnter={() => setCtaHover(true)}
-              onMouseLeave={() => setCtaHover(false)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "clamp(9px, 1vh, 12px) clamp(22px, 2.5vw, 32px)",
-                background: ctaHover
-                  ? "rgba(255,255,255,0.15)"
-                  : "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                borderRadius: 10,
-                fontSize: "clamp(12px, 1.1vw, 14px)",
-                fontWeight: 600,
-                color: "#fff",
-                textDecoration: "none",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
-                transition: "all 0.25s ease",
-              }}
-            >
-              {t("免费开始", "Get Started")}
-              <span style={{ opacity: 0.6 }}>→</span>
-            </Link>
           </div>
 
           {/* -- Accent bar -- */}

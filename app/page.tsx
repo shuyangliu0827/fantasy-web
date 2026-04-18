@@ -12,12 +12,8 @@ import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
-  { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
-  { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
-  { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
-  { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
 ];
 
 const FEATURES = [
@@ -188,7 +184,7 @@ export default function HomePage() {
                   cursor: "pointer",
                 }}
               >
-                中 / EN
+                中文 / EN
               </button>
               {!user ? (
                 <>
@@ -286,7 +282,7 @@ export default function HomePage() {
             <div style={{ height: 1, background: "#e2e8f0", margin: "4px 0" }} />
             <div style={{ padding: "12px 16px 20px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: "6px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                中 / EN
+                中文 / EN
               </button>
               {!user ? (
                 <>
@@ -319,54 +315,6 @@ export default function HomePage() {
       {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
 
-      {/* Feature cards */}
-      <section style={{ background: "#f8fafc", padding: isMobile ? "36px 12px 44px" : "64px 24px 80px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
-            gap: 20,
-          }}>
-            {FEATURES.map((f, i) => (
-              <Link key={i} href={f.href} style={{ textDecoration: "none" }}>
-                <div
-                  onMouseEnter={() => setHovered(i)}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    background: "#fff",
-                    borderRadius: 16,
-                    padding: "28px 26px 30px",
-                    border: `1px solid ${hovered === i ? "#dbeafe" : "#e2e8f0"}`,
-                    boxShadow: hovered === i
-                      ? "0 8px 32px rgba(30,58,138,0.10)"
-                      : "0 2px 8px rgba(0,0,0,0.05)",
-                    transition: "all 0.2s ease",
-                    transform: hovered === i ? "translateY(-3px)" : "none",
-                    cursor: "pointer",
-                    minHeight: 200,
-                  }}
-                >
-                  {/* Color block instead of emoji */}
-                  <div style={{
-                    width: 48, height: 48,
-                    background: f.accentColor,
-                    borderRadius: 12,
-                    marginBottom: 18,
-                  }} />
-
-                  <div style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>
-                    {lang === "zh" ? f.titleZh : f.titleEn}
-                  </div>
-
-                  <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.65, margin: 0 }}>
-                    {lang === "zh" ? f.descZh : f.descEn}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
 
 
     </div>

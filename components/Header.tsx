@@ -17,13 +17,8 @@ export default function Header() {
   const navItems = [
     { href: "/", label: t("首页", "Home") },
     { href: "/discover", label: t("发现", "Discover") },
-    { href: "/rankings", label: t("球员排名", "Rankings") },
     { href: "/league", label: t("公开联赛", "Leagues") },
-    { href: "/compare", label: t("球员对比", "Compare") },
-    { href: "/draft-guide", label: t("Fantasy新闻", "Fantasy News") },
-    { href: "/cheat-sheet", label: t("备忘单", "Cheat Sheet") },
-    { href: "/how-to-play", label: t("新手入门", "How To Play") },
-    { href: "/mock-draft", label: t("模拟选秀", "Mock Draft") },
+    { href: "/contest", label: t("每日竞赛", "Daily Fantasy") },
   ];
 
   const handleLogout = () => {

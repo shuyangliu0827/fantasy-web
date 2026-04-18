@@ -66,6 +66,8 @@ export default function LeagueNav({ slug, isOwner, leagueId }: LeagueNavProps) {
     { href: `/league/${slug}`, label: t("联赛主页", "League Home"), badge: 0 },
     { href: `/league/${slug}/roster`, label: t("阵容", "Roster"), badge: 0 },
     { href: `/league/${slug}/free-agents`, label: t("自由市场", "Free Agents"), badge: 0 },
+    { href: `/league/${slug}/rankings`, label: t("球员排名", "Rankings"), badge: 0 },
+    { href: `/league/${slug}/compare`, label: t("球员对比", "Compare"), badge: 0 },
     { href: `/league/${slug}/trade`, label: t("交易", "Trade"), badge: pendingCount },
     { href: `/league/${slug}/standings`, label: t("排行榜", "Standings"), badge: 0 },
     { href: `/league/${slug}/schedule`, label: t("赛程", "Schedule"), badge: 0 },
