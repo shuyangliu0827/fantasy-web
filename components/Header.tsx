@@ -18,7 +18,7 @@ export default function Header() {
     { href: "/", label: t("首页", "Home") },
     { href: "/discover", label: t("发现", "Discover") },
     { href: "/league", label: t("公开联赛", "Leagues") },
-    { href: "/contest", label: "Daily Fantasy" },
+    { href: "/contest", label: t("每日竞赛", "Daily Fantasy") },
   ];
 
   const handleLogout = () => {

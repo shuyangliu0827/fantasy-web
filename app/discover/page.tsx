@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/contest", labelZh: "Daily Fantasy", labelEn: "Daily Fantasy" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
 ];
 
 const ALL_TAGS = ["选秀策略", "球员分析", "交易建议", "新手指南", "Punt策略"];
@@ -120,15 +120,20 @@ export default function DiscoverPage() {
           {/* Desktop nav */}
           {!isMobile && (
             <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
-              {NAV_ITEMS.map(item => (
-                <Link key={item.href} href={item.href} style={{
-                  padding: "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-                  color: "#64748b", background: "transparent", textDecoration: "none",
-                  whiteSpace: "nowrap", transition: "all 0.15s",
-                }}>
-                  {lang === "zh" ? item.labelZh : item.labelEn}
-                </Link>
-              ))}
+              {NAV_ITEMS.map(item => {
+                const isActive = item.href === "/discover";
+                return (
+                  <Link key={item.href} href={item.href} style={{
+                    padding: "7px 13px", borderRadius: 8, fontSize: 14,
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? "#0f172a" : "#64748b",
+                    background: isActive ? "#f1f5f9" : "transparent",
+                    textDecoration: "none", whiteSpace: "nowrap", transition: "all 0.15s",
+                  }}>
+                    {lang === "zh" ? item.labelZh : item.labelEn}
+                  </Link>
+                );
+              })}
             </nav>
           )}
 

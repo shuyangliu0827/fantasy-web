@@ -9,7 +9,7 @@ const NAV = [
   { href: "/",         zh: "首页",         en: "Home" },
   { href: "/discover", zh: "发现",         en: "Discover" },
   { href: "/league",   zh: "公开联赛",      en: "Leagues" },
-  { href: "/contest",  zh: "Daily Fantasy", en: "Daily Fantasy" },
+  { href: "/contest",  zh: "每日竞赛", en: "Daily Fantasy" },
 ];
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {

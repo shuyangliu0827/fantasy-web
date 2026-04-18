@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/contest", labelZh: "Daily Fantasy", labelEn: "Daily Fantasy" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
 ];
 
 const FEATURES = [

@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/contest", labelZh: "Daily Fantasy", labelEn: "Daily Fantasy" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
 ];
 
 export default function DiscoverPostPage() {
@@ -192,14 +192,20 @@ export default function DiscoverPostPage() {
               touchAction: "pan-x",
             }}
           >
-            {NAV_ITEMS.map(item => (
+            {NAV_ITEMS.map(item => {
+              const isActive = item.href === "/discover";
+              return (
               <Link key={item.href} href={item.href} style={{
-                padding: isMobile ? "7px 10px" : "7px 13px", borderRadius: 8, fontSize: 14, fontWeight: 500,
-                color: "#64748b", background: "transparent", textDecoration: "none", whiteSpace: "nowrap",
+                padding: isMobile ? "7px 10px" : "7px 13px", borderRadius: 8, fontSize: 14,
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? "#0f172a" : "#64748b",
+                background: isActive ? "#f1f5f9" : "transparent",
+                textDecoration: "none", whiteSpace: "nowrap", transition: "all 0.15s",
               }}>
                 {lang === "zh" ? item.labelZh : item.labelEn}
               </Link>
-            ))}
+              );
+            })}
           </nav>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")}
