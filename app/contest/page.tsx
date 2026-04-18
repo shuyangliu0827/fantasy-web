@@ -62,6 +62,12 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatDateShort(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short", day: "numeric",
+  });
+}
+
 function formatLockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", timeZoneName: "short",
@@ -148,29 +154,37 @@ export default function ContestPage() {
         setPageError("No contests scheduled nearby. Check back soon.");
         return;
       }
-      setContest(selectedContest);
-
-      // 3. Player pool
-      const pr = await fetch(`/api/contests/${selectedContest.id}/players`);
-      if (pr.ok) {
-        const { players: pool } = await pr.json();
-        setPlayers(pool ?? []);
-      }
-
-      // 4. Existing lineup (requires auth; 404 = no lineup yet = fine)
-      if (user) {
-        const { data } = await getMyLineup(selectedContest.id);
-        if (data) {
-          const next: (string | null)[] = [null, null, null, null, null];
-          for (const p of data.players) next[p.slot - 1] = p.player_id;
-          setSlots(next);
-          setLineupStatus(data.status);
-        }
-      }
+      await loadContestDetail(selectedContest);
     } catch {
       setPageError("Network error. Please refresh and try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Loads player pool + user's lineup for a given contest and sets it as
+  // the selected contest. Used by both initial load() and card clicks.
+  async function loadContestDetail(c: Contest) {
+    setContest(c);
+    // Reset per-contest state so switching doesn't bleed across contests.
+    setSlots([null, null, null, null, null]);
+    setLineupStatus("draft");
+    setPlayers([]);
+
+    const pr = await fetch(`/api/contests/${c.id}/players`);
+    if (pr.ok) {
+      const { players: pool } = await pr.json();
+      setPlayers(pool ?? []);
+    }
+
+    if (user) {
+      const { data } = await getMyLineup(c.id);
+      if (data) {
+        const next: (string | null)[] = [null, null, null, null, null];
+        for (const p of data.players) next[p.slot - 1] = p.player_id;
+        setSlots(next);
+        setLineupStatus(data.status);
+      }
     }
   }
 
@@ -201,12 +215,11 @@ export default function ContestPage() {
       : "present")
     : null;
 
-  // Bucketed views over the full nearby window.
-  // Data-layer only in this step; the step-4 UI will consume these.
+  // Bucketed views over the full nearby window — feed the Past/Today/Upcoming
+  // section cards above the existing contest detail pane.
   const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
   const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
   const upcomingContests = allContests.filter((c) => c.date > todayUtc);
-  void pastContests; void presentContest; void upcomingContests;
 
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -382,6 +395,34 @@ export default function ContestPage() {
       )}
 
       <main style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
+
+        {/* ── Past / Today / Upcoming section cards ──────────── */}
+        {/* Clicking a card switches selectedContest via loadContestDetail. */}
+        {pastContests.length > 0 && (
+          <ContestSection
+            label="Past"
+            contests={pastContests}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+          />
+        )}
+        {presentContest && (
+          <ContestSection
+            label="Today"
+            contests={[presentContest]}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+            highlight
+          />
+        )}
+        {upcomingContests.length > 0 && (
+          <ContestSection
+            label="Upcoming"
+            contests={upcomingContests}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+          />
+        )}
 
         {/* ── Contest header ──────────────────────────────────── */}
         {contest && (
@@ -782,6 +823,66 @@ export default function ContestPage() {
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+function ContestSection({
+  label, contests, selectedId, onSelect, highlight = false,
+}: {
+  label: string;
+  contests: Contest[];
+  selectedId: string | null;
+  onSelect: (c: Contest) => void;
+  highlight?: boolean;
+}) {
+  return (
+    <div style={{ padding: "12px 16px 0" }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: 1,
+        color: "#6b7280", textTransform: "uppercase", marginBottom: 6,
+      }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        {contests.map((c) => {
+          const isSelected = c.id === selectedId;
+          const pill = STATUS_PILL[c.status];
+          const activeBg = highlight ? "#1e3a8a" : "#374151";
+          return (
+            <button
+              key={c.id}
+              onClick={() => onSelect(c)}
+              style={{
+                flexShrink: 0, minWidth: 96,
+                padding: "8px 12px", borderRadius: 10,
+                background: isSelected ? activeBg : "#fff",
+                border: `1px solid ${isSelected ? activeBg : "#e5e7eb"}`,
+                textAlign: "left", cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              <div style={{
+                fontSize: 12, fontWeight: 700,
+                color: isSelected ? "#fff" : "#111827",
+              }}>
+                {formatDateShort(c.date)}
+              </div>
+              <div style={{ marginTop: 3 }}>
+                <span style={{
+                  display: "inline-block",
+                  fontSize: 10, fontWeight: 700,
+                  padding: "1px 6px", borderRadius: 999,
+                  background: isSelected ? "rgba(255,255,255,0.2)" : (pill?.bg ?? "#f3f4f6"),
+                  color:      isSelected ? "#fff"                    : (pill?.color ?? "#374151"),
+                }}>
+                  {pill?.label ?? c.status}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function FilterPill({
   label, active, onClick, color, activeBg,
