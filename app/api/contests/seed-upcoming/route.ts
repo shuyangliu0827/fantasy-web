@@ -3,17 +3,21 @@ export const dynamic = "force-dynamic";
 //
 // GET /api/contests/seed-upcoming
 //
-// Idempotent. Seeds pending contest stubs for the next N days so they
-// appear in /api/contests/nearby's Upcoming bucket before game-day morning.
+// Idempotent. Seeds pending contest rows with provisional player pools
+// for the next N days so they appear in /api/contests/nearby's Upcoming
+// bucket before game-day morning, and already have a browseable pool.
 //
 // For each day in [today+1 … today+days]:
 //   - Skip if a contest row already exists for that date.
-//   - Call BDL to check for scheduled games. Skip if none.
+//   - Call BDL to get scheduled games. Skip if none.
 //   - Insert a contest row with status="pending" and a fallback lock time.
+//   - Build a provisional contest_players pool from player_stats_cache:
+//       same logic as create-today (playing teams → non-injured players →
+//       sort by fpts_avg → quartile tiers).
 //
-// Player pools are NOT populated here — /api/contests/create-today handles
-// that on game-day morning and now recognises pending stubs, upgrading them
-// to status="open" with a real player pool and accurate lock time.
+// On game-day morning, /api/contests/create-today upgrades the pending row:
+//   status → "open", lineup_lock_at → real BDL tip-off, pool → rebuilt fresh.
+// That rebuild replaces the provisional pool with the authoritative one.
 //
 // ── Authorization ─────────────────────────────────────────────
 // Same CRON_SECRET as create-today.
@@ -26,11 +30,11 @@ export const dynamic = "force-dynamic";
 // ── Sample response 200 ──────────────────────────────────────
 // {
 //   "seeded": 2,
-//   "skipped": 2,
+//   "skipped": 1,
 //   "results": [
-//     { "date": "2026-04-19", "action": "created" },
+//     { "date": "2026-04-19", "action": "created", "pool_size": 68 },
 //     { "date": "2026-04-20", "action": "exists"  },
-//     { "date": "2026-04-21", "action": "created" },
+//     { "date": "2026-04-21", "action": "created", "pool_size": 54 },
 //     { "date": "2026-04-22", "action": "no_games" }
 //   ]
 // }
@@ -41,6 +45,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
+import { normalizeTeamCode } from "@/lib/i18n";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const DEFAULT_DAYS = 7;
@@ -63,6 +68,15 @@ function isAuthorized(req: Request): boolean {
   return false;
 }
 
+// Same quartile-tier logic as create-today. rank is 1-based.
+function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
+  const q = total / 4;
+  if (rank <= q)     return 1;
+  if (rank <= q * 2) return 2;
+  if (rank <= q * 3) return 3;
+  return 4;
+}
+
 export async function GET(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -78,8 +92,8 @@ export async function GET(req: Request) {
   const todayUtc = new Date();
   todayUtc.setUTCHours(0, 0, 0, 0);
 
-  const results: { date: string; action: string; id?: string }[] = [];
-  let seeded = 0;
+  const results: { date: string; action: string; id?: string; pool_size?: number }[] = [];
+  let seeded  = 0;
   let noGames = 0;
 
   for (let i = 1; i <= days; i++) {
@@ -99,23 +113,28 @@ export async function GET(req: Request) {
       continue;
     }
 
-    // 2. Only create contests on days BDL confirms games are scheduled.
-    let hasGames = false;
+    // 2. Fetch BDL games for this date to collect playing teams.
+    //    Same normalisation as create-today so team codes match player_stats_cache.
+    const playingTeams = new Set<string>();
     try {
       const { data: games } = await getGames({ dates: [dateStr] });
-      hasGames = Array.isArray(games) && games.length > 0;
+      if (Array.isArray(games)) {
+        for (const g of games) {
+          if (g.home_team?.abbreviation)    playingTeams.add(normalizeTeamCode(g.home_team.abbreviation));
+          if (g.visitor_team?.abbreviation) playingTeams.add(normalizeTeamCode(g.visitor_team.abbreviation));
+        }
+      }
     } catch {
-      // BDL unavailable for this date — treat as no games, skip.
+      // BDL unavailable — treat as no games, skip this date.
     }
 
-    if (!hasGames) {
+    if (playingTeams.size === 0) {
       results.push({ date: dateStr, action: "no_games" });
       noGames++;
       continue;
     }
 
-    // 3. Insert a pending stub. lock time is a placeholder; create-today
-    //    will replace it with the real BDL tip-off time on game morning.
+    // 3. Insert the pending contest stub.
     const { data: created, error: insertErr } = await supabase
       .from("contests")
       .insert({
@@ -131,7 +150,29 @@ export async function GET(req: Request) {
       continue;
     }
 
-    results.push({ date: dateStr, action: "created", id: created.id });
+    // 4. Build a provisional player pool — same logic as create-today's buildPool.
+    //    PostgREST NOT ILIKE drops NULLs so we filter "Out*" injuries in JS.
+    const { data: cacheRows } = await supabase
+      .from("player_stats_cache")
+      .select("player_id, fpts_avg, injury, team")
+      .in("team", [...playingTeams])
+      .order("fpts_avg", { ascending: false });
+
+    const poolRows = (cacheRows ?? []).filter(
+      (r) => !r.injury?.toLowerCase().startsWith("out"),
+    );
+
+    if (poolRows.length > 0) {
+      await supabase.from("contest_players").insert(
+        poolRows.map((row, idx) => ({
+          contest_id: created.id,
+          player_id:  String(row.player_id),
+          tier:       tierFor(idx + 1, poolRows.length),
+        })),
+      );
+    }
+
+    results.push({ date: dateStr, action: "created", id: created.id, pool_size: poolRows.length });
     seeded++;
   }
 
