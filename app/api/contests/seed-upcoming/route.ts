@@ -29,15 +29,18 @@ export const dynamic = "force-dynamic";
 //
 // ── Sample response 200 ──────────────────────────────────────
 // {
-//   "seeded": 2,
-//   "skipped": 1,
+//   "seeded": 2, "backfilled": 1, "skipped": 1,
 //   "results": [
-//     { "date": "2026-04-19", "action": "created", "pool_size": 68 },
-//     { "date": "2026-04-20", "action": "exists"  },
-//     { "date": "2026-04-21", "action": "created", "pool_size": 54 },
-//     { "date": "2026-04-22", "action": "no_games" }
+//     { "date": "2026-04-19", "action": "created",    "pool_size": 68 },
+//     { "date": "2026-04-20", "action": "exists"                      },
+//     { "date": "2026-04-21", "action": "backfilled", "pool_size": 54 },
+//     { "date": "2026-04-22", "action": "no_games"                    }
 //   ]
 // }
+// "created"    — new contest stub + pool inserted.
+// "backfilled" — contest existed but had 0 contest_players; pool added.
+// "exists"     — contest existed and already had a pool; skipped.
+// "no_games"   — BDL returned no games for this date; skipped.
 //
 // Error responses:
 //   401 { "error": "unauthorized" }
@@ -101,16 +104,27 @@ export async function GET(req: Request) {
     d.setUTCDate(todayUtc.getUTCDate() + i);
     const dateStr = d.toISOString().slice(0, 10);
 
-    // 1. Idempotency: skip if any contest row already exists for this date.
+    // 1. Check if a contest row already exists for this date.
     const { data: existing } = await supabase
       .from("contests")
-      .select("id")
+      .select("id, status")
       .eq("date", dateStr)
       .maybeSingle();
 
+    // If it exists, check whether it already has a player pool.
     if (existing) {
-      results.push({ date: dateStr, action: "exists" });
-      continue;
+      const { count } = await supabase
+        .from("contest_players")
+        .select("id", { count: "exact", head: true })
+        .eq("contest_id", existing.id);
+
+      if ((count ?? 0) > 0) {
+        // Pool already present — nothing to do.
+        results.push({ date: dateStr, action: "exists" });
+        continue;
+      }
+      // Pool is empty (seeded before provisional pool was added) — fall
+      // through to BDL + pool-building using the existing contest id.
     }
 
     // 2. Fetch BDL games for this date to collect playing teams.
@@ -134,20 +148,30 @@ export async function GET(req: Request) {
       continue;
     }
 
-    // 3. Insert the pending contest stub.
-    const { data: created, error: insertErr } = await supabase
-      .from("contests")
-      .insert({
-        date:           dateStr,
-        status:         "pending",
-        lineup_lock_at: `${dateStr}${FALLBACK_LOCK_SUFFIX}`,
-      })
-      .select("id")
-      .single();
+    // 3. Create the contest stub only if one doesn't already exist.
+    let contestId: string;
+    let action: string;
+    if (existing) {
+      // Backfill path: use the existing (empty-pool) contest.
+      contestId = existing.id;
+      action    = "backfilled";
+    } else {
+      const { data: created, error: insertErr } = await supabase
+        .from("contests")
+        .insert({
+          date:           dateStr,
+          status:         "pending",
+          lineup_lock_at: `${dateStr}${FALLBACK_LOCK_SUFFIX}`,
+        })
+        .select("id")
+        .single();
 
-    if (insertErr) {
-      results.push({ date: dateStr, action: `error: ${insertErr.message}` });
-      continue;
+      if (insertErr) {
+        results.push({ date: dateStr, action: `error: ${insertErr.message}` });
+        continue;
+      }
+      contestId = created.id;
+      action    = "created";
     }
 
     // 4. Build a provisional player pool — same logic as create-today's buildPool.
@@ -165,16 +189,17 @@ export async function GET(req: Request) {
     if (poolRows.length > 0) {
       await supabase.from("contest_players").insert(
         poolRows.map((row, idx) => ({
-          contest_id: created.id,
+          contest_id: contestId,
           player_id:  String(row.player_id),
           tier:       tierFor(idx + 1, poolRows.length),
         })),
       );
     }
 
-    results.push({ date: dateStr, action: "created", id: created.id, pool_size: poolRows.length });
+    results.push({ date: dateStr, action, id: contestId, pool_size: poolRows.length });
     seeded++;
   }
 
-  return NextResponse.json({ seeded, skipped: noGames, results });
+  const backfilled = results.filter((r) => r.action === "backfilled").length;
+  return NextResponse.json({ seeded, backfilled, skipped: noGames, results });
 }
