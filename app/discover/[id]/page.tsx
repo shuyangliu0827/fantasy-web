@@ -210,7 +210,7 @@ export default function DiscoverPostPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")}
               style={{ padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-              中 / EN
+              中文 / EN
             </button>
             {!user ? (
               <>
