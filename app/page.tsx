@@ -12,12 +12,8 @@ import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
-  { href: "/rankings", labelZh: "球员排名", labelEn: "Rankings" },
   { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/compare", labelZh: "球员对比", labelEn: "Compare" },
-  { href: "/draft-guide", labelZh: "Fantasy新闻", labelEn: "Fantasy News" },
-  { href: "/cheat-sheet", labelZh: "备忘单", labelEn: "Cheat Sheet" },
-  { href: "/how-to-play", labelZh: "新手入门", labelEn: "How To Play" },
+  { href: "/contest", labelZh: "Daily Fantasy", labelEn: "Daily Fantasy" },
 ];
 
 const FEATURES = [
