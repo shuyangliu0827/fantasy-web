@@ -289,7 +289,7 @@
        return { ok: false as const, error: "Login failed" };
      }
 
-     // Fetch user profile from public.users table (try by id first, then by email)
+     // Fetch user profile from public.users table by auth UUID (primary key)
      let { data: user } = await supabase
        .from("users")
        .select("*")
@@ -297,17 +297,27 @@
        .single();
 
      if (!user) {
-       // Try by email as fallback
-       const { data: userByEmail } = await supabase
+       // No public.users row for this auth UUID.
+       // Check whether a row exists for the same email with a DIFFERENT UUID —
+       // that is a legacy mismatch and must never be used silently because
+       // user_lineups and other FKs reference auth.users.id, not the old UUID.
+       const { data: emailMatch } = await supabase
          .from("users")
-         .select("*")
+         .select("id")
          .eq("email", normalizedEmail)
          .single();
-       user = userByEmail;
-     }
 
-     // If public.users row is truly missing, create it (but never overwrite existing)
-     if (!user) {
+       if (emailMatch && emailMatch.id !== authData.user.id) {
+         // UUID mismatch detected: a public.users row exists for this email but
+         // its id does not match the authenticated Supabase Auth UUID.
+         // Using it would silently break all downstream FK operations.
+         return {
+           ok: false as const,
+           error: "Account data integrity error — please contact support.",
+         };
+       }
+
+       // No public.users row at all: create one using the auth UUID.
        const fallbackUsername = normalizedEmail.split("@")[0];
        const fallbackName = authData.user.user_metadata?.name || fallbackUsername;
        const { data: newUser } = await supabase
