@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { getSessionUser } from "@/lib/store";
@@ -162,16 +162,28 @@ export default function ContestPage() {
     }
   }
 
+  // Guards against stale fetch responses when the user rapidly switches
+  // between contest cards. Only responses for the latest-requested contest
+  // id are allowed to write into state.
+  const requestedContestIdRef = useRef<string | null>(null);
+
   // Loads player pool + user's lineup for a given contest and sets it as
   // the selected contest. Used by both initial load() and card clicks.
   async function loadContestDetail(c: Contest) {
+    requestedContestIdRef.current = c.id;
     setContest(c);
     // Reset per-contest state so switching doesn't bleed across contests.
     setSlots([null, null, null, null, null]);
     setLineupStatus("draft");
     setPlayers([]);
+    // Also reset player-pool filters — the previous contest's search/tier/
+    // position selection has no meaning against the new pool.
+    setSearch("");
+    setTierFilter(null);
+    setPosFilter(null);
 
     const pr = await fetch(`/api/contests/${c.id}/players`);
+    if (requestedContestIdRef.current !== c.id) return;
     if (pr.ok) {
       const { players: pool } = await pr.json();
       setPlayers(pool ?? []);
@@ -179,6 +191,7 @@ export default function ContestPage() {
 
     if (user) {
       const { data } = await getMyLineup(c.id);
+      if (requestedContestIdRef.current !== c.id) return;
       if (data) {
         const next: (string | null)[] = [null, null, null, null, null];
         for (const p of data.players) next[p.slot - 1] = p.player_id;
