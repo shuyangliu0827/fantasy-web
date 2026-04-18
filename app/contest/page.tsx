@@ -88,6 +88,9 @@ export default function ContestPage() {
   const [user] = useState(() => getSessionUser());
 
   // Contest data
+  // `allContests` holds the ±14-day window from /api/contests/nearby.
+  // `contest` is the currently selected contest (feeds lineup + player pool UI).
+  const [allContests, setAllContests] = useState<Contest[]>([]);
   const [contest, setContest] = useState<Contest | null>(null);
   const [players, setPlayers] = useState<ContestPlayer[]>([]);
 
@@ -122,48 +125,41 @@ export default function ContestPage() {
     setLoading(true);
     setPageError(null);
     try {
-      // 1. Try today's contest; fall back to nearby on no-game days so the
-      //    page doesn't dead-end. Prefer next upcoming, else most recent past.
-      let c: Contest | null = null;
-      const cr = await fetch("/api/contests/today");
-      if (cr.ok) {
-        c = await cr.json();
-      } else {
-        // Parse error body if possible; fall back gracefully if the server
-        // returned a non-JSON response (e.g. HTML crash page from Vercel).
-        let errorCode = "";
-        try { errorCode = (await cr.json())?.error ?? ""; } catch { /* non-JSON */ }
-        if (errorCode === "no_contest_today") {
-          const nr = await fetch("/api/contests/nearby");
-          if (nr.ok) {
-            const { contests } = (await nr.json()) as { contests: Contest[] };
-            const todayStr = new Date().toISOString().slice(0, 10);
-            c = contests.find((x) => x.date > todayStr)
-              ?? [...contests].reverse().find((x) => x.date < todayStr)
-              ?? null;
-          }
-        }
-        if (!c) {
-          setPageError(
-            errorCode === "no_contest_today"
-              ? "No contests scheduled nearby. Check back soon."
-              : "Failed to load contest."
-          );
-          return;
-        }
+      // 1. Fetch the nearby window (±14 days). Single source of truth for
+      //    the page — never 404s; an empty window returns { contests: [] }.
+      const nr = await fetch("/api/contests/nearby");
+      if (!nr.ok) {
+        setPageError("Failed to load contests.");
+        return;
       }
-      setContest(c);
+      const { contests } = (await nr.json()) as { contests: Contest[] };
+      setAllContests(contests);
 
-      // 2. Player pool
-      const pr = await fetch(`/api/contests/${c.id}/players`);
+      // 2. Pick a sensible selectedContest: prefer today, else next upcoming,
+      //    else most recent past. Only dead-ends when the window is empty.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const selectedContest =
+        contests.find((x) => x.date === todayStr) ??
+        contests.find((x) => x.date > todayStr) ??
+        [...contests].reverse().find((x) => x.date < todayStr) ??
+        null;
+
+      if (!selectedContest) {
+        setPageError("No contests scheduled nearby. Check back soon.");
+        return;
+      }
+      setContest(selectedContest);
+
+      // 3. Player pool
+      const pr = await fetch(`/api/contests/${selectedContest.id}/players`);
       if (pr.ok) {
         const { players: pool } = await pr.json();
         setPlayers(pool ?? []);
       }
 
-      // 3. Existing lineup (requires auth; 404 = no lineup yet = fine)
+      // 4. Existing lineup (requires auth; 404 = no lineup yet = fine)
       if (user) {
-        const { data } = await getMyLineup(c.id);
+        const { data } = await getMyLineup(selectedContest.id);
         if (data) {
           const next: (string | null)[] = [null, null, null, null, null];
           for (const p of data.players) next[p.slot - 1] = p.player_id;
@@ -204,6 +200,13 @@ export default function ContestPage() {
       : contest.date > todayUtc ? "upcoming"
       : "present")
     : null;
+
+  // Bucketed views over the full nearby window.
+  // Data-layer only in this step; the step-4 UI will consume these.
+  const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
+  const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
+  const upcomingContests = allContests.filter((c) => c.date > todayUtc);
+  void pastContests; void presentContest; void upcomingContests;
 
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
