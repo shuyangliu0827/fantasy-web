@@ -315,54 +315,6 @@ export default function HomePage() {
       {heroPlayer && <DraftWinsSection player={heroPlayer} isMobile={isMobile} />}
 
 
-      {/* Feature cards */}
-      <section style={{ background: "#f8fafc", padding: isMobile ? "36px 12px 44px" : "64px 24px 80px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
-            gap: 20,
-          }}>
-            {FEATURES.map((f, i) => (
-              <Link key={i} href={f.href} style={{ textDecoration: "none" }}>
-                <div
-                  onMouseEnter={() => setHovered(i)}
-                  onMouseLeave={() => setHovered(null)}
-                  style={{
-                    background: "#fff",
-                    borderRadius: 16,
-                    padding: "28px 26px 30px",
-                    border: `1px solid ${hovered === i ? "#dbeafe" : "#e2e8f0"}`,
-                    boxShadow: hovered === i
-                      ? "0 8px 32px rgba(30,58,138,0.10)"
-                      : "0 2px 8px rgba(0,0,0,0.05)",
-                    transition: "all 0.2s ease",
-                    transform: hovered === i ? "translateY(-3px)" : "none",
-                    cursor: "pointer",
-                    minHeight: 200,
-                  }}
-                >
-                  {/* Color block instead of emoji */}
-                  <div style={{
-                    width: 48, height: 48,
-                    background: f.accentColor,
-                    borderRadius: 12,
-                    marginBottom: 18,
-                  }} />
-
-                  <div style={{ fontSize: 17, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>
-                    {lang === "zh" ? f.titleZh : f.titleEn}
-                  </div>
-
-                  <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.65, margin: 0 }}>
-                    {lang === "zh" ? f.descZh : f.descEn}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
 
 
     </div>
