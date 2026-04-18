@@ -122,21 +122,36 @@ export default function ContestPage() {
     setLoading(true);
     setPageError(null);
     try {
-      // 1. Today's contest
+      // 1. Try today's contest; fall back to nearby on no-game days so the
+      //    page doesn't dead-end. Prefer next upcoming, else most recent past.
+      let c: Contest | null = null;
       const cr = await fetch("/api/contests/today");
-      if (!cr.ok) {
+      if (cr.ok) {
+        c = await cr.json();
+      } else {
         // Parse error body if possible; fall back gracefully if the server
         // returned a non-JSON response (e.g. HTML crash page from Vercel).
         let errorCode = "";
         try { errorCode = (await cr.json())?.error ?? ""; } catch { /* non-JSON */ }
-        setPageError(
-          errorCode === "no_contest_today"
-            ? "No contest is scheduled for today. Check back tomorrow."
-            : "Failed to load contest."
-        );
-        return;
+        if (errorCode === "no_contest_today") {
+          const nr = await fetch("/api/contests/nearby");
+          if (nr.ok) {
+            const { contests } = (await nr.json()) as { contests: Contest[] };
+            const todayStr = new Date().toISOString().slice(0, 10);
+            c = contests.find((x) => x.date > todayStr)
+              ?? [...contests].reverse().find((x) => x.date < todayStr)
+              ?? null;
+          }
+        }
+        if (!c) {
+          setPageError(
+            errorCode === "no_contest_today"
+              ? "No contests scheduled nearby. Check back soon."
+              : "Failed to load contest."
+          );
+          return;
+        }
       }
-      const c: Contest = await cr.json();
       setContest(c);
 
       // 2. Player pool
