@@ -196,6 +196,15 @@ export default function ContestPage() {
   const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
   const canEdit       = !!user && !isReadOnly;
 
+  // Contest bucket — derived from contest.date vs today (UTC). Drives
+  // bucket-aware CTA/header wording; reactive via the existing clock.
+  const todayUtc = now.toISOString().slice(0, 10);
+  const bucket: "past" | "present" | "upcoming" | null = contest
+    ? (contest.date < todayUtc ? "past"
+      : contest.date > todayUtc ? "upcoming"
+      : "present")
+    : null;
+
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
   for (const pid of slots) {
@@ -380,7 +389,9 @@ export default function ContestPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#6b7280", textTransform: "uppercase" }}>
-                  Daily Contest
+                  {bucket === "past" ? "Past Contest"
+                    : bucket === "upcoming" ? "Upcoming Contest"
+                    : "Daily Contest"}
                 </span>
                 <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", marginTop: 2 }}>
                   {formatDate(contest.date)}
@@ -459,6 +470,8 @@ export default function ContestPage() {
               }}>
                 {contest.status === "scored"
                   ? "Results are in — see your score below."
+                  : bucket === "past"
+                  ? "Viewing your submitted lineup — this contest has ended."
                   : "Lineup locked. Awaiting results."}
               </div>
             )}
@@ -473,7 +486,7 @@ export default function ContestPage() {
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  My Lineup
+                  {isReadOnly && isSubmitted ? "My Submitted Lineup" : "My Lineup"}
                 </span>
                 <span style={{ fontSize: 12, color: "#6b7280" }}>
                   {filledCount}/5 selected
@@ -620,7 +633,10 @@ export default function ContestPage() {
                     transition: "all 0.15s",
                   }}
                 >
-                  {submitting ? "Submitting…" : isSubmitted ? "Resubmit Lineup" : "Submit Lineup"}
+                  {submitting ? "Submitting…"
+                    : bucket === "upcoming"
+                      ? (isSubmitted ? "Update Lineup" : "Create Lineup")
+                      : (isSubmitted ? "Resubmit Lineup" : "Submit Lineup")}
                 </button>
               </div>
             )}
