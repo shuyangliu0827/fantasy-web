@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createInsight, getSessionUser, uploadImage } from "@/lib/store";
 import { useLang } from "@/lib/lang";
+import { LANGUAGE_LABELS } from "@/lib/language-labels";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
@@ -167,7 +168,7 @@ export default function NewPostPage() {
           </nav>
           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 4 : 10, flexShrink: 0 }}>
             <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: isMobile ? "6px 9px" : "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: isMobile ? 12 : 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-              中文 / EN
+              {LANGUAGE_LABELS.zh} / {LANGUAGE_LABELS.en}
             </button>
             <Link href={`/u/${user.username}`} style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 8, textDecoration: "none" }}>
               <div style={{ width: isMobile ? 30 : 32, height: isMobile ? 30 : 32, borderRadius: "50%", background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)", color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>

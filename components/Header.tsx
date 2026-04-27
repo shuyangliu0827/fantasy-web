@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
+import { LANGUAGE_LABELS } from "@/lib/language-labels";
 
 export default function Header() {
   const { lang, setLang, t } = useLang();
@@ -58,9 +59,9 @@ export default function Header() {
             )}
 
             <button className="lang-toggle" onClick={() => setLang(lang === "zh" ? "en" : "zh")}>
-              <span className={lang === "zh" ? "active" : ""}>ZH</span>
+              <span className={lang === "zh" ? "active" : ""}>{LANGUAGE_LABELS.zh}</span>
               <span className="divider">/</span>
-              <span className={lang === "en" ? "active" : ""}>EN</span>
+              <span className={lang === "en" ? "active" : ""}>{LANGUAGE_LABELS.en}</span>
             </button>
 
             {!user ? (

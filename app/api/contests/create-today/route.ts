@@ -210,10 +210,12 @@ async function handler(req: Request) {
 
   if (checkErr) return NextResponse.json({ error: checkErr.message }, { status: 500 });
 
-  if (existing && !force) {
-    // Normal idempotent path — contest already exists, nothing to do.
+  if (existing && !force && existing.status !== "pending") {
+    // Normal idempotent path — fully-created contest already exists.
     return NextResponse.json({ created: false, contest: existing });
   }
+  // A "pending" stub (seeded by /api/contests/seed-upcoming) falls through
+  // so its player pool can be populated and status upgraded to "open".
 
   // ── 2. Fetch today's slate from BDL ──────────────────────────
   const { lineupLockAt, lockSource, playingTeams } = await getTodaySlate(today);
@@ -241,7 +243,7 @@ async function handler(req: Request) {
   // Drop existing contest_players and replace them. The contest header
   // and any user lineups are preserved (they reference contest.id which
   // stays the same).
-  if (existing && force) {
+  if (existing && (force || existing.status === "pending")) {
     const { error: delErr } = await supabase
       .from("contest_players")
       .delete()
@@ -255,10 +257,13 @@ async function handler(req: Request) {
 
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
-    // Update lineup_lock_at in case BDL now has accurate tip-off times.
+    // Update lineup_lock_at with the real BDL tip-off time.
+    // Also flip status to "open" when upgrading a seed-upcoming pending stub.
+    const headerUpdate: Record<string, string> = { lineup_lock_at: lineupLockAt };
+    if (existing.status === "pending") headerUpdate.status = "open";
     await supabase
       .from("contests")
-      .update({ lineup_lock_at: lineupLockAt })
+      .update(headerUpdate)
       .eq("id", existing.id);
 
     return NextResponse.json({
