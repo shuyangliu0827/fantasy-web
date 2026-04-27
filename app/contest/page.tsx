@@ -62,6 +62,15 @@ const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> 
   scored:   { label: "Scored",    bg: "#dbeafe", color: "#1e40af" },
 };
 
+// Calendar-card pill derived from date bucket, not DB status. Past contests
+// always read "Past" (regardless of DB status), today reads "Open", and any
+// date in the future reads "Upcoming".
+const BUCKET_PILL: Record<"past" | "present" | "upcoming", { label: string; bg: string; color: string }> = {
+  past:     { label: "Past",     bg: "#f3f4f6", color: "#6b7280" },
+  present:  { label: "Open",     bg: "#d1fae5", color: "#065f46" },
+  upcoming: { label: "Upcoming", bg: "#fef3c7", color: "#92400e" },
+};
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -236,13 +245,6 @@ export default function ContestPage() {
   const inLineup      = new Set(slots.filter(Boolean) as string[]);
   const playerMap     = new Map(players.map((p) => [p.player_id, p]));
 
-  const isPastDeadline = contest
-    ? contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
-    : false;
-  const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
-  const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
-  const canEdit       = !!user && !isReadOnly;
-
   // Contest bucket — derived from contest.date vs today (UTC). Drives
   // bucket-aware CTA/header wording; reactive via the existing clock.
   const todayUtc = now.toISOString().slice(0, 10);
@@ -251,6 +253,13 @@ export default function ContestPage() {
       : contest.date > todayUtc ? "upcoming"
       : "present")
     : null;
+
+  const isPastDeadline = contest
+    ? bucket === "past" || contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
+    : false;
+  const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
+  const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
+  const canEdit       = !!user && !isReadOnly;
 
   // Bucketed views over the full nearby window — feed the Past/Today/Upcoming
   // section cards above the existing contest detail pane.
@@ -593,6 +602,7 @@ export default function ContestPage() {
             contests={pastContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
+            bucket="past"
           />
         )}
         {presentContest && (
@@ -602,6 +612,7 @@ export default function ContestPage() {
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
             highlight
+            bucket="present"
           />
         )}
         {upcomingContests.length > 0 && (
@@ -610,6 +621,7 @@ export default function ContestPage() {
             contests={upcomingContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
+            bucket="upcoming"
           />
         )}
 
@@ -630,14 +642,22 @@ export default function ContestPage() {
                   {formatDate(contest.date)}
                 </div>
               </div>
-              {/* Status pill */}
-              <span style={{
-                padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-                background: STATUS_PILL[contest.status]?.bg ?? "#f3f4f6",
-                color:      STATUS_PILL[contest.status]?.color ?? "#374151",
-              }}>
-                {STATUS_PILL[contest.status]?.label ?? contest.status}
-              </span>
+              {/* Status pill — past dates always show "Past" so the header
+                  matches the calendar card; today/future fall back to DB status. */}
+              {(() => {
+                const headerPill = bucket === "past"
+                  ? BUCKET_PILL.past
+                  : (STATUS_PILL[contest.status] ?? { label: contest.status, bg: "#f3f4f6", color: "#374151" });
+                return (
+                  <span style={{
+                    padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
+                    background: headerPill.bg,
+                    color:      headerPill.color,
+                  }}>
+                    {headerPill.label}
+                  </span>
+                );
+              })()}
             </div>
 
             {/* Lock info */}
@@ -1292,14 +1312,16 @@ export default function ContestPage() {
 // ── Sub-components ────────────────────────────────────────────
 
 function ContestSection({
-  label, contests, selectedId, onSelect, highlight = false,
+  label, contests, selectedId, onSelect, highlight = false, bucket,
 }: {
   label: string;
   contests: Contest[];
   selectedId: string | null;
   onSelect: (c: Contest) => void;
   highlight?: boolean;
+  bucket: "past" | "present" | "upcoming";
 }) {
+  const pill = BUCKET_PILL[bucket];
   return (
     <div style={{ padding: "12px 16px 0" }}>
       <div style={{
@@ -1311,7 +1333,6 @@ function ContestSection({
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {contests.map((c) => {
           const isSelected = c.id === selectedId;
-          const pill = STATUS_PILL[c.status];
           const activeBg = highlight ? "#1e3a8a" : "#374151";
           return (
             <button
@@ -1337,10 +1358,10 @@ function ContestSection({
                   display: "inline-block",
                   fontSize: 10, fontWeight: 700,
                   padding: "1px 6px", borderRadius: 999,
-                  background: isSelected ? "rgba(255,255,255,0.2)" : (pill?.bg ?? "#f3f4f6"),
-                  color:      isSelected ? "#fff"                    : (pill?.color ?? "#374151"),
+                  background: isSelected ? "rgba(255,255,255,0.2)" : pill.bg,
+                  color:      isSelected ? "#fff"                    : pill.color,
                 }}>
-                  {pill?.label ?? c.status}
+                  {pill.label}
                 </span>
               </div>
             </button>
