@@ -24,6 +24,11 @@ type Contest = {
   date: string;
   status: "pending" | "open" | "locked" | "scored";
   lineup_lock_at: string;
+  // True for client-synthesized future-date stubs that don't have a DB row.
+  // Rendered as "Upcoming" cards so the calendar always shows a future bucket;
+  // selecting one shows a "Contest opens closer to game day" panel instead of
+  // the lineup builder.
+  placeholder?: boolean;
 };
 
 type ContestPlayer = {
@@ -215,6 +220,11 @@ export default function ContestPage() {
     setTierFilter(null);
     setPosFilter(null);
 
+    // Placeholder upcoming card (no DB row yet) — skip the player/lineup
+    // fetches; the render path shows a "Contest opens closer to game day"
+    // panel instead of the lineup builder.
+    if (c.placeholder) return;
+
     const pr = await fetch(`/api/contests/${c.id}/players`);
     if (requestedContestIdRef.current !== c.id) return;
     if (pr.ok) {
@@ -265,7 +275,36 @@ export default function ContestPage() {
   // section cards above the existing contest detail pane.
   const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
   const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
-  const upcomingContests = allContests.filter((c) => c.date > todayUtc);
+  const realUpcoming     = allContests.filter((c) => c.date > todayUtc);
+
+  // Synthesize placeholder cards for the next 7 days that don't have a DB row,
+  // so the "Upcoming" section is always visible even when the seed-upcoming
+  // cron hasn't seeded yet. Placeholder cards are visually identical, but
+  // selecting one shows a "Contest opens closer to game day" panel.
+  const UPCOMING_PLACEHOLDER_DAYS = 7;
+  const placeholderUpcoming: Contest[] = (() => {
+    const haveDates = new Set(realUpcoming.map((c) => c.date));
+    const out: Contest[] = [];
+    const base = new Date(todayUtc + "T00:00:00Z");
+    for (let i = 1; i <= UPCOMING_PLACEHOLDER_DAYS; i++) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() + i);
+      const dateStr = d.toISOString().slice(0, 10);
+      if (haveDates.has(dateStr)) continue;
+      out.push({
+        id: `placeholder-${dateStr}`,
+        date: dateStr,
+        status: "pending",
+        lineup_lock_at: `${dateStr}T23:00:00Z`,
+        placeholder: true,
+      });
+    }
+    return out;
+  })();
+  const upcomingContests = [...realUpcoming, ...placeholderUpcoming]
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const isPlaceholder = !!contest?.placeholder;
 
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -660,20 +699,23 @@ export default function ContestPage() {
               })()}
             </div>
 
-            {/* Lock info */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
-              <span style={{ fontSize: 12, color: "#6b7280" }}>
-                Lock: {formatLockTime(contest.lineup_lock_at)}
-              </span>
-              {!isPastDeadline && (
-                <span style={{
-                  fontSize: 12, fontWeight: 700,
-                  color: formatCountdown(contest.lineup_lock_at, now) === "Locked" ? "#991b1b" : "#1e3a8a",
-                }}>
-                  {formatCountdown(contest.lineup_lock_at, now)}
+            {/* Lock info — hidden for placeholder cards since the lock time
+                is synthetic and not meaningful until the contest is seeded. */}
+            {!isPlaceholder && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                  Lock: {formatLockTime(contest.lineup_lock_at)}
                 </span>
-              )}
-            </div>
+                {!isPastDeadline && (
+                  <span style={{
+                    fontSize: 12, fontWeight: 700,
+                    color: formatCountdown(contest.lineup_lock_at, now) === "Locked" ? "#991b1b" : "#1e3a8a",
+                  }}>
+                    {formatCountdown(contest.lineup_lock_at, now)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -699,8 +741,31 @@ export default function ContestPage() {
           </div>
         )}
 
+        {/* ── Placeholder upcoming empty-state ────────────────── */}
+        {/* Future-date card with no DB row yet — shown instead of the
+            lineup builder until the seed-upcoming cron creates the contest. */}
+        {!loading && !pageError && contest && isPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🗓️</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                {t("竞赛尚未开放", "Contest opens closer to game day")}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+                {t(
+                  "球员池将在比赛日前一天准备好，请稍后再来选阵容。",
+                  "The player pool is prepared the day before tip-off. Check back closer to game day to build your lineup.",
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Main content ────────────────────────────────────── */}
-        {!loading && !pageError && contest && (
+        {!loading && !pageError && contest && !isPlaceholder && (
           <>
             {/* ── Not logged in banner ──────────────────────── */}
             {!user && (
