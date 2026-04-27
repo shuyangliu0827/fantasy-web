@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
+import { LANGUAGE_LABELS } from "@/lib/language-labels";
 import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
@@ -144,7 +145,7 @@ export default function DiscoverPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
               <button onClick={() => setLang(lang === "zh" ? "en" : "zh")}
                 style={{ padding: "7px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                中文 / EN
+                {LANGUAGE_LABELS.zh} / {LANGUAGE_LABELS.en}
               </button>
               {!user ? (
                 <>
@@ -193,7 +194,7 @@ export default function DiscoverPage() {
             <div style={{ height: 1, background: "#e2e8f0", margin: "4px 0" }} />
             <div style={{ padding: "12px 16px 20px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} style={{ padding: "6px 14px", border: "1px solid #e2e8f0", borderRadius: 999, background: "#fff", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                中文 / EN
+                {LANGUAGE_LABELS.zh} / {LANGUAGE_LABELS.en}
               </button>
               {!user ? (
                 <>

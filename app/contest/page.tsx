@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { getSessionUser } from "@/lib/store";
@@ -62,6 +62,12 @@ function formatDate(iso: string): string {
   });
 }
 
+function formatDateShort(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short", day: "numeric",
+  });
+}
+
 function formatLockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", {
     hour: "numeric", minute: "2-digit", timeZoneName: "short",
@@ -88,6 +94,9 @@ export default function ContestPage() {
   const [user] = useState(() => getSessionUser());
 
   // Contest data
+  // `allContests` holds the ±14-day window from /api/contests/nearby.
+  // `contest` is the currently selected contest (feeds lineup + player pool UI).
+  const [allContests, setAllContests] = useState<Contest[]>([]);
   const [contest, setContest] = useState<Contest | null>(null);
   const [players, setPlayers] = useState<ContestPlayer[]>([]);
 
@@ -122,44 +131,73 @@ export default function ContestPage() {
     setLoading(true);
     setPageError(null);
     try {
-      // 1. Today's contest
-      const cr = await fetch("/api/contests/today");
-      if (!cr.ok) {
-        // Parse error body if possible; fall back gracefully if the server
-        // returned a non-JSON response (e.g. HTML crash page from Vercel).
-        let errorCode = "";
-        try { errorCode = (await cr.json())?.error ?? ""; } catch { /* non-JSON */ }
-        setPageError(
-          errorCode === "no_contest_today"
-            ? "No contest is scheduled for today. Check back tomorrow."
-            : "Failed to load contest."
-        );
+      // 1. Fetch the nearby window (±14 days). Single source of truth for
+      //    the page — never 404s; an empty window returns { contests: [] }.
+      const nr = await fetch("/api/contests/nearby");
+      if (!nr.ok) {
+        setPageError("Failed to load contests.");
         return;
       }
-      const c: Contest = await cr.json();
-      setContest(c);
+      const { contests } = (await nr.json()) as { contests: Contest[] };
+      setAllContests(contests);
 
-      // 2. Player pool
-      const pr = await fetch(`/api/contests/${c.id}/players`);
-      if (pr.ok) {
-        const { players: pool } = await pr.json();
-        setPlayers(pool ?? []);
-      }
+      // 2. Pick a sensible selectedContest: prefer today, else next upcoming,
+      //    else most recent past. Only dead-ends when the window is empty.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const selectedContest =
+        contests.find((x) => x.date === todayStr) ??
+        contests.find((x) => x.date > todayStr) ??
+        [...contests].reverse().find((x) => x.date < todayStr) ??
+        null;
 
-      // 3. Existing lineup (requires auth; 404 = no lineup yet = fine)
-      if (user) {
-        const { data } = await getMyLineup(c.id);
-        if (data) {
-          const next: (string | null)[] = [null, null, null, null, null];
-          for (const p of data.players) next[p.slot - 1] = p.player_id;
-          setSlots(next);
-          setLineupStatus(data.status);
-        }
+      if (!selectedContest) {
+        setPageError("No contests scheduled nearby. Check back soon.");
+        return;
       }
+      await loadContestDetail(selectedContest);
     } catch {
       setPageError("Network error. Please refresh and try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Guards against stale fetch responses when the user rapidly switches
+  // between contest cards. Only responses for the latest-requested contest
+  // id are allowed to write into state.
+  const requestedContestIdRef = useRef<string | null>(null);
+
+  // Loads player pool + user's lineup for a given contest and sets it as
+  // the selected contest. Used by both initial load() and card clicks.
+  async function loadContestDetail(c: Contest) {
+    requestedContestIdRef.current = c.id;
+    setContest(c);
+    // Reset per-contest state so switching doesn't bleed across contests.
+    setSlots([null, null, null, null, null]);
+    setLineupStatus("draft");
+    setPlayers([]);
+    // Also reset player-pool filters — the previous contest's search/tier/
+    // position selection has no meaning against the new pool.
+    setSearch("");
+    setTierFilter(null);
+    setPosFilter(null);
+
+    const pr = await fetch(`/api/contests/${c.id}/players`);
+    if (requestedContestIdRef.current !== c.id) return;
+    if (pr.ok) {
+      const { players: pool } = await pr.json();
+      setPlayers(pool ?? []);
+    }
+
+    if (user) {
+      const { data } = await getMyLineup(c.id);
+      if (requestedContestIdRef.current !== c.id) return;
+      if (data) {
+        const next: (string | null)[] = [null, null, null, null, null];
+        for (const p of data.players) next[p.slot - 1] = p.player_id;
+        setSlots(next);
+        setLineupStatus(data.status);
+      }
     }
   }
 
@@ -180,6 +218,21 @@ export default function ContestPage() {
   const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
   const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
   const canEdit       = !!user && !isReadOnly;
+
+  // Contest bucket — derived from contest.date vs today (UTC). Drives
+  // bucket-aware CTA/header wording; reactive via the existing clock.
+  const todayUtc = now.toISOString().slice(0, 10);
+  const bucket: "past" | "present" | "upcoming" | null = contest
+    ? (contest.date < todayUtc ? "past"
+      : contest.date > todayUtc ? "upcoming"
+      : "present")
+    : null;
+
+  // Bucketed views over the full nearby window — feed the Past/Today/Upcoming
+  // section cards above the existing contest detail pane.
+  const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
+  const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
+  const upcomingContests = allContests.filter((c) => c.date > todayUtc);
 
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -356,6 +409,34 @@ export default function ContestPage() {
 
       <main style={{ maxWidth: 480, margin: "0 auto", paddingBottom: 80 }}>
 
+        {/* ── Past / Today / Upcoming section cards ──────────── */}
+        {/* Clicking a card switches selectedContest via loadContestDetail. */}
+        {pastContests.length > 0 && (
+          <ContestSection
+            label="Past"
+            contests={pastContests}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+          />
+        )}
+        {presentContest && (
+          <ContestSection
+            label="Today"
+            contests={[presentContest]}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+            highlight
+          />
+        )}
+        {upcomingContests.length > 0 && (
+          <ContestSection
+            label="Upcoming"
+            contests={upcomingContests}
+            selectedId={contest?.id ?? null}
+            onSelect={loadContestDetail}
+          />
+        )}
+
         {/* ── Contest header ──────────────────────────────────── */}
         {contest && (
           <div style={{
@@ -365,7 +446,9 @@ export default function ContestPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#6b7280", textTransform: "uppercase" }}>
-                  Daily Contest
+                  {bucket === "past" ? "Past Contest"
+                    : bucket === "upcoming" ? "Upcoming Contest"
+                    : "Daily Contest"}
                 </span>
                 <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", marginTop: 2 }}>
                   {formatDate(contest.date)}
@@ -444,6 +527,8 @@ export default function ContestPage() {
               }}>
                 {contest.status === "scored"
                   ? "Results are in — see your score below."
+                  : bucket === "past"
+                  ? "Viewing your submitted lineup — this contest has ended."
                   : "Lineup locked. Awaiting results."}
               </div>
             )}
@@ -458,7 +543,7 @@ export default function ContestPage() {
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  My Lineup
+                  {isReadOnly && isSubmitted ? "My Submitted Lineup" : "My Lineup"}
                 </span>
                 <span style={{ fontSize: 12, color: "#6b7280" }}>
                   {filledCount}/5 selected
@@ -605,7 +690,10 @@ export default function ContestPage() {
                     transition: "all 0.15s",
                   }}
                 >
-                  {submitting ? "Submitting…" : isSubmitted ? "Resubmit Lineup" : "Submit Lineup"}
+                  {submitting ? "Submitting…"
+                    : bucket === "upcoming"
+                      ? (isSubmitted ? "Update Lineup" : "Create Lineup")
+                      : (isSubmitted ? "Resubmit Lineup" : "Submit Lineup")}
                 </button>
               </div>
             )}
@@ -748,6 +836,66 @@ export default function ContestPage() {
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+function ContestSection({
+  label, contests, selectedId, onSelect, highlight = false,
+}: {
+  label: string;
+  contests: Contest[];
+  selectedId: string | null;
+  onSelect: (c: Contest) => void;
+  highlight?: boolean;
+}) {
+  return (
+    <div style={{ padding: "12px 16px 0" }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: 1,
+        color: "#6b7280", textTransform: "uppercase", marginBottom: 6,
+      }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        {contests.map((c) => {
+          const isSelected = c.id === selectedId;
+          const pill = STATUS_PILL[c.status];
+          const activeBg = highlight ? "#1e3a8a" : "#374151";
+          return (
+            <button
+              key={c.id}
+              onClick={() => onSelect(c)}
+              style={{
+                flexShrink: 0, minWidth: 96,
+                padding: "8px 12px", borderRadius: 10,
+                background: isSelected ? activeBg : "#fff",
+                border: `1px solid ${isSelected ? activeBg : "#e5e7eb"}`,
+                textAlign: "left", cursor: "pointer",
+                transition: "all 0.15s",
+              }}
+            >
+              <div style={{
+                fontSize: 12, fontWeight: 700,
+                color: isSelected ? "#fff" : "#111827",
+              }}>
+                {formatDateShort(c.date)}
+              </div>
+              <div style={{ marginTop: 3 }}>
+                <span style={{
+                  display: "inline-block",
+                  fontSize: 10, fontWeight: 700,
+                  padding: "1px 6px", borderRadius: 999,
+                  background: isSelected ? "rgba(255,255,255,0.2)" : (pill?.bg ?? "#f3f4f6"),
+                  color:      isSelected ? "#fff"                    : (pill?.color ?? "#374151"),
+                }}>
+                  {pill?.label ?? c.status}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function FilterPill({
   label, active, onClick, color, activeBg,
