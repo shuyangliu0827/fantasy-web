@@ -137,6 +137,14 @@ export default function ContestPage() {
   const [flash, setFlash] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [now, setNow] = useState(new Date());
 
+  // Placeholder-resolution state. When a user clicks an upcoming placeholder
+  // card we hit /api/contests/by-date to ask BDL whether games are scheduled
+  // and (if so) lazily create the contest row + player pool. Until that
+  // resolves, `resolvingPlaceholder` drives a "checking schedule…" panel.
+  // `noGamesForPlaceholder` is set when BDL says no games are scheduled.
+  const [resolvingPlaceholder, setResolvingPlaceholder] = useState(false);
+  const [noGamesForPlaceholder, setNoGamesForPlaceholder] = useState(false);
+
   // ── AI lineup post state ─────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
   const [aiTone, setAiTone] = useState<Tone>("analytical");
@@ -219,22 +227,57 @@ export default function ContestPage() {
     setSearch("");
     setTierFilter(null);
     setPosFilter(null);
+    setNoGamesForPlaceholder(false);
+    setResolvingPlaceholder(false);
 
-    // Placeholder upcoming card (no DB row yet) — skip the player/lineup
-    // fetches; the render path shows a "Contest opens closer to game day"
-    // panel instead of the lineup builder.
-    if (c.placeholder) return;
+    // Placeholder upcoming card (no DB row yet) — ask the by-date resolver
+    // whether games are scheduled. If yes, it creates the contest stub and
+    // returns a real row; we then load it like any other contest. If no
+    // games, surface the no-games panel instead of the lineup builder.
+    let real: Contest = c;
+    if (c.placeholder) {
+      setResolvingPlaceholder(true);
+      try {
+        const r = await fetch(`/api/contests/by-date?date=${encodeURIComponent(c.date)}`);
+        if (requestedContestIdRef.current !== c.id) return;
+        const json = await r.json().catch(() => null);
+        if (!r.ok || !json) {
+          setResolvingPlaceholder(false);
+          return;
+        }
+        if (json.noGames) {
+          setNoGamesForPlaceholder(true);
+          setResolvingPlaceholder(false);
+          return;
+        }
+        if (!json.contest) {
+          setResolvingPlaceholder(false);
+          return;
+        }
+        real = json.contest as Contest;
+        // Replace the synthetic placeholder in the calendar so subsequent
+        // renders / clicks see the real row directly.
+        setAllContests((prev) => {
+          const without = prev.filter((x) => x.date !== real.date);
+          return [...without, real].sort((a, b) => a.date.localeCompare(b.date));
+        });
+        requestedContestIdRef.current = real.id;
+        setContest(real);
+      } finally {
+        setResolvingPlaceholder(false);
+      }
+    }
 
-    const pr = await fetch(`/api/contests/${c.id}/players`);
-    if (requestedContestIdRef.current !== c.id) return;
+    const pr = await fetch(`/api/contests/${real.id}/players`);
+    if (requestedContestIdRef.current !== real.id) return;
     if (pr.ok) {
       const { players: pool } = await pr.json();
       setPlayers(pool ?? []);
     }
 
     if (user) {
-      const { data } = await getMyLineup(c.id);
-      if (requestedContestIdRef.current !== c.id) return;
+      const { data } = await getMyLineup(real.id);
+      if (requestedContestIdRef.current !== real.id) return;
       if (data) {
         const next: (string | null)[] = [null, null, null, null, null];
         for (const p of data.players) next[p.slot - 1] = p.player_id;
@@ -741,10 +784,46 @@ export default function ContestPage() {
           </div>
         )}
 
-        {/* ── Placeholder upcoming empty-state ────────────────── */}
-        {/* Future-date card with no DB row yet — shown instead of the
-            lineup builder until the seed-upcoming cron creates the contest. */}
-        {!loading && !pageError && contest && isPlaceholder && (
+        {/* ── Placeholder upcoming states ─────────────────────── */}
+        {/* While resolving via /api/contests/by-date — checks BDL + lazily
+            creates the contest stub. */}
+        {!loading && !pageError && contest && isPlaceholder && resolvingPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 14, color: "#6b7280" }}>
+                {t("正在检查赛程…", "Checking schedule…")}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BDL has no scheduled games for this date. */}
+        {!loading && !pageError && contest && isPlaceholder && !resolvingPlaceholder && noGamesForPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🏀</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                {t("当日无比赛", "No games scheduled")}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+                {t(
+                  "这一天没有 NBA 比赛，无法创建每日竞赛。",
+                  "There are no NBA games on this date, so no daily contest is available.",
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resolver returned no contest and no noGames flag (e.g. network
+            error). Fall back to the generic "opens closer to game day" copy. */}
+        {!loading && !pageError && contest && isPlaceholder && !resolvingPlaceholder && !noGamesForPlaceholder && (
           <div style={{ padding: "24px 16px" }}>
             <div style={{
               background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
