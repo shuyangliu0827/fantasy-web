@@ -3,11 +3,19 @@
 import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { getSessionUser } from "@/lib/store";
+import { getSessionUser, createInsight } from "@/lib/store";
 import { translateTeam } from "@/lib/i18n";
 import { useLang } from "@/lib/lang";
-import { getMyLineup, saveLineup, submitLineup } from "@/lib/contest-fetch";
+import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/contest-fetch";
 import { isEligibleForContestSlot, SLOT_LABEL, parsePositions } from "@/lib/contest-positions";
+import {
+  type Tone,
+  type Style,
+  TONE_VALUES,
+  STYLE_VALUES,
+  MAX_CUSTOM_INSTRUCTION_LEN,
+} from "@/lib/ai/input-safety";
+import { track } from "@/lib/analytics";
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -88,7 +96,7 @@ function formatCountdown(lockIso: string, now: Date): string {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ContestPage() {
-  const { lang } = useLang();
+  const { lang, t } = useLang();
 
   // Auth
   const [user] = useState(() => getSessionUser());
@@ -114,6 +122,22 @@ export default function ContestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [flash, setFlash] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [now, setNow] = useState(new Date());
+
+  // ── AI lineup post state ─────────────────────────────────────
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTone, setAiTone] = useState<Tone>("analytical");
+  const [aiStyle, setAiStyle] = useState<Style>("hupu");
+  const [aiCustom, setAiCustom] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiVersions, setAiVersions] = useState<{ style: string; post: string }[] | null>(null);
+  const [aiCustomIgnored, setAiCustomIgnored] = useState(false);
+  const [aiSelectedIdx, setAiSelectedIdx] = useState<number | null>(null);
+  const [aiEditTitle, setAiEditTitle] = useState("");
+  const [aiEditBody, setAiEditBody] = useState("");
+  const [aiInitialBody, setAiInitialBody] = useState("");
+  const [aiEditedTracked, setAiEditedTracked] = useState(false);
+  const [aiPublishing, setAiPublishing] = useState(false);
 
   // ── Clock ───────────────────────────────────────────────────
   useEffect(() => {
@@ -385,6 +409,158 @@ export default function ContestPage() {
       setLineupStatus("submitted");
       showFlash("ok", "Lineup submitted! Good luck 🎯");
     }
+  }
+
+  // ── AI lineup post helpers ───────────────────────────────────
+
+  function buildAiLineupPayload() {
+    if (!contest) return null;
+    const items: { slot: string; playerId: string; name: string; team: string; position: string; projFpts?: number }[] = [];
+    slots.forEach((pid, idx) => {
+      if (!pid) return;
+      const p = playerMap.get(pid);
+      if (!p) return;
+      const item: { slot: string; playerId: string; name: string; team: string; position: string; projFpts?: number } = {
+        slot: SLOT_LABEL[idx + 1],
+        playerId: p.player_id,
+        name: p.name,
+        team: p.team,
+        position: p.position,
+      };
+      if (typeof p.fpts_avg === "number" && Number.isFinite(p.fpts_avg)) {
+        item.projFpts = Math.round(p.fpts_avg * 10) / 10;
+      }
+      items.push(item);
+    });
+    if (items.length === 0) return null;
+    return { lineup: items, contestDate: contest.date };
+  }
+
+  function resetAiState() {
+    setAiVersions(null);
+    setAiCustomIgnored(false);
+    setAiSelectedIdx(null);
+    setAiEditTitle("");
+    setAiEditBody("");
+    setAiInitialBody("");
+    setAiEditedTracked(false);
+    setAiError(null);
+  }
+
+  function discardAiPost(reason: "user_close" | "after_publish") {
+    if (reason === "user_close" && aiVersions) {
+      track("ai_post_discarded", { hadSelection: aiSelectedIdx !== null });
+    }
+    resetAiState();
+    setAiOpen(false);
+  }
+
+  async function handleAiGenerate() {
+    if (aiGenerating) return;
+    const payload = buildAiLineupPayload();
+    if (!payload) {
+      setAiError(t("请先填满 5 个阵容位", "Fill all 5 lineup slots first"));
+      return;
+    }
+    const trimmedCustom = aiCustom.trim();
+    track("ai_post_generate_clicked", {
+      tone: aiTone,
+      style: aiStyle,
+      hasCustom: trimmedCustom.length > 0,
+    });
+    setAiError(null);
+    setAiGenerating(true);
+    setAiVersions(null);
+    setAiCustomIgnored(false);
+    setAiSelectedIdx(null);
+
+    try {
+      const res = await contestFetch("/api/ai/generate-lineup-post", {
+        method: "POST",
+        body: JSON.stringify({
+          language: lang,
+          tone: aiTone,
+          style: aiStyle,
+          contestDate: payload.contestDate,
+          lineup: payload.lineup,
+          customInstruction: trimmedCustom,
+          generateCount: 3,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        const code = data?.error ?? `HTTP ${res.status}`;
+        const map: Record<string, string> = {
+          unauthorized: t("请登录后再生成", "Log in to generate."),
+          AI_NOT_CONFIGURED: t("AI 服务暂未配置", "AI service is not configured."),
+          RATE_LIMITED: t("请求太频繁，稍后再试", "Too many requests, try again shortly."),
+          AI_OUTPUT_SHAPE: t("AI 返回格式异常，请重试", "Unexpected AI output, please retry."),
+          AI_UPSTREAM_ERROR: t("AI 服务暂时不可用", "AI service temporarily unavailable."),
+          EMPTY_LINEUP: t("阵容为空", "Lineup is empty."),
+        };
+        setAiError(map[code] ?? code);
+        return;
+      }
+      const versions = data.versions as { style: string; post: string }[];
+      const accepted = data.customInstructionAccepted as boolean;
+      setAiVersions(versions);
+      setAiCustomIgnored(trimmedCustom.length > 0 && accepted === false);
+      if (trimmedCustom.length > 0) {
+        track("ai_post_custom_instruction_used", { accepted });
+      }
+    } catch {
+      setAiError(t("网络错误，请重试", "Network error, please retry."));
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  function selectAiVersion(idx: number) {
+    if (!aiVersions) return;
+    const v = aiVersions[idx];
+    if (!v) return;
+    track("ai_post_version_selected", { style: v.style, index: idx });
+    const fallbackTitleZh = `${formatDate(contest!.date)} 我的阵容`;
+    const fallbackTitleEn = `My ${formatDateShort(contest!.date)} lineup`;
+    setAiSelectedIdx(idx);
+    setAiEditTitle(lang === "zh" ? fallbackTitleZh : fallbackTitleEn);
+    setAiEditBody(v.post);
+    setAiInitialBody(v.post);
+    setAiEditedTracked(false);
+  }
+
+  function onAiBodyChange(next: string) {
+    setAiEditBody(next);
+    if (!aiEditedTracked && next !== aiInitialBody) {
+      track("ai_post_edited");
+      setAiEditedTracked(true);
+    }
+  }
+
+  async function publishAiPost() {
+    if (aiPublishing) return;
+    if (!aiEditTitle.trim()) {
+      setAiError(t("请输入标题", "Please enter a title"));
+      return;
+    }
+    setAiPublishing(true);
+    setAiError(null);
+    const result = await createInsight({
+      title: aiEditTitle,
+      body: aiEditBody.trim() || aiInitialBody,
+    });
+    setAiPublishing(false);
+    if (!result.ok) {
+      setAiError(result.error || t("发布失败", "Publish failed"));
+      return;
+    }
+    track("ai_post_published", {
+      tone: aiTone,
+      style: aiStyle,
+      versionStyle: aiVersions?.[aiSelectedIdx ?? 0]?.style,
+    });
+    showFlash("ok", t("已发布到 Insights", "Published to Insights"));
+    discardAiPost("after_publish");
   }
 
   // ── Render ───────────────────────────────────────────────────
@@ -706,6 +882,284 @@ export default function ContestPage() {
                 borderRadius: 8, fontSize: 12, color: "#15803d", fontWeight: 500,
               }}>
                 ✓ Lineup submitted — you can still update it until lock time.
+              </div>
+            )}
+
+            {/* ── AI lineup post ──────────────────────────────── */}
+            {user && filledCount === 5 && (
+              <div style={{
+                margin: "12px 16px 0", padding: "14px",
+                background: "#fff", border: "1px solid #e5e7eb",
+                borderRadius: 12,
+              }}>
+                {!aiOpen && (
+                  <button
+                    onClick={() => setAiOpen(true)}
+                    style={{
+                      width: "100%", padding: "11px 0",
+                      background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                      border: "none", borderRadius: 10,
+                      fontSize: 14, fontWeight: 700, color: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("一键生成阵容贴", "Generate lineup post")}
+                  </button>
+                )}
+
+                {aiOpen && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                        {t("阵容贴生成器", "Lineup post generator")}
+                      </span>
+                      <button
+                        onClick={() => discardAiPost("user_close")}
+                        style={{
+                          background: "none", border: "none", fontSize: 18,
+                          color: "#6b7280", cursor: "pointer", lineHeight: 1,
+                        }}
+                        aria-label="close"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    {/* Tone selector */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                        {t("语气", "Tone")}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {TONE_VALUES.map((tone) => {
+                          const labels: Record<Tone, [string, string]> = {
+                            analytical: ["专业分析", "Analytical"],
+                            casual: ["轻松吐槽", "Casual"],
+                            bold_prediction: ["大胆预测", "Bold prediction"],
+                            ask_advice: ["求建议", "Ask advice"],
+                            trash_talk: ["赛前狠话", "Trash talk"],
+                          };
+                          const [zh, en] = labels[tone];
+                          const active = aiTone === tone;
+                          return (
+                            <button
+                              key={tone}
+                              onClick={() => setAiTone(tone)}
+                              style={{
+                                padding: "6px 12px", borderRadius: 999,
+                                fontSize: 12, fontWeight: 600,
+                                border: `1px solid ${active ? "#4f46e5" : "#d1d5db"}`,
+                                background: active ? "#4f46e5" : "#fff",
+                                color: active ? "#fff" : "#374151",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {t(zh, en)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Style selector */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                        {t("风格", "Style")}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {STYLE_VALUES.map((style) => {
+                          const labels: Record<Style, [string, string]> = {
+                            hupu: ["虎扑老哥", "Hupu fan"],
+                            xiaohongshu: ["小红书", "Xiaohongshu"],
+                            wechat_moments: ["朋友圈", "WeChat moments"],
+                            professional_short: ["专业简短", "Professional short"],
+                          };
+                          const [zh, en] = labels[style];
+                          const active = aiStyle === style;
+                          return (
+                            <button
+                              key={style}
+                              onClick={() => setAiStyle(style)}
+                              style={{
+                                padding: "6px 12px", borderRadius: 999,
+                                fontSize: 12, fontWeight: 600,
+                                border: `1px solid ${active ? "#4f46e5" : "#d1d5db"}`,
+                                background: active ? "#4f46e5" : "#fff",
+                                color: active ? "#fff" : "#374151",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {t(zh, en)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Custom instruction */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                        {t("自定义说明（可选）", "Custom instruction (optional)")}
+                      </div>
+                      <textarea
+                        value={aiCustom}
+                        onChange={(e) => setAiCustom(e.target.value)}
+                        maxLength={MAX_CUSTOM_INSTRUCTION_LEN}
+                        placeholder={t(
+                          "比如：写得嚣张一点 / 强调我今天赌冷门 / 不要太正式",
+                          "e.g. make it bolder / emphasize my underdog bet / not too formal",
+                        )}
+                        rows={2}
+                        style={{
+                          width: "100%", padding: "8px 10px",
+                          border: "1px solid #e5e7eb", borderRadius: 8,
+                          fontSize: 13, color: "#111827", background: "#fff",
+                          outline: "none", resize: "vertical",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, textAlign: "right" }}>
+                        {Array.from(aiCustom).length}/{MAX_CUSTOM_INSTRUCTION_LEN}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleAiGenerate}
+                      disabled={aiGenerating}
+                      style={{
+                        width: "100%", padding: "10px 0",
+                        background: aiGenerating ? "#a5b4fc" : "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                        border: "none", borderRadius: 10,
+                        fontSize: 13, fontWeight: 700, color: "#fff",
+                        cursor: aiGenerating ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {aiGenerating ? t("生成中…", "Generating…") : t("生成 3 个版本", "Generate 3 versions")}
+                    </button>
+
+                    {aiError && (
+                      <div style={{
+                        marginTop: 10, padding: "8px 10px",
+                        background: "#fef2f2", border: "1px solid #fecaca",
+                        borderRadius: 8, fontSize: 12, color: "#991b1b",
+                      }}>
+                        {aiError}
+                      </div>
+                    )}
+
+                    {aiCustomIgnored && (
+                      <div style={{
+                        marginTop: 10, padding: "8px 10px",
+                        background: "#fffbeb", border: "1px solid #fde68a",
+                        borderRadius: 8, fontSize: 12, color: "#92400e",
+                      }}>
+                        {t("自定义说明已忽略（与篮球/阵容主题无关）", "Custom instruction ignored (off-topic).")}
+                      </div>
+                    )}
+
+                    {aiVersions && aiSelectedIdx === null && (
+                      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                        {aiVersions.map((v, idx) => {
+                          const tag = v.style === "analysis"
+                            ? t("分析", "Analysis")
+                            : v.style === "casual"
+                              ? t("吐槽", "Casual")
+                              : t("预测", "Bold");
+                          return (
+                            <div key={idx} style={{
+                              border: "1px solid #e5e7eb", borderRadius: 10,
+                              padding: 10, background: "#fafafa",
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                                <span style={{
+                                  padding: "2px 8px", borderRadius: 999,
+                                  fontSize: 11, fontWeight: 700,
+                                  background: "#eef2ff", color: "#4338ca",
+                                }}>
+                                  {tag}
+                                </span>
+                                <button
+                                  onClick={() => selectAiVersion(idx)}
+                                  style={{
+                                    padding: "4px 10px", borderRadius: 6,
+                                    border: "1px solid #4f46e5", background: "#4f46e5",
+                                    color: "#fff", fontSize: 11, fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  {t("使用此版本", "Use this version")}
+                                </button>
+                              </div>
+                              <div style={{ fontSize: 13, color: "#111827", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                                {v.post}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {aiVersions && aiSelectedIdx !== null && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>
+                          {t("标题", "Title")}
+                        </div>
+                        <input
+                          value={aiEditTitle}
+                          onChange={(e) => setAiEditTitle(e.target.value)}
+                          maxLength={80}
+                          style={{
+                            width: "100%", padding: "8px 10px",
+                            border: "1px solid #e5e7eb", borderRadius: 8,
+                            fontSize: 13, color: "#111827", background: "#fff",
+                            outline: "none", boxSizing: "border-box", marginBottom: 8,
+                          }}
+                        />
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>
+                          {t("正文", "Body")}
+                        </div>
+                        <textarea
+                          value={aiEditBody}
+                          onChange={(e) => onAiBodyChange(e.target.value)}
+                          maxLength={2000}
+                          rows={6}
+                          style={{
+                            width: "100%", padding: "8px 10px",
+                            border: "1px solid #e5e7eb", borderRadius: 8,
+                            fontSize: 13, color: "#111827", background: "#fff",
+                            outline: "none", boxSizing: "border-box", resize: "vertical",
+                          }}
+                        />
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button
+                            onClick={() => setAiSelectedIdx(null)}
+                            style={{
+                              flex: 1, padding: "9px 0",
+                              background: "#fff", border: "1px solid #d1d5db",
+                              borderRadius: 8, fontSize: 13, fontWeight: 600,
+                              color: "#374151", cursor: "pointer",
+                            }}
+                          >
+                            {t("返回", "Back")}
+                          </button>
+                          <button
+                            onClick={publishAiPost}
+                            disabled={aiPublishing}
+                            style={{
+                              flex: 2, padding: "9px 0",
+                              background: aiPublishing ? "#a7f3d0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                              border: "none", borderRadius: 8,
+                              fontSize: 13, fontWeight: 700, color: "#fff",
+                              cursor: aiPublishing ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {aiPublishing ? t("发布中…", "Publishing…") : t("发布", "Publish")}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
