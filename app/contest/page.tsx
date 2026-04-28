@@ -24,6 +24,11 @@ type Contest = {
   date: string;
   status: "pending" | "open" | "locked" | "scored";
   lineup_lock_at: string;
+  // True for client-synthesized future-date stubs that don't have a DB row.
+  // Rendered as "Upcoming" cards so the calendar always shows a future bucket;
+  // selecting one shows a "Contest opens closer to game day" panel instead of
+  // the lineup builder.
+  placeholder?: boolean;
 };
 
 type ContestPlayer = {
@@ -62,6 +67,15 @@ const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> 
   scored:   { label: "Scored",    bg: "#dbeafe", color: "#1e40af" },
 };
 
+// Calendar-card pill derived from date bucket, not DB status. Past contests
+// always read "Past" (regardless of DB status), today reads "Open", and any
+// date in the future reads "Upcoming".
+const BUCKET_PILL: Record<"past" | "present" | "upcoming", { label: string; bg: string; color: string }> = {
+  past:     { label: "Past",     bg: "#f3f4f6", color: "#6b7280" },
+  present:  { label: "Open",     bg: "#d1fae5", color: "#065f46" },
+  upcoming: { label: "Upcoming", bg: "#fef3c7", color: "#92400e" },
+};
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
@@ -74,23 +88,6 @@ function formatDateShort(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
     month: "short", day: "numeric",
   });
-}
-
-function formatLockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  });
-}
-
-function formatCountdown(lockIso: string, now: Date): string {
-  const diff = new Date(lockIso).getTime() - now.getTime();
-  if (diff <= 0) return "Locked";
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor((diff % 3_600_000) / 60_000);
-  const s = Math.floor((diff % 60_000) / 1_000);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
 }
 
 // ── Page ──────────────────────────────────────────────────────
@@ -122,6 +119,14 @@ export default function ContestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [flash, setFlash] = useState<{ type: "ok" | "err"; msg: string } | null>(null);
   const [now, setNow] = useState(new Date());
+
+  // Placeholder-resolution state. When a user clicks an upcoming placeholder
+  // card we hit /api/contests/by-date to ask BDL whether games are scheduled
+  // and (if so) lazily create the contest row + player pool. Until that
+  // resolves, `resolvingPlaceholder` drives a "checking schedule…" panel.
+  // `noGamesForPlaceholder` is set when BDL says no games are scheduled.
+  const [resolvingPlaceholder, setResolvingPlaceholder] = useState(false);
+  const [noGamesForPlaceholder, setNoGamesForPlaceholder] = useState(false);
 
   // ── AI lineup post state ─────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
@@ -205,17 +210,57 @@ export default function ContestPage() {
     setSearch("");
     setTierFilter(null);
     setPosFilter(null);
+    setNoGamesForPlaceholder(false);
+    setResolvingPlaceholder(false);
 
-    const pr = await fetch(`/api/contests/${c.id}/players`);
-    if (requestedContestIdRef.current !== c.id) return;
+    // Placeholder upcoming card (no DB row yet) — ask the by-date resolver
+    // whether games are scheduled. If yes, it creates the contest stub and
+    // returns a real row; we then load it like any other contest. If no
+    // games, surface the no-games panel instead of the lineup builder.
+    let real: Contest = c;
+    if (c.placeholder) {
+      setResolvingPlaceholder(true);
+      try {
+        const r = await fetch(`/api/contests/by-date?date=${encodeURIComponent(c.date)}`);
+        if (requestedContestIdRef.current !== c.id) return;
+        const json = await r.json().catch(() => null);
+        if (!r.ok || !json) {
+          setResolvingPlaceholder(false);
+          return;
+        }
+        if (json.noGames) {
+          setNoGamesForPlaceholder(true);
+          setResolvingPlaceholder(false);
+          return;
+        }
+        if (!json.contest) {
+          setResolvingPlaceholder(false);
+          return;
+        }
+        real = json.contest as Contest;
+        // Replace the synthetic placeholder in the calendar so subsequent
+        // renders / clicks see the real row directly.
+        setAllContests((prev) => {
+          const without = prev.filter((x) => x.date !== real.date);
+          return [...without, real].sort((a, b) => a.date.localeCompare(b.date));
+        });
+        requestedContestIdRef.current = real.id;
+        setContest(real);
+      } finally {
+        setResolvingPlaceholder(false);
+      }
+    }
+
+    const pr = await fetch(`/api/contests/${real.id}/players`);
+    if (requestedContestIdRef.current !== real.id) return;
     if (pr.ok) {
       const { players: pool } = await pr.json();
       setPlayers(pool ?? []);
     }
 
     if (user) {
-      const { data } = await getMyLineup(c.id);
-      if (requestedContestIdRef.current !== c.id) return;
+      const { data } = await getMyLineup(real.id);
+      if (requestedContestIdRef.current !== real.id) return;
       if (data) {
         const next: (string | null)[] = [null, null, null, null, null];
         for (const p of data.players) next[p.slot - 1] = p.player_id;
@@ -236,13 +281,6 @@ export default function ContestPage() {
   const inLineup      = new Set(slots.filter(Boolean) as string[]);
   const playerMap     = new Map(players.map((p) => [p.player_id, p]));
 
-  const isPastDeadline = contest
-    ? contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
-    : false;
-  const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
-  const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
-  const canEdit       = !!user && !isReadOnly;
-
   // Contest bucket — derived from contest.date vs today (UTC). Drives
   // bucket-aware CTA/header wording; reactive via the existing clock.
   const todayUtc = now.toISOString().slice(0, 10);
@@ -252,11 +290,65 @@ export default function ContestPage() {
       : "present")
     : null;
 
+  // Player editing locks at the first game tip-off (lineup_lock_at) or once
+  // the contest header has flipped to locked/scored. We don't add a separate
+  // "is the date in the past" check here because for any past date its
+  // lineup_lock_at is already in the past too, so the time comparison covers
+  // it — duplicating the check would just shadow data integrity bugs.
+  const isPastDeadline = contest
+    ? contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
+    : false;
+  const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
+  const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
+  const canEdit       = !!user && !isReadOnly;
+
   // Bucketed views over the full nearby window — feed the Past/Today/Upcoming
   // section cards above the existing contest detail pane.
-  const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
-  const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
-  const upcomingContests = allContests.filter((c) => c.date > todayUtc);
+  const pastContests = allContests.filter((c) => c.date < todayUtc).reverse();
+  const realPresent  = allContests.find((c) => c.date === todayUtc) ?? null;
+  const realUpcoming = allContests.filter((c) => c.date > todayUtc);
+
+  // Synthesize a placeholder for TODAY when no DB row exists yet. The morning
+  // create-today cron normally seeds it at 14:00 UTC, but the section must
+  // still render before then (or if the cron failed). Clicking calls the
+  // same /api/contests/by-date resolver as upcoming placeholders.
+  const presentContest: Contest = realPresent ?? {
+    id: `placeholder-${todayUtc}`,
+    date: todayUtc,
+    status: "pending",
+    lineup_lock_at: `${todayUtc}T23:00:00Z`,
+    placeholder: true,
+  };
+
+  // Synthesize placeholder cards for the next 7 days that don't have a DB row,
+  // so the "Upcoming" section is always visible even when the seed-upcoming
+  // cron hasn't seeded yet. Clicking calls /api/contests/by-date which
+  // resolves the date against BDL — either pulling an existing contest,
+  // creating one if games are scheduled, or surfacing a no-games panel.
+  const UPCOMING_PLACEHOLDER_DAYS = 7;
+  const placeholderUpcoming: Contest[] = (() => {
+    const haveDates = new Set(realUpcoming.map((c) => c.date));
+    const out: Contest[] = [];
+    const base = new Date(todayUtc + "T00:00:00Z");
+    for (let i = 1; i <= UPCOMING_PLACEHOLDER_DAYS; i++) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() + i);
+      const dateStr = d.toISOString().slice(0, 10);
+      if (haveDates.has(dateStr)) continue;
+      out.push({
+        id: `placeholder-${dateStr}`,
+        date: dateStr,
+        status: "pending",
+        lineup_lock_at: `${dateStr}T23:00:00Z`,
+        placeholder: true,
+      });
+    }
+    return out;
+  })();
+  const upcomingContests = [...realUpcoming, ...placeholderUpcoming]
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const isPlaceholder = !!contest?.placeholder;
 
   // Tier counts of the current lineup slots
   const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -593,23 +685,24 @@ export default function ContestPage() {
             contests={pastContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
+            bucket="past"
           />
         )}
-        {presentContest && (
-          <ContestSection
-            label="Today"
-            contests={[presentContest]}
-            selectedId={contest?.id ?? null}
-            onSelect={loadContestDetail}
-            highlight
-          />
-        )}
+        <ContestSection
+          label="Today"
+          contests={[presentContest]}
+          selectedId={contest?.id ?? null}
+          onSelect={loadContestDetail}
+          highlight
+          bucket="present"
+        />
         {upcomingContests.length > 0 && (
           <ContestSection
             label="Upcoming"
             contests={upcomingContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
+            bucket="upcoming"
           />
         )}
 
@@ -630,29 +723,22 @@ export default function ContestPage() {
                   {formatDate(contest.date)}
                 </div>
               </div>
-              {/* Status pill */}
-              <span style={{
-                padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-                background: STATUS_PILL[contest.status]?.bg ?? "#f3f4f6",
-                color:      STATUS_PILL[contest.status]?.color ?? "#374151",
-              }}>
-                {STATUS_PILL[contest.status]?.label ?? contest.status}
-              </span>
-            </div>
-
-            {/* Lock info */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
-              <span style={{ fontSize: 12, color: "#6b7280" }}>
-                Lock: {formatLockTime(contest.lineup_lock_at)}
-              </span>
-              {!isPastDeadline && (
-                <span style={{
-                  fontSize: 12, fontWeight: 700,
-                  color: formatCountdown(contest.lineup_lock_at, now) === "Locked" ? "#991b1b" : "#1e3a8a",
-                }}>
-                  {formatCountdown(contest.lineup_lock_at, now)}
-                </span>
-              )}
+              {/* Status pill — past dates always show "Past" so the header
+                  matches the calendar card; today/future fall back to DB status. */}
+              {(() => {
+                const headerPill = bucket === "past"
+                  ? BUCKET_PILL.past
+                  : (STATUS_PILL[contest.status] ?? { label: contest.status, bg: "#f3f4f6", color: "#374151" });
+                return (
+                  <span style={{
+                    padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
+                    background: headerPill.bg,
+                    color:      headerPill.color,
+                  }}>
+                    {headerPill.label}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -679,8 +765,75 @@ export default function ContestPage() {
           </div>
         )}
 
+        {/* ── Placeholder upcoming states ─────────────────────── */}
+        {/* While resolving via /api/contests/by-date — checks BDL + lazily
+            creates the contest stub. */}
+        {!loading && !pageError && contest && isPlaceholder && resolvingPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 14, color: "#6b7280" }}>
+                {t("正在检查赛程…", "Checking schedule…")}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BDL has no scheduled games for this date. */}
+        {!loading && !pageError && contest && isPlaceholder && !resolvingPlaceholder && noGamesForPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🏀</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                {t("当日无比赛", "No games scheduled")}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+                {t(
+                  "这一天没有 NBA 比赛，无法创建每日竞赛。",
+                  "There are no NBA games on this date, so no daily contest is available.",
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resolver returned no contest and no noGames flag (e.g. network
+            error). Fall back copy depends on bucket so a today-placeholder
+            doesn't read like a future date. */}
+        {!loading && !pageError && contest && isPlaceholder && !resolvingPlaceholder && !noGamesForPlaceholder && (
+          <div style={{ padding: "24px 16px" }}>
+            <div style={{
+              background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>🗓️</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
+                {bucket === "present"
+                  ? t("竞赛准备中", "Contest is being prepared")
+                  : t("竞赛尚未开放", "Contest opens closer to game day")}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+                {bucket === "present"
+                  ? t(
+                      "今日竞赛即将开放，请稍后刷新。",
+                      "Today's contest is being prepared. Please refresh in a moment.",
+                    )
+                  : t(
+                      "球员池将在比赛日前一天准备好，请稍后再来选阵容。",
+                      "The player pool is prepared the day before tip-off. Check back closer to game day to build your lineup.",
+                    )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Main content ────────────────────────────────────── */}
-        {!loading && !pageError && contest && (
+        {!loading && !pageError && contest && !isPlaceholder && (
           <>
             {/* ── Not logged in banner ──────────────────────── */}
             {!user && (
@@ -1292,14 +1445,16 @@ export default function ContestPage() {
 // ── Sub-components ────────────────────────────────────────────
 
 function ContestSection({
-  label, contests, selectedId, onSelect, highlight = false,
+  label, contests, selectedId, onSelect, highlight = false, bucket,
 }: {
   label: string;
   contests: Contest[];
   selectedId: string | null;
   onSelect: (c: Contest) => void;
   highlight?: boolean;
+  bucket: "past" | "present" | "upcoming";
 }) {
+  const pill = BUCKET_PILL[bucket];
   return (
     <div style={{ padding: "12px 16px 0" }}>
       <div style={{
@@ -1311,7 +1466,6 @@ function ContestSection({
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {contests.map((c) => {
           const isSelected = c.id === selectedId;
-          const pill = STATUS_PILL[c.status];
           const activeBg = highlight ? "#1e3a8a" : "#374151";
           return (
             <button
@@ -1337,10 +1491,10 @@ function ContestSection({
                   display: "inline-block",
                   fontSize: 10, fontWeight: 700,
                   padding: "1px 6px", borderRadius: 999,
-                  background: isSelected ? "rgba(255,255,255,0.2)" : (pill?.bg ?? "#f3f4f6"),
-                  color:      isSelected ? "#fff"                    : (pill?.color ?? "#374151"),
+                  background: isSelected ? "rgba(255,255,255,0.2)" : pill.bg,
+                  color:      isSelected ? "#fff"                    : pill.color,
                 }}>
-                  {pill?.label ?? c.status}
+                  {pill.label}
                 </span>
               </div>
             </button>
