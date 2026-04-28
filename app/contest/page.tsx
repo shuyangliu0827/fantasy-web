@@ -151,6 +151,12 @@ export default function ContestPage() {
   const [resolvingPlaceholder, setResolvingPlaceholder] = useState(false);
   const [noGamesForPlaceholder, setNoGamesForPlaceholder] = useState(false);
 
+  // Player-pool fetch error. When non-null, the pool area renders a
+  // diagnostic banner instead of "no players match your filter" so the user
+  // can tell apart a real empty pool from a transport / schema problem
+  // (e.g., a missing migration on the deployed DB).
+  const [playersError, setPlayersError] = useState<string | null>(null);
+
   // ── AI lineup post state ─────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
   const [aiTone, setAiTone] = useState<Tone>("analytical");
@@ -235,6 +241,7 @@ export default function ContestPage() {
     setPosFilter(null);
     setNoGamesForPlaceholder(false);
     setResolvingPlaceholder(false);
+    setPlayersError(null);
 
     // Placeholder upcoming card (no DB row yet) — ask the by-date resolver
     // whether games are scheduled. If yes, it creates the contest stub and
@@ -279,6 +286,15 @@ export default function ContestPage() {
     if (pr.ok) {
       const { players: pool } = await pr.json();
       setPlayers(pool ?? []);
+      setPlayersError(null);
+    } else {
+      // Surface the upstream error so an empty pool is debuggable instead
+      // of looking identical to an over-filtered list. The most common
+      // cause is a missing column on the deployed DB (migration 025 not
+      // yet applied).
+      const body = await pr.json().catch(() => null);
+      setPlayersError(body?.error ?? `HTTP ${pr.status}`);
+      setPlayers([]);
     }
 
     if (user) {
@@ -1451,9 +1467,24 @@ export default function ContestPage() {
 
               {/* Flat salary-DESC list. Tier badge + filter pill above keep
                   the tier signal without forcing a grouped layout. */}
-              {sortedPool.length === 0 ? (
+              {playersError ? (
+                <div style={{
+                  padding: "14px 16px", background: "#fef2f2",
+                  border: "1px solid #fecaca", borderRadius: 10,
+                  fontSize: 13, color: "#991b1b", lineHeight: 1.5,
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    {t("无法加载球员池", "Could not load player pool")}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#7f1d1d" }}>
+                    {playersError}
+                  </div>
+                </div>
+              ) : sortedPool.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: "#9ca3af" }}>
-                  {t("暂无符合条件的球员。", "No players match your filter.")}
+                  {players.length === 0
+                    ? t("当日没有球员可选。", "No players available for this contest.")
+                    : t("暂无符合条件的球员。", "No players match your filter.")}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

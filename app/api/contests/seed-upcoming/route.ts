@@ -170,9 +170,16 @@ export async function GET(req: Request) {
     //    Computes last-5 fpts averages → projected_points → salary + tier.
     const poolRows = (await buildContestPool(supabase, dateStr, playingTeams)) ?? [];
     if (poolRows.length > 0) {
-      await supabase.from("contest_players").insert(
-        poolRows.map((row) => ({ ...row, contest_id: contestId })),
-      );
+      const { error: cpErr } = await supabase
+        .from("contest_players")
+        .insert(poolRows.map((row) => ({ ...row, contest_id: contestId })));
+
+      // Surface the insert failure in the per-date result so a missing
+      // migration / schema mismatch doesn't silently leave an empty pool.
+      if (cpErr) {
+        results.push({ date: dateStr, action: `error: ${cpErr.message}`, id: contestId });
+        continue;
+      }
     }
 
     results.push({ date: dateStr, action, id: contestId, pool_size: poolRows.length });

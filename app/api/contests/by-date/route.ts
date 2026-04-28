@@ -117,9 +117,19 @@ export async function GET(req: Request) {
   //    (last-5 fpts averages → projected_points → salary curve + tier).
   const poolRows = await buildContestPool(supabase, date, playingTeams);
   if (poolRows && poolRows.length > 0) {
-    await supabase.from("contest_players").insert(
-      poolRows.map((row) => ({ ...row, contest_id: created.id })),
-    );
+    const { error: cpErr } = await supabase
+      .from("contest_players")
+      .insert(poolRows.map((row) => ({ ...row, contest_id: created.id })));
+
+    // Surface insert failures so a schema mismatch / missing migration
+    // doesn't silently leave a contest with an empty pool. The contest row
+    // already exists at this point — caller can retry or rebuild.
+    if (cpErr) {
+      return NextResponse.json(
+        { error: `pool_insert_failed: ${cpErr.message}`, contest: created },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ contest: created });
