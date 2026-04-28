@@ -61,6 +61,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
+import { buildContestPool } from "@/lib/contest-pool-builder";
 
 // Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
@@ -82,20 +83,6 @@ function isAuthorized(req: Request): boolean {
   const url = new URL(req.url);
   if (url.searchParams.get("secret") === secret) return true;
   return false;
-}
-
-/**
- * Assigns tier by quartile of the full pool.
- * rank is 1-based; total is the pool size.
- * Quartile boundaries use the exact count / 4 so uneven pools
- * distribute extra players into the next tier.
- */
-function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
-  const q = total / 4;
-  if (rank <= q)     return 1;
-  if (rank <= q * 2) return 2;
-  if (rank <= q * 3) return 3;
-  return 4;
 }
 
 /**
@@ -166,29 +153,6 @@ async function getTodaySlate(dateStr: string): Promise<TodaySlate> {
   }
 }
 
-/**
- * Build the contest player pool for a given set of playing teams.
- * Returns all non-injured players on those teams, sorted by fpts_avg DESC.
- * No cap — the full same-day slate is the pool.
- */
-async function buildPool(supabase: ReturnType<typeof db>, playingTeams: Set<string>) {
-  const { data: cacheRows, error } = await supabase
-    .from("player_stats_cache")
-    .select("player_id, fpts_avg, injury, team")
-    .in("team", [...playingTeams])
-    .order("fpts_avg", { ascending: false });
-
-  if (error) return { poolRows: null, error };
-
-  // Filter out "Out*" injuries in JS — PostgREST NOT ILIKE drops NULLs.
-  // No cap: ALL non-injured players on a playing team enter the pool.
-  const poolRows = (cacheRows ?? []).filter(
-    (r) => !r.injury?.toLowerCase().startsWith("out"),
-  );
-
-  return { poolRows, error: null };
-}
-
 // ── Handler ───────────────────────────────────────────────────
 
 async function handler(req: Request) {
@@ -224,20 +188,17 @@ async function handler(req: Request) {
     return NextResponse.json({ created: false, reason: "no_games_today" });
   }
 
-  // ── 3. Build pool: all non-injured players on playing teams ───
-  const { poolRows, error: poolErr } = await buildPool(supabase, playingTeams);
-  if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
-  if (!poolRows || poolRows.length === 0) {
+  // ── 3. Build a fully-priced pool via the shared builder ──────
+  const poolRows = await buildContestPool(supabase, today, playingTeams);
+  if (poolRows === null) {
+    return NextResponse.json({ error: "failed to read player_stats_cache" }, { status: 500 });
+  }
+  if (poolRows.length === 0) {
     return NextResponse.json(
       { error: "player pool is empty — run /api/nba-stats first to populate player_stats_cache" },
       { status: 422 },
     );
   }
-
-  const contestPlayers = poolRows.map((row, i) => ({
-    player_id: String(row.player_id),
-    tier:      tierFor(i + 1, poolRows.length),
-  }));
 
   // ── Force-rebuild path ────────────────────────────────────────
   // Drop existing contest_players and replace them. The contest header
@@ -253,7 +214,7 @@ async function handler(req: Request) {
 
     const { error: insErr } = await supabase
       .from("contest_players")
-      .insert(contestPlayers.map((cp) => ({ ...cp, contest_id: existing.id })));
+      .insert(poolRows.map((row) => ({ ...row, contest_id: existing.id })));
 
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
@@ -269,7 +230,7 @@ async function handler(req: Request) {
     return NextResponse.json({
       rebuilt:       true,
       contest:       { ...existing, lineup_lock_at: lineupLockAt },
-      pool_size:     contestPlayers.length,
+      pool_size:     poolRows.length,
       playing_teams: playingTeams.size,
       lock_source:   lockSource,
     });
@@ -286,14 +247,14 @@ async function handler(req: Request) {
 
   const { error: cpErr } = await supabase
     .from("contest_players")
-    .insert(contestPlayers.map((cp) => ({ ...cp, contest_id: contest.id })));
+    .insert(poolRows.map((row) => ({ ...row, contest_id: contest.id })));
 
   if (cpErr) return NextResponse.json({ error: cpErr.message }, { status: 500 });
 
   return NextResponse.json({
     created:       true,
     contest,
-    pool_size:     contestPlayers.length,
+    pool_size:     poolRows.length,
     playing_teams: playingTeams.size,
     lock_source:   lockSource,
   });

@@ -9,6 +9,11 @@ import { useLang } from "@/lib/lang";
 import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/contest-fetch";
 import { isEligibleForContestSlot, SLOT_LABEL, parsePositions } from "@/lib/contest-positions";
 import {
+  SALARY_CAP,
+  ROSTER_SIZE,
+  computeCapState,
+} from "@/lib/contest-salary";
+import {
   type Tone,
   type Style,
   TONE_VALUES,
@@ -40,7 +45,25 @@ type ContestPlayer = {
   position: string;
   fpts_avg: number;
   injury: string | null;
+  // Salary-cap fields populated by /api/contests/[id]/players (migration 025).
+  // Older contests created before the migration will have salary=5000 and
+  // projected_points=0 — the UI tolerates that gracefully.
+  salary: number;
+  projected_points: number;
+  last_5_avg_fp: number;
+  season_avg_fp: number;
+  value: number;
+  injury_status: string | null;
+  is_available: boolean;
 };
+
+// Money formatter used everywhere in the cap UI. Whole-dollar precision and
+// a leading $ keeps "$50,000" / "$8,400" readable on a phone-width card.
+function fmtMoney(n: number): string {
+  const abs = Math.abs(Math.round(n));
+  const sign = n < 0 ? "-" : "";
+  return `${sign}$${abs.toLocaleString("en-US")}`;
+}
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -128,6 +151,12 @@ export default function ContestPage() {
   const [resolvingPlaceholder, setResolvingPlaceholder] = useState(false);
   const [noGamesForPlaceholder, setNoGamesForPlaceholder] = useState(false);
 
+  // Player-pool fetch error. When non-null, the pool area renders a
+  // diagnostic banner instead of "no players match your filter" so the user
+  // can tell apart a real empty pool from a transport / schema problem
+  // (e.g., a missing migration on the deployed DB).
+  const [playersError, setPlayersError] = useState<string | null>(null);
+
   // ── AI lineup post state ─────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
   const [aiTone, setAiTone] = useState<Tone>("analytical");
@@ -212,6 +241,7 @@ export default function ContestPage() {
     setPosFilter(null);
     setNoGamesForPlaceholder(false);
     setResolvingPlaceholder(false);
+    setPlayersError(null);
 
     // Placeholder upcoming card (no DB row yet) — ask the by-date resolver
     // whether games are scheduled. If yes, it creates the contest stub and
@@ -256,6 +286,15 @@ export default function ContestPage() {
     if (pr.ok) {
       const { players: pool } = await pr.json();
       setPlayers(pool ?? []);
+      setPlayersError(null);
+    } else {
+      // Surface the upstream error so an empty pool is debuggable instead
+      // of looking identical to an over-filtered list. The most common
+      // cause is a missing column on the deployed DB (migration 025 not
+      // yet applied).
+      const body = await pr.json().catch(() => null);
+      setPlayersError(body?.error ?? `HTTP ${pr.status}`);
+      setPlayers([]);
     }
 
     if (user) {
@@ -270,12 +309,11 @@ export default function ContestPage() {
     }
   }
 
-  // ── Tier rules ───────────────────────────────────────────────
-  // Exact requirement: 1 T1, 1 T2, 1 T3, 2 T4.
-  // Mirrored server-side in app/api/contests/[id]/lineup/route.ts.
-  const TIER_REQUIRED: Record<number, number> = { 1: 1, 2: 1, 3: 1, 4: 2 };
-
   // ── Derived ─────────────────────────────────────────────────
+  // Lineup composition is governed by the salary cap, not tier quotas.
+  // Tier remains a display / filter aid (badge + filter pill) but no longer
+  // affects validity. Cap math lives in lib/contest-salary.ts and is
+  // mirrored server-side by app/api/contests/[id]/lineup/route.ts.
 
   const filledCount   = slots.filter(Boolean).length;
   const inLineup      = new Set(slots.filter(Boolean) as string[]);
@@ -350,19 +388,12 @@ export default function ContestPage() {
 
   const isPlaceholder = !!contest?.placeholder;
 
-  // Tier counts of the current lineup slots
-  const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-  for (const pid of slots) {
-    if (pid) {
-      const t = playerMap.get(pid)?.tier ?? 4;
-      tierCounts[t] = (tierCounts[t] ?? 0) + 1;
-    }
-  }
-  const tierOk = filledCount === 5 &&
-    tierCounts[1] === TIER_REQUIRED[1] &&
-    tierCounts[2] === TIER_REQUIRED[2] &&
-    tierCounts[3] === TIER_REQUIRED[3] &&
-    tierCounts[4] === TIER_REQUIRED[4];
+  // Salary-cap state: live total, remaining budget, per-empty-slot average.
+  // Drives the cap counter UI and gates the Save / Submit buttons.
+  const lineupSalaries = slots.map((pid) => (pid ? playerMap.get(pid)?.salary ?? 0 : 0));
+  const capState = computeCapState(lineupSalaries);
+  const lineupComplete = filledCount === ROSTER_SIZE;
+  const lineupValid    = lineupComplete && !capState.overCap;
 
   // Base positions for the filter pills — always the five canonical slots,
   // independent of what combo strings are stored in player_stats_cache.
@@ -376,15 +407,16 @@ export default function ContestPage() {
     return true;
   });
 
-  // Group by tier (only tiers with results after filtering)
-  const tierGroups: Array<{ tier: number; players: ContestPlayer[] }> = [1, 2, 3, 4]
-    .map((t) => ({ tier: t, players: filtered.filter((p) => p.tier === t) }))
-    .filter((g) => g.players.length > 0);
+  // Flat salary-DESC list — replaces the tier-grouped layout. Tier is now a
+  // small badge on each row, and the tier filter pill above the list is
+  // sufficient for narrowing down by tier when the user wants to.
+  const sortedPool = [...filtered].sort((a, b) => b.salary - a.salary);
 
   // ── Interactions ────────────────────────────────────────────
 
   // Toggle player in/out of lineup.
-  // Fills the first empty slot the player is position-eligible for.
+  // Fills the first empty slot the player is position-eligible for, gated
+  // by the salary cap and per-day availability (no tier quotas anymore).
   // Combo positions ("PG/SG") satisfy either slot they contain.
   function togglePlayer(pid: string) {
     if (!canEdit) return;
@@ -397,12 +429,24 @@ export default function ContestPage() {
     const player = playerMap.get(pid);
     if (!player) return;
 
-    // ── Tier constraint checks ─────────────────────────────
-    // Block adding if this tier is already at its quota.
-    const tierQuota = TIER_REQUIRED[player.tier] ?? 0;
-    if ((tierCounts[player.tier] ?? 0) >= tierQuota) {
-      const labels: Record<number, string> = { 1: "Elite (T1)", 2: "Solid (T2)", 3: "Value (T3)", 4: "Deep Cut (T4)" };
-      showFlash("err", `Only ${tierQuota} ${labels[player.tier]} player${tierQuota === 1 ? "" : "s"} allowed.`);
+    // Player flagged unavailable since the page loaded — block. Server
+    // re-checks at submit time as a defence-in-depth layer.
+    if (player.is_available === false) {
+      showFlash("err", t(
+        `${player.name} 当日不可用。`,
+        `${player.name} is unavailable for this contest.`,
+      ));
+      return;
+    }
+
+    // Cap guard: would adding this player push us past the cap?
+    const projectedTotal = capState.totalSalary + (player.salary || 0);
+    if (projectedTotal > SALARY_CAP) {
+      const over = projectedTotal - SALARY_CAP;
+      showFlash("err", t(
+        `加上 ${player.name}（${fmtMoney(player.salary)}）会超出工资帽 ${fmtMoney(over)}。`,
+        `Adding ${player.name} (${fmtMoney(player.salary)}) would exceed the cap by ${fmtMoney(over)}.`,
+      ));
       return;
     }
 
@@ -446,43 +490,50 @@ export default function ContestPage() {
     const picks = slots
       .map((id, i) => (id ? { slot: i + 1, player_id: id } : null))
       .filter(Boolean) as { slot: number; player_id: string }[];
-    if (picks.length !== 5) {
-      showFlash("err", "Fill all 5 slots to save.");
+    if (picks.length !== ROSTER_SIZE) {
+      showFlash("err", t("请选满 5 名球员后再保存。", "Fill all 5 slots to save."));
       return;
     }
-    if (!tierOk) {
-      showFlash("err", "Lineup must have exactly 1 Elite, 1 Solid, 1 Value, and 2 Deep Cut players.");
+    if (capState.overCap) {
+      showFlash("err", t(
+        `工资超出 ${fmtMoney(-capState.remaining)}。`,
+        `Lineup is ${fmtMoney(-capState.remaining)} over the salary cap.`,
+      ));
       return;
     }
     setSaving(true);
     const { error } = await saveLineup(contest.id, picks);
     setSaving(false);
     if (error) {
-      showFlash("err",
-        error === "unauthorized"   ? "Log in to save your lineup." :
-        error === "contest_locked" ? "Contest is locked — edits not allowed." :
-        error
-      );
+      const msgs: Record<string, string> = {
+        unauthorized:                          t("请登录后再保存。", "Log in to save your lineup."),
+        contest_locked:                        t("比赛已锁定，无法编辑。", "Contest is locked — edits not allowed."),
+        "salary cap exceeded":                 t("工资超出上限。", "Lineup exceeds the salary cap."),
+        "one or more players not available":   t("阵容中存在不可用球员。", "One or more players are not available."),
+      };
+      showFlash("err", msgs[error] ?? error);
     } else {
-      showFlash("ok", "Draft saved.");
+      showFlash("ok", t("草稿已保存。", "Draft saved."));
     }
   }
 
   // ── Submit ───────────────────────────────────────────────────
 
   async function handleSubmit() {
-    if (!contest || !user || !canEdit || filledCount !== 5 || submitting) return;
+    if (!contest || !user || !canEdit || !lineupValid || submitting) return;
     setSubmitting(true);
 
     // Save first, then submit
     const picks = slots.map((id, i) => ({ slot: i + 1, player_id: id! }));
     const saveResult = await saveLineup(contest.id, picks);
     if (saveResult.error) {
-      showFlash("err",
-        saveResult.error === "unauthorized"   ? "Log in to submit." :
-        saveResult.error === "contest_locked" ? "Contest is locked." :
-        saveResult.error
-      );
+      const msgs: Record<string, string> = {
+        unauthorized:                          t("请登录后再提交。", "Log in to submit."),
+        contest_locked:                        t("比赛已锁定。", "Contest is locked."),
+        "salary cap exceeded":                 t("工资超出上限。", "Lineup exceeds the salary cap."),
+        "one or more players not available":   t("阵容中存在不可用球员。", "One or more players are not available."),
+      };
+      showFlash("err", msgs[saveResult.error] ?? saveResult.error);
       setSubmitting(false);
       return;
     }
@@ -491,15 +542,17 @@ export default function ContestPage() {
     setSubmitting(false);
     if (subResult.error) {
       const msgs: Record<string, string> = {
-        unauthorized:     "Log in to submit.",
-        contest_locked:   "Contest is locked — lineups can no longer be submitted.",
-        lineup_locked:    "Your lineup is already locked.",
-        incomplete_lineup: "Select exactly 5 players.",
+        unauthorized:                          t("请登录后再提交。", "Log in to submit."),
+        contest_locked:                        t("比赛已锁定，无法提交。", "Contest is locked — lineups can no longer be submitted."),
+        lineup_locked:                         t("阵容已锁定。", "Your lineup is already locked."),
+        incomplete_lineup:                     t("请选择 5 名球员。", "Select exactly 5 players."),
+        "salary cap exceeded":                 t("工资超出上限。", "Lineup exceeds the salary cap."),
+        "one or more players not available":   t("阵容中存在不可用球员。", "One or more players are not available."),
       };
       showFlash("err", msgs[subResult.error] ?? subResult.error);
     } else {
       setLineupStatus("submitted");
-      showFlash("ok", "Lineup submitted! Good luck 🎯");
+      showFlash("ok", t("阵容已提交！祝你好运 🎯", "Lineup submitted! Good luck 🎯"));
     }
   }
 
@@ -958,30 +1011,59 @@ export default function ContestPage() {
               })}
             </div>
 
-            {/* ── Tier rules bar ────────────────────────────── */}
+            {/* ── Salary-cap counter ────────────────────────── */}
+            {/* Live cap state: filled/5, used $, remaining $, avg per empty
+                slot. Mirrors lib/contest-salary.ts; server re-validates. */}
             {user && !isReadOnly && (
               <div style={{
-                margin: "10px 16px 0", padding: "10px 14px",
-                background: "#f8fafc", border: "1px solid #e5e7eb",
-                borderRadius: 8, fontSize: 12,
-                display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
+                margin: "10px 16px 0", padding: "12px 14px",
+                background: "#f8fafc", border: `1px solid ${capState.overCap ? "#fecaca" : "#e5e7eb"}`,
+                borderRadius: 10,
               }}>
-                <span style={{ color: "#6b7280", fontWeight: 600 }}>Required:</span>
-                {([1, 2, 3, 4] as const).map((t) => {
-                  const required = TIER_REQUIRED[t];
-                  const current  = tierCounts[t] ?? 0;
-                  const over  = current > required;
-                  const met   = current === required;
-                  const label = ["", "T1", "T2", "T3", "T4"][t];
-                  return (
-                    <span key={t} style={{
-                      fontWeight: 700,
-                      color: over ? "#991b1b" : met ? "#15803d" : "#6b7280",
-                    }}>
-                      {label}: {current}/{required}
-                    </span>
-                  );
-                })}
+                <div style={{
+                  display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                  gap: 8, fontSize: 11,
+                }}>
+                  <CapStat
+                    label={t("已选", "Filled")}
+                    value={`${capState.filled}/${ROSTER_SIZE}`}
+                    tone={lineupComplete ? "ok" : "neutral"}
+                  />
+                  <CapStat
+                    label={t("已用工资", "Salary used")}
+                    value={fmtMoney(capState.totalSalary)}
+                    tone={capState.overCap ? "err" : "neutral"}
+                  />
+                  <CapStat
+                    label={t("剩余", "Remaining")}
+                    value={fmtMoney(capState.remaining)}
+                    tone={capState.overCap ? "err" : capState.remaining < 1000 ? "warn" : "ok"}
+                  />
+                  <CapStat
+                    label={t("空位均值", "Avg / empty")}
+                    value={capState.emptySlots > 0 ? fmtMoney(capState.avgPerEmptySlot) : "—"}
+                    tone="neutral"
+                  />
+                </div>
+
+                {/* Inline error: cap exceeded or lineup incomplete. Submit
+                    button is disabled in either state — this line tells the
+                    user exactly what to fix. */}
+                {capState.overCap ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#991b1b", fontWeight: 600 }}>
+                    {t(
+                      `超出工资帽 ${fmtMoney(-capState.remaining)}。`,
+                      `Over the salary cap by ${fmtMoney(-capState.remaining)}.`,
+                    )}
+                  </div>
+                ) : !lineupComplete ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#92400e", fontWeight: 600 }}>
+                    {t(
+                      `还需选择 ${ROSTER_SIZE - capState.filled} 名球员。`,
+                      `Pick ${ROSTER_SIZE - capState.filled} more player${ROSTER_SIZE - capState.filled === 1 ? "" : "s"} to submit.`,
+                    )}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -990,39 +1072,39 @@ export default function ContestPage() {
               <div style={{ padding: "12px 16px 0", display: "flex", gap: 8 }}>
                 <button
                   onClick={handleSave}
-                  disabled={saving || filledCount !== 5 || !tierOk}
+                  disabled={saving || !lineupValid}
                   style={{
                     flex: 1, padding: "11px 0",
                     background: "#fff", border: "1px solid #d1d5db",
                     borderRadius: 10, fontSize: 14, fontWeight: 600,
-                    color: filledCount === 5 && tierOk ? "#374151" : "#9ca3af",
-                    cursor: filledCount === 5 && tierOk && !saving ? "pointer" : "not-allowed",
-                    opacity: filledCount === 5 && tierOk ? 1 : 0.5,
+                    color: lineupValid ? "#374151" : "#9ca3af",
+                    cursor: lineupValid && !saving ? "pointer" : "not-allowed",
+                    opacity: lineupValid ? 1 : 0.5,
                     transition: "all 0.15s",
                   }}
                 >
-                  {saving ? "Saving…" : "Save Draft"}
+                  {saving ? t("保存中…", "Saving…") : t("保存草稿", "Save Draft")}
                 </button>
 
                 <button
                   onClick={handleSubmit}
-                  disabled={!canEdit || filledCount !== 5 || !tierOk || submitting}
+                  disabled={!canEdit || !lineupValid || submitting}
                   style={{
                     flex: 2, padding: "11px 0",
-                    background: canEdit && filledCount === 5 && tierOk
+                    background: canEdit && lineupValid
                       ? "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
                       : "#e5e7eb",
                     border: "none", borderRadius: 10,
                     fontSize: 14, fontWeight: 700,
-                    color: canEdit && filledCount === 5 && tierOk ? "#000" : "#9ca3af",
-                    cursor: canEdit && filledCount === 5 && tierOk && !submitting ? "pointer" : "not-allowed",
+                    color: canEdit && lineupValid ? "#000" : "#9ca3af",
+                    cursor: canEdit && lineupValid && !submitting ? "pointer" : "not-allowed",
                     transition: "all 0.15s",
                   }}
                 >
-                  {submitting ? "Submitting…"
+                  {submitting ? t("提交中…", "Submitting…")
                     : bucket === "upcoming"
-                      ? (isSubmitted ? "Update Lineup" : "Create Lineup")
-                      : (isSubmitted ? "Resubmit Lineup" : "Submit Lineup")}
+                      ? (isSubmitted ? t("更新阵容", "Update Lineup") : t("创建阵容", "Create Lineup"))
+                      : (isSubmitted ? t("重新提交", "Resubmit Lineup") : t("提交阵容", "Submit Lineup"))}
                 </button>
               </div>
             )}
@@ -1383,52 +1465,49 @@ export default function ContestPage() {
                 ))}
               </div>
 
-              {/* Tier-grouped player list */}
-              {tierGroups.length === 0 ? (
+              {/* Flat salary-DESC list. Tier badge + filter pill above keep
+                  the tier signal without forcing a grouped layout. */}
+              {playersError ? (
+                <div style={{
+                  padding: "14px 16px", background: "#fef2f2",
+                  border: "1px solid #fecaca", borderRadius: 10,
+                  fontSize: 13, color: "#991b1b", lineHeight: 1.5,
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    {t("无法加载球员池", "Could not load player pool")}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#7f1d1d" }}>
+                    {playersError}
+                  </div>
+                </div>
+              ) : sortedPool.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "24px 0", fontSize: 13, color: "#9ca3af" }}>
-                  No players match your filter.
+                  {players.length === 0
+                    ? t("当日没有球员可选。", "No players available for this contest.")
+                    : t("暂无符合条件的球员。", "No players match your filter.")}
                 </div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {tierGroups.map(({ tier, players: group }) => (
-                    <div key={tier}>
-                      {/* Tier header */}
-                      <div style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        marginBottom: 6,
-                      }}>
-                        <span style={{
-                          padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 700,
-                          background: TIER_COLOR[tier].bg, color: TIER_COLOR[tier].color,
-                          border: `1px solid ${TIER_COLOR[tier].border}`,
-                        }}>
-                          Tier {tier} — {TIER_LABEL[tier]}
-                        </span>
-                        <span style={{ fontSize: 11, color: "#9ca3af" }}>
-                          {group.length} players
-                        </span>
-                      </div>
-
-                      {/* Player cards */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        {group.map((p) => {
-                          const selected = inLineup.has(p.player_id);
-                          const isOut = p.injury?.toLowerCase().startsWith("out");
-                          return (
-                            <PlayerCard
-                              key={p.player_id}
-                              player={p}
-                              selected={selected}
-                              canEdit={canEdit}
-                              lang={lang}
-                              isOut={!!isOut}
-                              onClick={() => togglePlayer(p.player_id)}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {sortedPool.map((p) => {
+                    const selected = inLineup.has(p.player_id);
+                    const isOut = p.is_available === false || p.injury?.toLowerCase().startsWith("out");
+                    // A non-selected player whose salary would push us past
+                    // the cap is rendered greyed/non-clickable.
+                    const wouldOverflow = !selected &&
+                      capState.totalSalary + (p.salary || 0) > SALARY_CAP;
+                    return (
+                      <PlayerCard
+                        key={p.player_id}
+                        player={p}
+                        selected={selected}
+                        canEdit={canEdit}
+                        lang={lang}
+                        isOut={!!isOut}
+                        wouldOverflow={wouldOverflow}
+                        onClick={() => togglePlayer(p.player_id)}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -1505,6 +1584,31 @@ function ContestSection({
   );
 }
 
+// Single cell in the salary-cap counter. Tone drives the color so a glance
+// at the row tells the user whether they're under, near, or over the cap.
+function CapStat({
+  label, value, tone,
+}: {
+  label: string;
+  value: string;
+  tone: "ok" | "warn" | "err" | "neutral";
+}) {
+  const color =
+    tone === "err"  ? "#991b1b" :
+    tone === "warn" ? "#92400e" :
+    tone === "ok"   ? "#065f46" : "#111827";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 14, fontWeight: 700, color }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function FilterPill({
   label, active, onClick, color, activeBg,
 }: {
@@ -1531,31 +1635,37 @@ function FilterPill({
 }
 
 function PlayerCard({
-  player: p, selected, canEdit, lang, isOut, onClick,
+  player: p, selected, canEdit, lang, isOut, wouldOverflow, onClick,
 }: {
   player: ContestPlayer;
   selected: boolean;
   canEdit: boolean;
   lang: string;
   isOut: boolean;
+  wouldOverflow: boolean;
   onClick: () => void;
 }) {
   const tc = TIER_COLOR[p.tier];
+  // Disabled = locked view (no edit), or unavailable, or would push over
+  // the cap (only when not already in the lineup).
+  const disabled = (!canEdit && !selected) || (canEdit && (isOut || wouldOverflow) && !selected);
+  const fadedReason = !selected && (isOut || wouldOverflow);
 
   return (
     <button
       onClick={onClick}
-      disabled={!canEdit && !selected}
+      disabled={disabled}
       style={{
         width: "100%", display: "flex", alignItems: "center", gap: 10,
         padding: "10px 12px", textAlign: "left",
         background: selected
           ? "rgba(30,58,138,0.06)"
-          : isOut ? "#fafafa" : "#fff",
+          : fadedReason ? "#fafafa" : "#fff",
         border: `1px solid ${selected ? "#93c5fd" : "#e5e7eb"}`,
-        borderRadius: 10, cursor: canEdit ? "pointer" : "default",
+        borderRadius: 10,
+        cursor: disabled ? "not-allowed" : (canEdit ? "pointer" : "default"),
         transition: "all 0.15s",
-        opacity: isOut && !selected ? 0.55 : 1,
+        opacity: fadedReason ? 0.55 : 1,
       }}
     >
       {/* Selected check or avatar */}
@@ -1572,7 +1682,7 @@ function PlayerCard({
         <PlayerAvatar name={p.name} size={32} />
       )}
 
-      {/* Player info */}
+      {/* Player info — name + (team · pos · tier · injury) on a second line. */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 14, fontWeight: 600, color: "#111827",
@@ -1580,16 +1690,23 @@ function PlayerCard({
         }}>
           {p.name}
         </div>
-        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1, display: "flex", alignItems: "center", gap: 4 }}>
+        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           <span>{translateTeam(p.team, lang as "en" | "zh")}</span>
           <span>·</span>
           <span>{p.position}</span>
+          {/* Tier — display/filter only, no longer enforced. */}
+          <span style={{
+            padding: "1px 5px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+            background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`,
+            marginLeft: 2,
+          }}>
+            T{p.tier}
+          </span>
           {p.injury && (
             <span style={{
               padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 700,
               background: isOut ? "rgba(239,68,68,0.12)" : "rgba(245,158,11,0.12)",
               color: isOut ? "#ef4444" : "#d97706",
-              marginLeft: 2,
             }}>
               {p.injury}
             </span>
@@ -1597,20 +1714,17 @@ function PlayerCard({
         </div>
       </div>
 
-      {/* Avg FPTS + tier */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+      {/* Salary + projected + value. Three lines, right-aligned. Salary is
+          bold (it's the cap-driver). Value is the per-$1k efficiency hint. */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1, flexShrink: 0, minWidth: 64 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-          {p.fpts_avg.toFixed(1)}
+          {fmtMoney(p.salary)}
         </span>
-        <span style={{ fontSize: 10, color: "#9ca3af" }}>avg</span>
-      </div>
-
-      <div style={{ flexShrink: 0 }}>
-        <span style={{
-          padding: "2px 7px", borderRadius: 999, fontSize: 10, fontWeight: 700,
-          background: tc.bg, color: tc.color, border: `1px solid ${tc.border}`,
-        }}>
-          T{p.tier}
+        <span style={{ fontSize: 10, color: "#6b7280" }}>
+          {p.projected_points.toFixed(1)} {lang === "zh" ? "预测" : "proj"}
+        </span>
+        <span style={{ fontSize: 10, color: "#2563eb", fontWeight: 600 }}>
+          {p.value.toFixed(2)}× {lang === "zh" ? "性价比" : "value"}
         </span>
       </div>
     </button>

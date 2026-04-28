@@ -31,6 +31,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
+import { buildContestPool } from "@/lib/contest-pool-builder";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const MAX_DAYS_AHEAD = 14;
@@ -40,15 +41,6 @@ function db() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
-}
-
-// Quartile tiering — matches seed-upcoming/create-today.
-function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
-  const q = total / 4;
-  if (rank <= q)     return 1;
-  if (rank <= q * 2) return 2;
-  if (rank <= q * 3) return 3;
-  return 4;
 }
 
 export async function GET(req: Request) {
@@ -121,25 +113,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 });
   }
 
-  // 4. Build a provisional player pool — same logic as seed-upcoming.
-  const { data: cacheRows } = await supabase
-    .from("player_stats_cache")
-    .select("player_id, fpts_avg, injury, team")
-    .in("team", [...playingTeams])
-    .order("fpts_avg", { ascending: false });
+  // 4. Build a fully-priced provisional player pool via the shared builder
+  //    (last-5 fpts averages → projected_points → salary curve + tier).
+  const poolRows = await buildContestPool(supabase, date, playingTeams);
+  if (poolRows && poolRows.length > 0) {
+    const { error: cpErr } = await supabase
+      .from("contest_players")
+      .insert(poolRows.map((row) => ({ ...row, contest_id: created.id })));
 
-  const poolRows = (cacheRows ?? []).filter(
-    (r) => !r.injury?.toLowerCase().startsWith("out"),
-  );
-
-  if (poolRows.length > 0) {
-    await supabase.from("contest_players").insert(
-      poolRows.map((row, idx) => ({
-        contest_id: created.id,
-        player_id:  String(row.player_id),
-        tier:       tierFor(idx + 1, poolRows.length),
-      })),
-    );
+    // Surface insert failures so a schema mismatch / missing migration
+    // doesn't silently leave a contest with an empty pool. The contest row
+    // already exists at this point — caller can retry or rebuild.
+    if (cpErr) {
+      return NextResponse.json(
+        { error: `pool_insert_failed: ${cpErr.message}`, contest: created },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ contest: created });
