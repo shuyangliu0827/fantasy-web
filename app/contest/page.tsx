@@ -90,23 +90,6 @@ function formatDateShort(iso: string): string {
   });
 }
 
-function formatLockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
-  });
-}
-
-function formatCountdown(lockIso: string, now: Date): string {
-  const diff = new Date(lockIso).getTime() - now.getTime();
-  if (diff <= 0) return "Locked";
-  const h = Math.floor(diff / 3_600_000);
-  const m = Math.floor((diff % 3_600_000) / 60_000);
-  const s = Math.floor((diff % 60_000) / 1_000);
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ContestPage() {
@@ -757,24 +740,6 @@ export default function ContestPage() {
                 );
               })()}
             </div>
-
-            {/* Lock info — hidden for placeholder cards since the lock time
-                is synthetic and not meaningful until the contest is seeded. */}
-            {!isPlaceholder && (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 6 }}>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>
-                  Lock: {formatLockTime(contest.lineup_lock_at)}
-                </span>
-                {!isPastDeadline && (
-                  <span style={{
-                    fontSize: 12, fontWeight: 700,
-                    color: formatCountdown(contest.lineup_lock_at, now) === "Locked" ? "#991b1b" : "#1e3a8a",
-                  }}>
-                    {formatCountdown(contest.lineup_lock_at, now)}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         )}
 
