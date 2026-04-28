@@ -39,6 +39,8 @@ export const dynamic = "force-dynamic";
 //   - Slots must be 1–5, each used exactly once
 //   - No duplicate player_id in the same lineup
 //   - Every player_id must exist in contest_players for this contest
+//   - Every player must be `is_available = true` at submit time
+//   - Total salary across the 5 picks must be ≤ SALARY_CAP ($50,000)
 //   - Each player must be position-eligible for their assigned slot:
 //       slot 1=PG, 2=SG, 3=SF, 4=PF, 5=C
 //       combo positions ("PG/SG") satisfy either slot they contain
@@ -66,6 +68,8 @@ export const dynamic = "force-dynamic";
 //   400 { "error": "slots must be 1–5, each used exactly once" }
 //   400 { "error": "duplicate player in lineup" }
 //   400 { "error": "one or more players not in contest pool" }
+//   400 { "error": "one or more players not available" }
+//   400 { "error": "salary cap exceeded", total_salary, cap }
 //   404 { "error": "contest_not_found" }
 //   409 { "error": "contest_locked" }
 //   409 { "error": "lineup_locked" }
@@ -75,6 +79,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/contest-positions";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+import { SALARY_CAP, ROSTER_SIZE } from "@/lib/contest-salary";
 
 function db() {
   return createClient(
@@ -139,16 +144,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { players } = body;
 
   // ── Validate shape ────────────────────────────────────────
-  if (!Array.isArray(players) || players.length !== 5) {
+  if (!Array.isArray(players) || players.length !== ROSTER_SIZE) {
     return NextResponse.json({ error: "exactly 5 players required" }, { status: 400 });
   }
   const slots     = players.map((p) => p.slot);
   const playerIds = players.map((p) => p.player_id);
   const validSlots = [1, 2, 3, 4, 5];
-  if (!validSlots.every((s) => slots.includes(s)) || new Set(slots).size !== 5) {
+  if (!validSlots.every((s) => slots.includes(s)) || new Set(slots).size !== ROSTER_SIZE) {
     return NextResponse.json({ error: "slots must be 1–5, each used exactly once" }, { status: 400 });
   }
-  if (new Set(playerIds).size !== 5) {
+  if (new Set(playerIds).size !== ROSTER_SIZE) {
     return NextResponse.json({ error: "duplicate player in lineup" }, { status: 400 });
   }
 
@@ -173,30 +178,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Guard: every player_id must be in the contest pool ───
-  // Also fetch tier for each player — used for lineup constraint validation.
+  // Also fetch salary + availability — both required for cap validation.
   const { data: poolRows, error: poolErr } = await supabase
     .from("contest_players")
-    .select("player_id, tier")
+    .select("player_id, salary, is_available")
     .eq("contest_id", id)
     .in("player_id", playerIds);
 
   if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
-  if ((poolRows?.length ?? 0) !== 5) {
+  if ((poolRows?.length ?? 0) !== ROSTER_SIZE) {
     return NextResponse.json({ error: "one or more players not in contest pool" }, { status: 400 });
   }
 
-  // ── Tier composition constraints ─────────────────────────
-  // Required: exactly 1 T1, 1 T2, 1 T3, 2 T4.
-  const tierMap = new Map<string, number>((poolRows ?? []).map((r) => [r.player_id, r.tier]));
-  const tierCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
-  for (const pid of playerIds) {
-    const t = tierMap.get(pid) ?? 4;
-    tierCounts[t] = (tierCounts[t] ?? 0) + 1;
+  // ── Availability check ────────────────────────────────────
+  // Re-validated on the server: a player marked unavailable between draft
+  // and submit cannot be locked into the lineup.
+  const unavailable = (poolRows ?? []).filter((r) => r.is_available === false);
+  if (unavailable.length > 0) {
+    return NextResponse.json(
+      {
+        error: "one or more players not available",
+        player_ids: unavailable.map((r) => r.player_id),
+      },
+      { status: 400 },
+    );
   }
 
-  if (tierCounts[1] !== 1 || tierCounts[2] !== 1 || tierCounts[3] !== 1 || tierCounts[4] !== 2) {
+  // ── Salary-cap constraint ─────────────────────────────────
+  // Mirrors lib/contest-salary.ts on the client. Source of truth lives
+  // in the DB row (already clamped to [3000, 12000] by the CHECK constraint
+  // in migration 025), so a stale client price can't slip past.
+  const totalSalary = (poolRows ?? []).reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
+  if (totalSalary > SALARY_CAP) {
     return NextResponse.json(
-      { error: "lineup must have exactly 1 Elite (T1), 1 Solid (T2), 1 Value (T3), and 2 Deep Cut (T4) players" },
+      { error: "salary cap exceeded", total_salary: totalSalary, cap: SALARY_CAP },
       { status: 400 },
     );
   }

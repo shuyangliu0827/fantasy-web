@@ -49,6 +49,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
+import { buildContestPool } from "@/lib/contest-pool-builder";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const DEFAULT_DAYS = 7;
@@ -69,15 +70,6 @@ function isAuthorized(req: Request): boolean {
   const url = new URL(req.url);
   if (url.searchParams.get("secret") === secret) return true;
   return false;
-}
-
-// Same quartile-tier logic as create-today. rank is 1-based.
-function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
-  const q = total / 4;
-  if (rank <= q)     return 1;
-  if (rank <= q * 2) return 2;
-  if (rank <= q * 3) return 3;
-  return 4;
 }
 
 export async function GET(req: Request) {
@@ -174,25 +166,12 @@ export async function GET(req: Request) {
       action    = "created";
     }
 
-    // 4. Build a provisional player pool — same logic as create-today's buildPool.
-    //    PostgREST NOT ILIKE drops NULLs so we filter "Out*" injuries in JS.
-    const { data: cacheRows } = await supabase
-      .from("player_stats_cache")
-      .select("player_id, fpts_avg, injury, team")
-      .in("team", [...playingTeams])
-      .order("fpts_avg", { ascending: false });
-
-    const poolRows = (cacheRows ?? []).filter(
-      (r) => !r.injury?.toLowerCase().startsWith("out"),
-    );
-
+    // 4. Build a fully-priced provisional player pool via the shared builder.
+    //    Computes last-5 fpts averages → projected_points → salary + tier.
+    const poolRows = (await buildContestPool(supabase, dateStr, playingTeams)) ?? [];
     if (poolRows.length > 0) {
       await supabase.from("contest_players").insert(
-        poolRows.map((row, idx) => ({
-          contest_id: contestId,
-          player_id:  String(row.player_id),
-          tier:       tierFor(idx + 1, poolRows.length),
-        })),
+        poolRows.map((row) => ({ ...row, contest_id: contestId })),
       );
     }
 

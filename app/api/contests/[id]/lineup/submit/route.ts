@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 //   - Contest must be "open" and current time < lineup_lock_at
 //   - User must have a saved lineup (draft or submitted)
 //   - Lineup must have exactly 5 players
+//   - All 5 players must still be `is_available = true` in contest_players
+//   - Sum of salaries across the 5 picks must be ≤ SALARY_CAP
 //   - Lineup must not already be "locked" or "scored"
 //
 // Sample response 200:
@@ -26,15 +28,18 @@ export const dynamic = "force-dynamic";
 //
 // Error responses:
 //   401 { "error": "unauthorized" }
-//   400 { "error": "incomplete_lineup" }       — fewer than 5 players saved
+//   400 { "error": "incomplete_lineup" }              — fewer than 5 players saved
+//   400 { "error": "one or more players not available", player_ids: [...] }
+//   400 { "error": "salary cap exceeded", total_salary, cap }
 //   404 { "error": "contest_not_found" }
-//   404 { "error": "lineup_not_found" }        — must save a lineup first
-//   409 { "error": "contest_locked" }          — past deadline
-//   409 { "error": "lineup_locked" }           — already locked/scored
+//   404 { "error": "lineup_not_found" }               — must save a lineup first
+//   409 { "error": "contest_locked" }                 — past deadline
+//   409 { "error": "lineup_locked" }                  — already locked/scored
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
+import { SALARY_CAP, ROSTER_SIZE } from "@/lib/contest-salary";
 
 function db() {
   return createClient(
@@ -84,14 +89,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Guard: lineup must have exactly 5 players ─────────────
-  const { count, error: countErr } = await supabase
+  const { data: lineupPlayers, error: lpErr } = await supabase
     .from("user_lineup_players")
-    .select("id", { count: "exact", head: true })
+    .select("player_id")
     .eq("lineup_id", lineup.id);
 
-  if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
-  if ((count ?? 0) !== 5) {
+  if (lpErr) return NextResponse.json({ error: lpErr.message }, { status: 500 });
+  if ((lineupPlayers?.length ?? 0) !== ROSTER_SIZE) {
     return NextResponse.json({ error: "incomplete_lineup" }, { status: 400 });
+  }
+
+  // ── Re-validate availability + cap at submit time ─────────
+  // Mirrors the checks in POST /lineup so a stale draft (saved when prices /
+  // availability were different) can never be locked into the contest.
+  const playerIds = lineupPlayers!.map((p) => p.player_id);
+  const { data: poolRows, error: poolErr } = await supabase
+    .from("contest_players")
+    .select("player_id, salary, is_available")
+    .eq("contest_id", id)
+    .in("player_id", playerIds);
+
+  if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
+  if ((poolRows?.length ?? 0) !== ROSTER_SIZE) {
+    return NextResponse.json({ error: "one or more players not in contest pool" }, { status: 400 });
+  }
+
+  const unavailable = (poolRows ?? []).filter((r) => r.is_available === false);
+  if (unavailable.length > 0) {
+    return NextResponse.json(
+      {
+        error: "one or more players not available",
+        player_ids: unavailable.map((r) => r.player_id),
+      },
+      { status: 400 },
+    );
+  }
+
+  const totalSalary = (poolRows ?? []).reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
+  if (totalSalary > SALARY_CAP) {
+    return NextResponse.json(
+      { error: "salary cap exceeded", total_salary: totalSalary, cap: SALARY_CAP },
+      { status: 400 },
+    );
   }
 
   // ── Mark submitted ────────────────────────────────────────

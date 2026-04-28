@@ -23,13 +23,20 @@ export const dynamic = "force-dynamic";
 //   "players": [
 //     {
 //       "player_id": "666",
-//       "tier": 1,
+//       "tier": 1,                      // display/filter only — no longer enforced
 //       "fpts_scored": null,
 //       "name": "Nikola Jokic",
 //       "team": "DEN",
 //       "position": "C",
 //       "fpts_avg": 62.4,
-//       "injury": null
+//       "salary": 12000,                // $3000-$12000, snapped to $100
+//       "projected_points": 50.2,       // 0.6*last5 + 0.4*season
+//       "last_5_avg_fp": 55.4,
+//       "season_avg_fp": 62.4,
+//       "value": 4.18,                  // projected_points / salary * 1000
+//       "injury": null,
+//       "injury_status": null,
+//       "is_available": true
 //     },
 //     ...
 //   ]
@@ -42,6 +49,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 import { calcFantasyPoints } from "@/lib/scoring-config";
+import { calcValue } from "@/lib/contest-salary";
 
 function db() {
   return createClient(
@@ -67,12 +75,13 @@ export async function GET(
   if (contestErr) return NextResponse.json({ error: contestErr.message }, { status: 500 });
   if (!contest)   return NextResponse.json({ error: "contest_not_found" }, { status: 404 });
 
-  // Fetch pool rows
+  // Fetch pool rows. Salary-related fields come from migration 025; tier
+  // is retained as a display/filter aid (no longer enforced).
   const { data: pool, error: poolErr } = await supabase
     .from("contest_players")
-    .select("player_id, tier, fpts_scored")
+    .select("player_id, tier, fpts_scored, salary, projected_points, last_5_avg_fp, season_avg_fp, injury_status, is_available")
     .eq("contest_id", id)
-    .order("tier", { ascending: true });
+    .order("salary", { ascending: false });
 
   if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
   if (!pool || pool.length === 0) {
@@ -101,16 +110,18 @@ export async function GET(
   const players = pool.map((cp) => {
     const intId = parseInt(cp.player_id, 10);
     const meta  = statsMap.get(intId);
+    const projected = Number(cp.projected_points) || 0;
+    const salary    = Number(cp.salary) || 0;
     return {
-      player_id:   cp.player_id,           // TEXT — consistent with rest of contest system
-      tier:        cp.tier,
-      fpts_scored: cp.fpts_scored ?? null,  // null until scoring job runs
-      name:        meta?.name     ?? "",
-      team:        meta?.team     ?? "",
-      position:    getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
+      player_id:        cp.player_id,           // TEXT — consistent with rest of contest system
+      tier:             cp.tier,
+      fpts_scored:      cp.fpts_scored ?? null, // null until scoring job runs
+      name:             meta?.name     ?? "",
+      team:             meta?.team     ?? "",
+      position:         getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
       // Compute fpts_avg from the 11 avg stat fields, matching the nba-stats
       // read path exactly (same calcFantasyPoints call, same ESPN_DEFAULT_WEIGHTS).
-      fpts_avg:    meta ? Math.round(calcFantasyPoints({
+      fpts_avg: meta ? Math.round(calcFantasyPoints({
         pts:  meta.pts_avg  || 0,
         fgm:  meta.fgm_avg  || 0,
         fga:  meta.fga_avg  || 0,
@@ -123,7 +134,15 @@ export async function GET(
         blk:  meta.blk_avg  || 0,
         tov:  meta.tov_avg  || 0,
       }) * 10) / 10 : 0,
-      injury:      meta?.injury   ?? null,
+      injury:           meta?.injury ?? null,
+      // Salary-cap fields populated by migration 025 + contest-pool-builder.
+      salary,
+      projected_points: projected,
+      last_5_avg_fp:    Number(cp.last_5_avg_fp) || 0,
+      season_avg_fp:    Number(cp.season_avg_fp) || 0,
+      value:            Math.round(calcValue(projected, salary) * 100) / 100,
+      injury_status:    cp.injury_status ?? null,
+      is_available:     cp.is_available !== false,
     };
   });
 
