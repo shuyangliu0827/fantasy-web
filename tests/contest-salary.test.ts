@@ -82,7 +82,7 @@ test("cap state aggregates totals and remaining budget per empty slot", () => {
   assert.equal(partial.overCap, false);
 
   // Full lineup right at the cap.
-  const atCap = computeCapState([10000, 10000, 10000, 10000, 10000]);
+  const atCap = computeCapState([8400, 8400, 8400, 8400, 8400]);
   assert.equal(atCap.totalSalary, SALARY_CAP);
   assert.equal(atCap.filled, ROSTER_SIZE);
   assert.equal(atCap.emptySlots, 0);
@@ -92,6 +92,6 @@ test("cap state aggregates totals and remaining budget per empty slot", () => {
   // Over the cap.
   const over = computeCapState([12000, 12000, 12000, 12000, 12000]);
   assert.equal(over.totalSalary, 60000);
-  assert.equal(over.remaining, -10000);
+  assert.equal(over.remaining, -18000);
   assert.equal(over.overCap, true);
 });
