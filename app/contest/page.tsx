@@ -1690,10 +1690,10 @@ function PlayerCard({
           {fmtMoney(p.salary)}
         </span>
         <span style={{ fontSize: 10, color: "#6b7280" }}>
-          {p.projected_points.toFixed(1)} {t("预测", "proj")}
+          {p.projected_points.toFixed(1)} {lang === "zh" ? "预测" : "proj"}
         </span>
         <span style={{ fontSize: 10, color: "#2563eb", fontWeight: 600 }}>
-          {p.value.toFixed(2)}× {t("性价比", "value")}
+          {p.value.toFixed(2)}× {lang === "zh" ? "性价比" : "value"}
         </span>
       </div>
     </button>
