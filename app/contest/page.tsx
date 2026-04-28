@@ -316,14 +316,27 @@ export default function ContestPage() {
 
   // Bucketed views over the full nearby window — feed the Past/Today/Upcoming
   // section cards above the existing contest detail pane.
-  const pastContests     = allContests.filter((c) => c.date < todayUtc).reverse();
-  const presentContest   = allContests.find((c) => c.date === todayUtc) ?? null;
-  const realUpcoming     = allContests.filter((c) => c.date > todayUtc);
+  const pastContests = allContests.filter((c) => c.date < todayUtc).reverse();
+  const realPresent  = allContests.find((c) => c.date === todayUtc) ?? null;
+  const realUpcoming = allContests.filter((c) => c.date > todayUtc);
+
+  // Synthesize a placeholder for TODAY when no DB row exists yet. The morning
+  // create-today cron normally seeds it at 14:00 UTC, but the section must
+  // still render before then (or if the cron failed). Clicking calls the
+  // same /api/contests/by-date resolver as upcoming placeholders.
+  const presentContest: Contest = realPresent ?? {
+    id: `placeholder-${todayUtc}`,
+    date: todayUtc,
+    status: "pending",
+    lineup_lock_at: `${todayUtc}T23:00:00Z`,
+    placeholder: true,
+  };
 
   // Synthesize placeholder cards for the next 7 days that don't have a DB row,
   // so the "Upcoming" section is always visible even when the seed-upcoming
-  // cron hasn't seeded yet. Placeholder cards are visually identical, but
-  // selecting one shows a "Contest opens closer to game day" panel.
+  // cron hasn't seeded yet. Clicking calls /api/contests/by-date which
+  // resolves the date against BDL — either pulling an existing contest,
+  // creating one if games are scheduled, or surfacing a no-games panel.
   const UPCOMING_PLACEHOLDER_DAYS = 7;
   const placeholderUpcoming: Contest[] = (() => {
     const haveDates = new Set(realUpcoming.map((c) => c.date));
@@ -687,16 +700,14 @@ export default function ContestPage() {
             bucket="past"
           />
         )}
-        {presentContest && (
-          <ContestSection
-            label="Today"
-            contests={[presentContest]}
-            selectedId={contest?.id ?? null}
-            onSelect={loadContestDetail}
-            highlight
-            bucket="present"
-          />
-        )}
+        <ContestSection
+          label="Today"
+          contests={[presentContest]}
+          selectedId={contest?.id ?? null}
+          onSelect={loadContestDetail}
+          highlight
+          bucket="present"
+        />
         {upcomingContests.length > 0 && (
           <ContestSection
             label="Upcoming"
@@ -822,7 +833,8 @@ export default function ContestPage() {
         )}
 
         {/* Resolver returned no contest and no noGames flag (e.g. network
-            error). Fall back to the generic "opens closer to game day" copy. */}
+            error). Fall back copy depends on bucket so a today-placeholder
+            doesn't read like a future date. */}
         {!loading && !pageError && contest && isPlaceholder && !resolvingPlaceholder && !noGamesForPlaceholder && (
           <div style={{ padding: "24px 16px" }}>
             <div style={{
@@ -831,13 +843,20 @@ export default function ContestPage() {
             }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🗓️</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>
-                {t("竞赛尚未开放", "Contest opens closer to game day")}
+                {bucket === "present"
+                  ? t("竞赛准备中", "Contest is being prepared")
+                  : t("竞赛尚未开放", "Contest opens closer to game day")}
               </div>
               <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
-                {t(
-                  "球员池将在比赛日前一天准备好，请稍后再来选阵容。",
-                  "The player pool is prepared the day before tip-off. Check back closer to game day to build your lineup.",
-                )}
+                {bucket === "present"
+                  ? t(
+                      "今日竞赛即将开放，请稍后刷新。",
+                      "Today's contest is being prepared. Please refresh in a moment.",
+                    )
+                  : t(
+                      "球员池将在比赛日前一天准备好，请稍后再来选阵容。",
+                      "The player pool is prepared the day before tip-off. Check back closer to game day to build your lineup.",
+                    )}
               </div>
             </div>
           </div>
