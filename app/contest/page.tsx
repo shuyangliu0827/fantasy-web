@@ -307,8 +307,13 @@ export default function ContestPage() {
       : "present")
     : null;
 
+  // Player editing locks at the first game tip-off (lineup_lock_at) or once
+  // the contest header has flipped to locked/scored. We don't add a separate
+  // "is the date in the past" check here because for any past date its
+  // lineup_lock_at is already in the past too, so the time comparison covers
+  // it — duplicating the check would just shadow data integrity bugs.
   const isPastDeadline = contest
-    ? bucket === "past" || contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
+    ? contest.status === "locked" || contest.status === "scored" || now >= new Date(contest.lineup_lock_at)
     : false;
   const isReadOnly    = isPastDeadline || lineupStatus === "locked" || lineupStatus === "scored";
   const isSubmitted   = lineupStatus === "submitted" || lineupStatus === "locked" || lineupStatus === "scored";
