@@ -40,7 +40,7 @@ export const dynamic = "force-dynamic";
 //   - No duplicate player_id in the same lineup
 //   - Every player_id must exist in contest_players for this contest
 //   - Every player must be `is_available = true` at submit time
-//   - Total salary across the 5 picks must be ≤ SALARY_CAP ($50,000)
+//   - Total salary across the 5 picks must be ≤ SALARY_CAP ($42,000)
 //   - Each player must be position-eligible for their assigned slot:
 //       slot 1=PG, 2=SG, 3=SF, 4=PF, 5=C
 //       combo positions ("PG/SG") satisfy either slot they contain

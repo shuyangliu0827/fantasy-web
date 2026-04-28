@@ -4,7 +4,7 @@
 // safe to import on both server and client. Mirrored at the SQL layer by
 // the contest_players_salary_range CHECK constraint (migration 025).
 
-export const SALARY_CAP = 50_000;
+export const SALARY_CAP = 42_000;
 export const ROSTER_SIZE = 5;
 export const SALARY_MIN = 3_000;
 export const SALARY_MAX = 12_000;
