@@ -132,6 +132,12 @@ export default function ContestPage() {
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null, null]);
   const [lineupStatus, setLineupStatus] = useState<string>("draft");
 
+  // Multi-position slot picker modal state
+  const [slotPickModal, setSlotPickModal] = useState<{
+    player: ContestPlayer;
+    eligibleSlots: number[]; // 0-based slot indices
+  } | null>(null);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -415,9 +421,8 @@ export default function ContestPage() {
   // ── Interactions ────────────────────────────────────────────
 
   // Toggle player in/out of lineup.
-  // Fills the first empty slot the player is position-eligible for, gated
-  // by the salary cap and per-day availability (no tier quotas anymore).
-  // Combo positions ("PG/SG") satisfy either slot they contain.
+  // For multi-position players (e.g. "PF/C") with multiple eligible empty slots,
+  // shows a picker modal instead of auto-assigning to the first eligible slot.
   function togglePlayer(pid: string) {
     if (!canEdit) return;
 
@@ -429,8 +434,6 @@ export default function ContestPage() {
     const player = playerMap.get(pid);
     if (!player) return;
 
-    // Player flagged unavailable since the page loaded — block. Server
-    // re-checks at submit time as a defence-in-depth layer.
     if (player.is_available === false) {
       showFlash("err", t(
         `${player.name} 当日不可用。`,
@@ -439,7 +442,6 @@ export default function ContestPage() {
       return;
     }
 
-    // Cap guard: would adding this player push us past the cap?
     const projectedTotal = capState.totalSalary + (player.salary || 0);
     if (projectedTotal > SALARY_CAP) {
       const over = projectedTotal - SALARY_CAP;
@@ -450,23 +452,33 @@ export default function ContestPage() {
       return;
     }
 
-    // slots is current state — safe to read here (no stale closure risk since
-    // we call setSlots with a direct value, not a functional update that depends on prev).
-    const eligibleEmptyIdx = slots.findIndex(
-      (id, i) => id === null && isEligibleForContestSlot(player.position, i + 1),
-    );
+    // Collect ALL eligible empty slot indices (0-based).
+    const eligibleSlots = slots
+      .map((id, i) => (id === null && isEligibleForContestSlot(player.position, i + 1) ? i : -1))
+      .filter((i) => i !== -1);
 
-    if (eligibleEmptyIdx === -1) {
+    if (eligibleSlots.length === 0) {
       const pos = player.position === "N/A" ? "unknown position" : player.position;
-      showFlash("err", `${player.name} (${pos}) doesn't fit any open slot.`);
+      showFlash("err", t(
+        `${player.name}（${pos}）没有可用的位置。`,
+        `${player.name} (${pos}) doesn't fit any open slot.`,
+      ));
       return;
     }
 
-    setSlots((prev) => {
-      const next = [...prev];
-      next[eligibleEmptyIdx] = pid;
-      return next;
-    });
+    if (eligibleSlots.length === 1) {
+      const idx = eligibleSlots[0];
+      setSlots((prev) => { const next = [...prev]; next[idx] = pid; return next; });
+      return;
+    }
+
+    // Multiple eligible slots — ask the user to choose.
+    setSlotPickModal({ player, eligibleSlots });
+  }
+
+  function placeInSlot(pid: string, slotIdx: number) {
+    setSlots((prev) => { const next = [...prev]; next[slotIdx] = pid; return next; });
+    setSlotPickModal(null);
   }
 
   function removeSlot(idx: number) {
@@ -1517,6 +1529,62 @@ export default function ContestPage() {
           </>
         )}
       </main>
+
+      {/* ── Slot-picker modal (multi-position players) ───────── */}
+      {slotPickModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setSlotPickModal(null)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 16, padding: "24px 20px",
+              maxWidth: 320, width: "90%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 6 }}>
+              {t("选择位置", "Choose a slot")}
+            </div>
+            <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
+              {t(
+                `把 ${slotPickModal.player.name} 放在哪个位置？`,
+                `Where do you want to place ${slotPickModal.player.name}?`,
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              {slotPickModal.eligibleSlots.map((idx) => (
+                <button
+                  key={idx}
+                  onClick={() => placeInSlot(slotPickModal.player.player_id, idx)}
+                  style={{
+                    flex: 1, padding: "12px 0", borderRadius: 10,
+                    background: "#1e3a8a", color: "#fff",
+                    border: "none", cursor: "pointer",
+                    fontSize: 15, fontWeight: 700,
+                  }}
+                >
+                  {SLOT_LABEL[idx + 1]}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setSlotPickModal(null)}
+              style={{
+                width: "100%", marginTop: 10, padding: "9px 0", borderRadius: 10,
+                background: "#f3f4f6", border: "none", cursor: "pointer",
+                fontSize: 13, color: "#6b7280",
+              }}
+            >
+              {t("取消", "Cancel")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
