@@ -40,11 +40,19 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calcPointsAwarded, assignRanks } from "@/lib/contest-points";
 
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+
+// Read-only client (anon key) — for fetching contests, lineups, player stats.
 function db() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  return createClient(URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+}
+
+// Write client using service_role key — bypasses RLS for settlement writes.
+// Falls back to anon key only if SUPABASE_SERVICE_ROLE_KEY is not configured
+// (useful in local dev without a service key set up).
+function serviceDb() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createClient(URL, key, { auth: { persistSession: false } });
 }
 
 function checkAuth(req: Request): boolean {
@@ -59,7 +67,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!checkAuth(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const supabase = db();
+  const supabase = db();          // reads (anon key)
+  const svcDb   = serviceDb();    // writes (service_role bypasses RLS)
 
   // ── 1. Fetch contest ─────────────────────────────────────────
   const { data: contest, error: cErr } = await supabase
@@ -85,8 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
 
   if (!lineups || lineups.length === 0) {
-    // No eligible lineups — still mark contest scored.
-    await supabase.from("contests").update({ status: "scored" }).eq("id", id);
+    await svcDb.from("contests").update({ status: "scored" }).eq("id", id);
     return NextResponse.json({ settled: 0, message: "no submitted lineups" });
   }
 
@@ -151,10 +159,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ranks = assignRanks(lineupTotals);
   const totalEntries = lineupTotals.length;
 
-  // ── 7. Write per-player actual_fantasy_points ────────────────
+  // ── 7. Write per-player actual_fantasy_points (service role) ─
   for (const lineup of lineupTotals) {
     for (const player of lineup.players) {
-      const { error } = await supabase
+      const { error } = await svcDb
         .from("user_lineup_players")
         .update({ actual_fantasy_points: player.fpts })
         .eq("id", player.id);
@@ -162,28 +170,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  // ── 8. Write contest_players.fpts_scored ─────────────────────
+  // ── 8. Write contest_players.fpts_scored (service role) ──────
   for (const [pid, fpts] of fptsMap) {
-    await supabase
+    await svcDb
       .from("contest_players")
       .update({ fpts_scored: fpts })
       .eq("contest_id", id)
       .eq("player_id", pid);
   }
 
-  // ── 9. Write user_lineups + points_transactions ──────────────
+  // ── 9. Write user_lineups + points_transactions (service role)
   for (const lineup of lineupTotals) {
-    const rank = ranks.get(lineup.id)!;
+    const rank   = ranks.get(lineup.id)!;
     const points = calcPointsAwarded(rank, totalEntries);
 
-    const { error: ulErr } = await supabase
+    const { error: ulErr } = await svcDb
       .from("user_lineups")
       .update({ total_fpts: lineup.total_fpts, rank, points_awarded: points, status: "scored" })
       .eq("id", lineup.id);
     if (ulErr) return NextResponse.json({ error: `lineup: ${ulErr.message}` }, { status: 500 });
 
     // Upsert is idempotent: UNIQUE (lineup_id, reason) → ON CONFLICT UPDATE amount.
-    const { error: ptErr } = await supabase
+    // Uses service_role so this write bypasses the restrictive RLS on points_transactions.
+    const { error: ptErr } = await svcDb
       .from("points_transactions")
       .upsert(
         { user_id: lineup.user_id, contest_id: id, lineup_id: lineup.id, amount: points, reason: "daily_rank_reward" },
@@ -192,8 +201,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (ptErr) return NextResponse.json({ error: `pt: ${ptErr.message}` }, { status: 500 });
   }
 
-  // ── 10. Mark contest scored ──────────────────────────────────
-  const { error: csErr } = await supabase
+  // ── 10. Mark contest scored (service role) ───────────────────
+  const { error: csErr } = await svcDb
     .from("contests")
     .update({ status: "scored" })
     .eq("id", id);
