@@ -13,7 +13,7 @@
 // Data source: GET /api/contests/[id]/leaderboard
 // (backend enforces the visibility rules via the `locked` flag).
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
@@ -42,7 +42,7 @@ type LeaderboardData = {
   total: number; entries: Entry[];
 };
 
-export default function LeaderboardPage() {
+function LeaderboardContent() {
   const { t } = useLang();
   const searchParams = useSearchParams();
   const contestId = searchParams.get("id");
@@ -333,5 +333,13 @@ export default function LeaderboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LeaderboardPage() {
+  return (
+    <Suspense>
+      <LeaderboardContent />
+    </Suspense>
   );
 }

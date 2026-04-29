@@ -13,7 +13,7 @@
 //   Submitted / locked     → Show players, "Awaiting results"
 //   Scored                 → Show players with actual fpts, rank, points_awarded
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
@@ -51,7 +51,7 @@ type LineupData = {
   }[];
 };
 
-export default function MyLineupPage() {
+function MyLineupContent() {
   const { t, lang } = useLang();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -292,5 +292,13 @@ export default function MyLineupPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function MyLineupPage() {
+  return (
+    <Suspense>
+      <MyLineupContent />
+    </Suspense>
   );
 }
