@@ -1,8 +1,9 @@
 "use client";
 // app/contest/my-lineup/page.tsx
 //
-// "My Results" — shows all submitted/locked/scored lineups for the user,
-// sorted by contest date newest-first.
+// "My Results" — shows the current week's submitted/locked/scored lineups,
+// sorted Mon → Sun (oldest first). Each card is expandable to show players
+// and, when scored, the total_fpts / rank / points_awarded summary.
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
@@ -70,11 +71,8 @@ function MyLineupContent() {
     const json = await res.json();
     const entries: LineupEntry[] = json.lineups ?? [];
     setLineups(entries);
-    // Auto-expand non-scored contests
-    const autoExpand = new Set<string>(
-      entries.filter((e) => e.status !== "scored").map((e) => e.lineup_id),
-    );
-    setExpanded(autoExpand);
+    // Auto-expand all current-week entries so scores are immediately visible
+    setExpanded(new Set<string>(entries.map((e) => e.lineup_id)));
     setLoading(false);
   }
 
@@ -180,13 +178,14 @@ function MyLineupContent() {
             {lineups.map((entry) => {
               const isExpanded = expanded.has(entry.lineup_id);
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
+              const isScored = entry.status === "scored";
 
               return (
                 <div key={entry.lineup_id} style={{
                   background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb",
                   overflow: "hidden",
                 }}>
-                  {/* Card header */}
+                  {/* Card header — always visible */}
                   <div
                     onClick={() => toggleExpand(entry.lineup_id)}
                     style={{
@@ -203,7 +202,8 @@ function MyLineupContent() {
                       </div>
                     </div>
 
-                    {entry.status === "scored" ? (
+                    {/* Header right: scored summary or status badge */}
+                    {isScored ? (
                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                         <div style={{ textAlign: "center" }}>
                           <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
@@ -236,8 +236,10 @@ function MyLineupContent() {
                     }}>▼</span>
                   </div>
 
+                  {/* Expandable section */}
                   {isExpanded && (
                     <>
+                      {/* Player rows */}
                       <div style={{ borderTop: "1px solid #f3f4f6" }}>
                         {entry.players.map((p, i) => (
                           <div key={p.player_id} style={{
@@ -263,7 +265,7 @@ function MyLineupContent() {
                               </div>
                             </div>
                             <div style={{ textAlign: "right", flexShrink: 0 }}>
-                              {entry.status === "scored" ? (
+                              {isScored ? (
                                 <span style={{
                                   fontSize: 14, fontWeight: 700,
                                   color: (p.actual_fantasy_points ?? 0) > 30 ? "#059669" : "#374151",
@@ -280,30 +282,60 @@ function MyLineupContent() {
                         ))}
                       </div>
 
-                      <div style={{
-                        borderTop: "1px solid #f3f4f6",
-                        padding: "10px 16px",
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                      }}>
-                        <span style={{ fontSize: 12, color: "#6b7280" }}>
-                          {t("总工资", "Total Salary")}
-                          <span style={{ fontWeight: 600, color: "#374151", marginLeft: 6 }}>
-                            {fmtMoney(totalSalary)}
+                      {/* Footer */}
+                      <div style={{ borderTop: "1px solid #f3f4f6", padding: "12px 16px" }}>
+                        {/* Scored stats grid OR pending notice */}
+                        {isScored ? (
+                          <div style={{
+                            display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+                            gap: 8, marginBottom: 10,
+                          }}>
+                            {[
+                              { label: t("总分", "Total Fpts"), value: fmtFpts(entry.total_fpts) },
+                              { label: t("排名", "Rank"),        value: entry.rank != null ? `#${entry.rank}` : "—" },
+                              { label: t("获得积分", "Points"),  value: `+${entry.points_awarded}` },
+                            ].map(({ label, value }) => (
+                              <div key={label} style={{
+                                background: "#f9fafb", borderRadius: 8, padding: "8px 6px",
+                                textAlign: "center", border: "1px solid #f3f4f6",
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "#111827" }}>{value}</div>
+                                <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{
+                            fontSize: 12, color: "#92400e", background: "#fef3c7",
+                            border: "1px solid #fcd34d", borderRadius: 6,
+                            padding: "6px 10px", marginBottom: 10, fontWeight: 500,
+                          }}>
+                            {t("等待结算，比赛结束后自动更新排名和积分。", "Awaiting settlement — rank and points will update after games complete.")}
+                          </div>
+                        )}
+
+                        {/* Total salary + leaderboard button */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 12, color: "#6b7280" }}>
+                            {t("总工资", "Total Salary")}
+                            <span style={{ fontWeight: 600, color: "#374151", marginLeft: 6 }}>
+                              {fmtMoney(totalSalary)}
+                            </span>
                           </span>
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/contest/leaderboard?id=${entry.contest_id}`);
-                          }}
-                          style={{
-                            padding: "5px 12px", borderRadius: 6, border: "1px solid #e5e7eb",
-                            background: "#fff", color: "#374151", cursor: "pointer",
-                            fontSize: 12, fontWeight: 600,
-                          }}
-                        >
-                          {t("查看排行榜", "Leaderboard")}
-                        </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/contest/leaderboard?id=${entry.contest_id}`);
+                            }}
+                            style={{
+                              padding: "5px 12px", borderRadius: 6, border: "1px solid #e5e7eb",
+                              background: "#fff", color: "#374151", cursor: "pointer",
+                              fontSize: 12, fontWeight: 600,
+                            }}
+                          >
+                            {t("查看排行榜", "Leaderboard")}
+                          </button>
+                        </div>
                       </div>
                     </>
                   )}

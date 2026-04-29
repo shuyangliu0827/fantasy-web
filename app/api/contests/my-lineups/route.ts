@@ -1,39 +1,14 @@
 export const dynamic = "force-dynamic";
 // GET /api/contests/my-lineups
 //
-// Returns all submitted/locked/scored lineups for the authenticated user,
-// across all contests, sorted by contest date DESC (newest first).
-//
-// Each entry includes contest info + player details (name, position, salary,
-// actual_fantasy_points) so the page can render without extra requests.
-//
-// Auth: Authorization: Bearer <supabase_access_token>
-//
-// Response 200:
-// {
-//   "lineups": [
-//     {
-//       "lineup_id": "...",
-//       "contest_id": "...",
-//       "contest_date": "2026-04-30",
-//       "contest_status": "open",
-//       "status": "submitted",
-//       "total_fpts": null,
-//       "rank": null,
-//       "points_awarded": 0,
-//       "submitted_at": "...",
-//       "players": [
-//         { "slot": 1, "slot_label": "PG", "player_id": "...", "name": "...",
-//           "position": "...", "salary": 7100, "actual_fantasy_points": null }
-//       ]
-//     }
-//   ]
-// }
+// Returns submitted/locked/scored lineups for the authenticated user
+// within the current natural week (Mon–Sun UTC), sorted by contest_date ASC.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { SLOT_LABEL } from "@/lib/contest-positions";
+import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
 
 function db() {
   return createClient(
@@ -59,12 +34,21 @@ export async function GET(req: Request) {
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
   if (!lineups || lineups.length === 0) return NextResponse.json({ lineups: [] });
 
+  // ── Filter to current natural week (Mon–Sun UTC) by contest_date ──
+  const weekStart = toDateStr(getWeekStart());
+  const weekEnd   = toDateStr(getWeekEnd());
+  const weekLineups = (lineups as any[]).filter((l) => {
+    const date = (l.contests as any)?.date;
+    return date && date >= weekStart && date <= weekEnd;
+  });
+  if (weekLineups.length === 0) return NextResponse.json({ lineups: [] });
+
   // Try to include points_awarded; fall back if column not yet migrated.
   let pointsMap = new Map<string, number>();
   const { data: paRows, error: paErr } = await supabase
     .from("user_lineups")
     .select("id, points_awarded")
-    .in("id", (lineups as any[]).map((l) => l.id));
+    .in("id", weekLineups.map((l: any) => l.id));
 
   if (!paErr && paRows) {
     for (const r of paRows as any[]) {
@@ -72,7 +56,7 @@ export async function GET(req: Request) {
     }
   }
 
-  const lineupIds = (lineups as any[]).map((l) => l.id);
+  const lineupIds = weekLineups.map((l: any) => l.id);
 
   // ── 2. Fetch all lineup players ──────────────────────────────
   const { data: lineupPlayers, error: lpErr } = await supabase
@@ -86,8 +70,7 @@ export async function GET(req: Request) {
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
   const intIds = allPlayerIds.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
 
-  // Get contest_ids to fetch salaries
-  const contestIds = [...new Set((lineups as any[]).map((l) => l.contest_id))];
+  const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))];
 
   const [pscRes, cpRes] = await Promise.all([
     intIds.length
@@ -122,9 +105,9 @@ export async function GET(req: Request) {
     });
   }
 
-  // ── 5. Sort and enrich each lineup ───────────────────────────
-  const result = (lineups as any[])
-    .map((l) => {
+  // ── 5. Build result sorted by contest_date ASC (Mon → Sun) ──
+  const result = weekLineups
+    .map((l: any) => {
       const contest = l.contests as any;
       const players = (playersByLineup.get(l.id) ?? [])
         .map((p) => ({
@@ -146,12 +129,11 @@ export async function GET(req: Request) {
         players,
       };
     })
-    // Sort by contest_date DESC (newest first)
-    .sort((a, b) => {
+    .sort((a: any, b: any) => {
       if (!a.contest_date && !b.contest_date) return 0;
       if (!a.contest_date) return 1;
       if (!b.contest_date) return -1;
-      return b.contest_date.localeCompare(a.contest_date);
+      return a.contest_date.localeCompare(b.contest_date); // oldest first (Mon → Sun)
     });
 
   return NextResponse.json({ lineups: result });
