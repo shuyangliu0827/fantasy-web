@@ -40,11 +40,11 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { calcPointsAwarded, assignRanks } from "@/lib/contest-points";
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
 // Read-only client (anon key) — for fetching contests, lineups, player stats.
 function db() {
-  return createClient(URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  return createClient(SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 }
 
 // Write client using service_role key — bypasses RLS for settlement writes.
@@ -52,7 +52,7 @@ function db() {
 // (useful in local dev without a service key set up).
 function serviceDb() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(URL, key, { auth: { persistSession: false } });
+  return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
 
 function checkAuth(req: Request): boolean {
