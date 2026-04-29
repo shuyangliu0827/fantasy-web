@@ -83,19 +83,42 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     || new Date() >= new Date((contest as any).lineup_lock_at);
 
   // Fetch submitted/locked/scored entries (exclude drafts).
-  const { data: entries, count, error: eErr } = await supabase
+  // Try selecting points_awarded; if the column doesn't exist yet (migration pending),
+  // fall back to a query without it and default to 0.
+  let entries: any[] | null = null;
+  let count: number | null = null;
+
+  const baseSelect = "id, rank, user_id, status, total_fpts, submitted_at, users!inner(username)";
+  const fullSelect = `${baseSelect}, points_awarded`;
+
+  const fullResult = await supabase
     .from("user_lineups")
-    .select(
-      "id, rank, user_id, status, total_fpts, points_awarded, submitted_at, users!inner(username)",
-      { count: "exact" },
-    )
+    .select(fullSelect, { count: "exact" })
     .eq("contest_id", id)
     .in("status", ["submitted", "locked", "scored"])
     .order("rank",         { ascending: true,  nullsFirst: false })
     .order("submitted_at", { ascending: true,  nullsFirst: false })
     .range(offset, offset + limit - 1);
 
-  if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
+  if (fullResult.error?.message?.includes("points_awarded")) {
+    // Migration 027 not yet applied — fall back without points_awarded.
+    const fallback = await supabase
+      .from("user_lineups")
+      .select(baseSelect, { count: "exact" })
+      .eq("contest_id", id)
+      .in("status", ["submitted", "locked", "scored"])
+      .order("rank",         { ascending: true,  nullsFirst: false })
+      .order("submitted_at", { ascending: true,  nullsFirst: false })
+      .range(offset, offset + limit - 1);
+    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
+    entries = fallback.data;
+    count   = fallback.count;
+  } else if (fullResult.error) {
+    return NextResponse.json({ error: fullResult.error.message }, { status: 500 });
+  } else {
+    entries = fullResult.data;
+    count   = fullResult.count;
+  }
 
   // After lock: enrich each entry with player details so the UI can show lineups.
   let playersByLineup: Map<string, any[]> = new Map();

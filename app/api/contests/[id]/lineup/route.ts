@@ -97,34 +97,57 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const supabase = db();
 
-  // Fetch lineup + contest status in parallel.
-  const [lineupRes, contestRes] = await Promise.all([
-    supabase
+  // Fetch lineup (try with points_awarded; fall back without it if migration pending).
+  const contestRes = supabase.from("contests").select("date, status").eq("id", id).maybeSingle();
+
+  let lineupRaw: any = null;
+  const fullLineupRes = await supabase
+    .from("user_lineups")
+    .select("id, contest_id, user_id, status, total_fpts, rank, points_awarded, submitted_at")
+    .eq("contest_id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fullLineupRes.error?.message?.includes("points_awarded")) {
+    const fallback = await supabase
       .from("user_lineups")
-      .select("id, contest_id, user_id, status, total_fpts, rank, points_awarded, submitted_at")
+      .select("id, contest_id, user_id, status, total_fpts, rank, submitted_at")
       .eq("contest_id", id)
       .eq("user_id", userId)
-      .maybeSingle(),
-    supabase
-      .from("contests")
-      .select("date, status")
-      .eq("id", id)
-      .maybeSingle(),
-  ]);
+      .maybeSingle();
+    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
+    lineupRaw = fallback.data ? { ...fallback.data, points_awarded: 0 } : null;
+  } else if (fullLineupRes.error) {
+    return NextResponse.json({ error: fullLineupRes.error.message }, { status: 500 });
+  } else {
+    lineupRaw = fullLineupRes.data;
+  }
 
-  if (lineupRes.error) return NextResponse.json({ error: lineupRes.error.message }, { status: 500 });
-  if (!lineupRes.data)  return NextResponse.json({ error: "lineup_not_found" }, { status: 404 });
-  const lineup = lineupRes.data as any;
-  const contest = contestRes.data as any;
+  if (!lineupRaw) return NextResponse.json({ error: "lineup_not_found" }, { status: 404 });
+  const lineup  = lineupRaw as any;
+  const contest = ((await contestRes).data) as any;
 
-  // Fetch lineup players with per-player actual fpts.
-  const { data: lineupPlayers, error: lpErr } = await supabase
+  // Fetch lineup players (try with actual_fantasy_points; fall back without it).
+  let lineupPlayers: any[] = [];
+  const lpFull = await supabase
     .from("user_lineup_players")
     .select("slot, player_id, actual_fantasy_points")
     .eq("lineup_id", lineup.id)
     .order("slot");
 
-  if (lpErr) return NextResponse.json({ error: lpErr.message }, { status: 500 });
+  if (lpFull.error?.message?.includes("actual_fantasy_points")) {
+    const lpFallback = await supabase
+      .from("user_lineup_players")
+      .select("slot, player_id")
+      .eq("lineup_id", lineup.id)
+      .order("slot");
+    if (lpFallback.error) return NextResponse.json({ error: lpFallback.error.message }, { status: 500 });
+    lineupPlayers = (lpFallback.data ?? []).map((p: any) => ({ ...p, actual_fantasy_points: null }));
+  } else if (lpFull.error) {
+    return NextResponse.json({ error: lpFull.error.message }, { status: 500 });
+  } else {
+    lineupPlayers = lpFull.data ?? [];
+  }
 
   const playerIds = (lineupPlayers ?? []).map((p: any) => String(p.player_id));
 
