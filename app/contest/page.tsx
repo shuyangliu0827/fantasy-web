@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
+import ContestNav from "@/components/ContestNav";
 import { getSessionUser, createInsight } from "@/lib/store";
 import { translateTeam } from "@/lib/i18n";
 import { useLang } from "@/lib/lang";
@@ -725,6 +726,7 @@ export default function ContestPage() {
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
+      <ContestNav contestId={contest?.id ?? null} />
 
       {/* ── Flash toast ─────────────────────────────────────── */}
       {flash && (
@@ -1121,14 +1123,42 @@ export default function ContestPage() {
               </div>
             )}
 
-            {/* Submitted confirmation */}
+            {/* Submitted confirmation + results link */}
             {isSubmitted && !isReadOnly && (
-              <div style={{
-                margin: "10px 16px 0", padding: "10px 14px",
-                background: "#f0fdf4", border: "1px solid #bbf7d0",
-                borderRadius: 8, fontSize: 12, color: "#15803d", fontWeight: 500,
-              }}>
-                ✓ Lineup submitted — you can still update it until lock time.
+              <div style={{ margin: "10px 16px 0" }}>
+                <div style={{
+                  padding: "10px 14px",
+                  background: "#f0fdf4", border: "1px solid #bbf7d0",
+                  borderRadius: 8, fontSize: 12, color: "#15803d", fontWeight: 500,
+                }}>
+                  ✓ {t("阵容已提交，锁定前可继续更新。", "Lineup submitted — you can still update it until lock time.")}
+                </div>
+                <button
+                  onClick={() => contest && window.open(`/contest/my-lineup?id=${contest.id}`, "_self")}
+                  style={{
+                    width: "100%", marginTop: 8, padding: "9px 0", borderRadius: 8,
+                    background: "#fff", border: "1px solid #e5e7eb",
+                    fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer",
+                  }}
+                >
+                  {t("查看我的成绩", "View My Results")}
+                </button>
+              </div>
+            )}
+
+            {/* Read-only results link (after lock) */}
+            {isSubmitted && isReadOnly && contest && (
+              <div style={{ margin: "10px 16px 0" }}>
+                <button
+                  onClick={() => window.open(`/contest/my-lineup?id=${contest.id}`, "_self")}
+                  style={{
+                    width: "100%", padding: "10px 0", borderRadius: 8,
+                    background: "#1e3a8a", border: "none",
+                    fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer",
+                  }}
+                >
+                  {t("查看比赛成绩", "View Results")}
+                </button>
               </div>
             )}
 

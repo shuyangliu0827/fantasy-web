@@ -97,33 +97,87 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const supabase = db();
 
-  const { data: lineup, error } = await supabase
-    .from("user_lineups")
-    .select("id, contest_id, user_id, status, total_fpts, rank, submitted_at")
-    .eq("contest_id", id)
-    .eq("user_id", userId)
-    .maybeSingle();
+  // Fetch lineup + contest status in parallel.
+  const [lineupRes, contestRes] = await Promise.all([
+    supabase
+      .from("user_lineups")
+      .select("id, contest_id, user_id, status, total_fpts, rank, points_awarded, submitted_at")
+      .eq("contest_id", id)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("contests")
+      .select("date, status")
+      .eq("id", id)
+      .maybeSingle(),
+  ]);
 
-  if (error)   return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!lineup) return NextResponse.json({ error: "lineup_not_found" }, { status: 404 });
+  if (lineupRes.error) return NextResponse.json({ error: lineupRes.error.message }, { status: 500 });
+  if (!lineupRes.data)  return NextResponse.json({ error: "lineup_not_found" }, { status: 404 });
+  const lineup = lineupRes.data as any;
+  const contest = contestRes.data as any;
 
+  // Fetch lineup players with per-player actual fpts.
   const { data: lineupPlayers, error: lpErr } = await supabase
     .from("user_lineup_players")
-    .select("slot, player_id")
+    .select("slot, player_id, actual_fantasy_points")
     .eq("lineup_id", lineup.id)
     .order("slot");
 
   if (lpErr) return NextResponse.json({ error: lpErr.message }, { status: 500 });
 
+  const playerIds = (lineupPlayers ?? []).map((p: any) => String(p.player_id));
+
+  // Fetch salary from contest_players and name/team/position from player_stats_cache.
+  const [cpRes, pscRes] = await Promise.all([
+    playerIds.length
+      ? supabase
+          .from("contest_players")
+          .select("player_id, salary")
+          .eq("contest_id", id)
+          .in("player_id", playerIds)
+      : Promise.resolve({ data: [], error: null }),
+    playerIds.length
+      ? supabase
+          .from("player_stats_cache")
+          .select("player_id, name, team, position")
+          .in("player_id", playerIds.map((p) => parseInt(p, 10)))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const salaryMap = new Map<string, number>(
+    ((cpRes.data as any[]) ?? []).map((r) => [String(r.player_id), r.salary]),
+  );
+  const metaMap = new Map<string, { name: string; team: string; position: string }>(
+    ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
+  );
+
+  const enrichedPlayers = (lineupPlayers ?? []).map((p: any) => {
+    const meta = metaMap.get(String(p.player_id));
+    return {
+      slot:                   p.slot,
+      slot_label:             SLOT_LABEL[p.slot as number] ?? String(p.slot),
+      player_id:              p.player_id,
+      name:                   meta?.name    ?? "",
+      team:                   meta?.team    ?? "",
+      position:               meta?.position ?? "",
+      salary:                 salaryMap.get(String(p.player_id)) ?? 0,
+      actual_fantasy_points:  p.actual_fantasy_points ?? null,
+    };
+  });
+
   return NextResponse.json({
-    lineup_id:    lineup.id,
-    contest_id:   lineup.contest_id,
-    user_id:      lineup.user_id,
-    status:       lineup.status,
-    total_fpts:   lineup.total_fpts  ?? null,
-    rank:         lineup.rank        ?? null,
-    submitted_at: lineup.submitted_at ?? null,
-    players:      lineupPlayers ?? [],
+    lineup_id:      lineup.id,
+    contest_id:     lineup.contest_id,
+    contest_date:   contest?.date   ?? null,
+    contest_status: contest?.status ?? null,
+    user_id:        lineup.user_id,
+    status:         lineup.status,
+    total_fpts:     lineup.total_fpts    ?? null,
+    rank:           lineup.rank          ?? null,
+    points_awarded: lineup.points_awarded ?? 0,
+    submitted_at:   lineup.submitted_at  ?? null,
+    players:        enrichedPlayers,
   });
 }
 
