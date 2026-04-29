@@ -11,6 +11,7 @@ const TABS = [
   { href: "/contest",             labelZh: "选阵容",   labelEn: "Build" },
   { href: "/contest/leaderboard", labelZh: "每日榜",   labelEn: "Daily Board" },
   { href: "/contest/weekly",      labelZh: "周积分榜", labelEn: "Weekly" },
+  { href: "/contest/all-time",    labelZh: "总积分榜", labelEn: "All-Time" },
   { href: "/contest/my-lineup",   labelZh: "我的成绩", labelEn: "My Results" },
 ] as const;
 
