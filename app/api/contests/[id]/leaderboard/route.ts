@@ -72,42 +72,118 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // Verify contest
   const { data: contest, error: cErr } = await supabase
     .from("contests")
-    .select("id, status")
+    .select("id, status, lineup_lock_at")
     .eq("id", id)
     .maybeSingle();
 
-  if (cErr)    return NextResponse.json({ error: cErr.message }, { status: 500 });
+  if (cErr)     return NextResponse.json({ error: cErr.message }, { status: 500 });
   if (!contest) return NextResponse.json({ error: "contest_not_found" }, { status: 404 });
 
-  // Fetch submitted/locked/scored entries only (exclude drafts from public board).
-  // Order: rank ASC (nulls at bottom for pre-scoring), then submitted_at ASC.
-  // submitted_at ordering is the deterministic tiebreaker for equal rank.
-  const { data: entries, count, error: eErr } = await supabase
+  const isLocked = (contest as any).status === "locked" || (contest as any).status === "scored"
+    || new Date() >= new Date((contest as any).lineup_lock_at);
+
+  // Fetch submitted/locked/scored entries (exclude drafts).
+  // Try selecting points_awarded; if the column doesn't exist yet (migration pending),
+  // fall back to a query without it and default to 0.
+  let entries: any[] | null = null;
+  let count: number | null = null;
+
+  const baseSelect = "id, rank, user_id, status, total_fpts, submitted_at, users!inner(username)";
+  const fullSelect = `${baseSelect}, points_awarded`;
+
+  const fullResult = await supabase
     .from("user_lineups")
-    .select(
-      "rank, user_id, status, total_fpts, submitted_at, users!inner(username)",
-      { count: "exact" },
-    )
+    .select(fullSelect, { count: "exact" })
     .eq("contest_id", id)
     .in("status", ["submitted", "locked", "scored"])
     .order("rank",         { ascending: true,  nullsFirst: false })
     .order("submitted_at", { ascending: true,  nullsFirst: false })
     .range(offset, offset + limit - 1);
 
-  if (eErr) return NextResponse.json({ error: eErr.message }, { status: 500 });
+  if (fullResult.error?.message?.includes("points_awarded")) {
+    // Migration 027 not yet applied — fall back without points_awarded.
+    const fallback = await supabase
+      .from("user_lineups")
+      .select(baseSelect, { count: "exact" })
+      .eq("contest_id", id)
+      .in("status", ["submitted", "locked", "scored"])
+      .order("rank",         { ascending: true,  nullsFirst: false })
+      .order("submitted_at", { ascending: true,  nullsFirst: false })
+      .range(offset, offset + limit - 1);
+    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
+    entries = fallback.data;
+    count   = fallback.count;
+  } else if (fullResult.error) {
+    return NextResponse.json({ error: fullResult.error.message }, { status: 500 });
+  } else {
+    entries = fullResult.data;
+    count   = fullResult.count;
+  }
+
+  // After lock: enrich each entry with player details so the UI can show lineups.
+  let playersByLineup: Map<string, any[]> = new Map();
+  if (isLocked && entries && entries.length > 0) {
+    const lineupIds = (entries as any[]).map((e) => e.id);
+
+    const [lpRes, cpRes, pscRes] = await Promise.all([
+      supabase
+        .from("user_lineup_players")
+        .select("lineup_id, slot, player_id, actual_fantasy_points")
+        .in("lineup_id", lineupIds),
+      supabase
+        .from("contest_players")
+        .select("player_id, salary")
+        .eq("contest_id", id),
+      // player_stats_cache uses integer player_id; contest_players uses text.
+      supabase
+        .from("player_stats_cache")
+        .select("player_id, name, position"),
+    ]);
+
+    const salaryMap = new Map<string, number>(
+      ((cpRes.data as any[]) ?? []).map((r) => [String(r.player_id), r.salary]),
+    );
+    const nameMap = new Map<string, { name: string; position: string }>(
+      ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
+    );
+
+    for (const lp of (lpRes.data as any[] ?? [])) {
+      const meta = nameMap.get(String(lp.player_id));
+      const slot_labels: Record<number, string> = { 1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C" };
+      const row = {
+        slot:                  lp.slot,
+        slot_label:            slot_labels[lp.slot as number] ?? String(lp.slot),
+        player_id:             lp.player_id,
+        name:                  meta?.name     ?? "",
+        position:              meta?.position ?? "",
+        salary:                salaryMap.get(String(lp.player_id)) ?? 0,
+        actual_fantasy_points: lp.actual_fantasy_points ?? null,
+      };
+      if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
+      playersByLineup.get(lp.lineup_id)!.push(row);
+    }
+    // Sort players by slot within each lineup.
+    for (const players of playersByLineup.values()) {
+      players.sort((a, b) => a.slot - b.slot);
+    }
+  }
 
   const shaped = (entries ?? []).map((row: any) => ({
-    rank:         row.rank         ?? null,
-    user_id:      row.user_id,
-    username:     (row.users as any)?.username ?? "",
-    total_fpts:   row.total_fpts   ?? null,
-    status:       row.status,
-    submitted_at: row.submitted_at ?? null,
+    rank:           row.rank           ?? null,
+    user_id:        row.user_id,
+    username:       (row.users as any)?.username ?? "",
+    total_fpts:     row.total_fpts     ?? null,
+    points_awarded: row.points_awarded ?? 0,
+    status:         row.status,
+    submitted_at:   row.submitted_at   ?? null,
+    // Players only exposed after lock — prevents lineup scouting before deadline.
+    players:        isLocked ? (playersByLineup.get(row.id) ?? []) : null,
   }));
 
   return NextResponse.json({
     contest_id: id,
-    status:     contest.status,
+    status:     (contest as any).status,
+    locked:     isLocked,
     total:      count ?? 0,
     entries:    shaped,
   });
