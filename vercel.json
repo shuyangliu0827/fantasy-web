@@ -7,6 +7,10 @@
     {
       "path": "/api/contests/seed-upcoming",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/contests/settle-all-pending",
+      "schedule": "0 7 * * *"
     }
   ]
 }
