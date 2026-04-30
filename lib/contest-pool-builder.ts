@@ -121,10 +121,13 @@ export async function buildContestPool(
 
   if (error) return null;
 
-  // Drop "Out*" injuries — those players never enter the pool.
-  // PostgREST NOT ILIKE drops NULLs, so we filter in JS.
+  // Drop "Out*" injuries and players who have never scored in the NBA
+  // (fpts_avg = 0 or null means G-League / two-way / inactive — they
+  // shouldn't appear in a playable contest pool).
   const eligible = (cacheRows ?? []).filter(
-    (r) => !r.injury?.toLowerCase().startsWith("out"),
+    (r) =>
+      !r.injury?.toLowerCase().startsWith("out") &&
+      Number(r.fpts_avg) > 0,
   );
 
   if (eligible.length === 0) return [];

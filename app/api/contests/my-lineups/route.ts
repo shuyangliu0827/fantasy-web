@@ -116,9 +116,10 @@ export async function GET(req: Request) {
     );
   }
 
-  // ── Fetch game schedule for opponent labels ───────────────────
-  // Keyed "team_abbr:date" → "vs OPP" | "@ OPP"
-  const opponentMap = new Map<string, string>();
+  // ── Fetch game schedule for opponent labels + game status ─────
+  // Keyed "team_abbr:date" → { label, status }
+  type GameMeta = { label: string; status: string };
+  const opponentMap = new Map<string, GameMeta>();
   if (allDates.length > 0) {
     const minDate = allDates.reduce((a, b) => (a < b ? a : b));
     const maxDate = allDates.reduce((a, b) => (a > b ? a : b));
@@ -126,7 +127,10 @@ export async function GET(req: Request) {
       const gamesMap = await fetchGamesForRange(minDate, maxDate);
       for (const [teamAbbr, dateGames] of Object.entries(gamesMap)) {
         for (const [date, info] of Object.entries(dateGames)) {
-          opponentMap.set(`${teamAbbr}:${date}`, info.isHome ? `vs ${info.opponent}` : `@ ${info.opponent}`);
+          opponentMap.set(`${teamAbbr}:${date}`, {
+            label:  info.isHome ? `vs ${info.opponent}` : `@ ${info.opponent}`,
+            status: info.status,
+          });
         }
       }
     } catch {
@@ -172,11 +176,13 @@ export async function GET(req: Request) {
           const statsKey  = contestDate ? `${contestDate}:${String(p.player_id)}` : null;
           const box_score = statsKey ? (statsMap.get(statsKey) ?? null) : null;
           const oppKey    = p.team && contestDate ? `${p.team}:${contestDate}` : null;
-          const opponent  = oppKey ? (opponentMap.get(oppKey) ?? null) : null;
+          const gameMeta  = oppKey ? (opponentMap.get(oppKey) ?? null) : null;
+          const opponent  = gameMeta?.label  ?? null;
+          const game_status = gameMeta?.status ?? null;
           // live_fpts: for unscored lineups, real-time fpts from BDL box score.
           const live_fpts = !isScored && box_score ? box_score.fpts : null;
 
-          return { ...p, salary, box_score, opponent, live_fpts };
+          return { ...p, salary, box_score, opponent, game_status, live_fpts };
         })
         .sort((a: any, b: any) => a.slot - b.slot);
 

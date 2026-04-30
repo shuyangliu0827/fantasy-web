@@ -20,6 +20,16 @@ function fmtMoney(n: number) { return `$${n.toLocaleString()}`; }
 function fmtFpts(n: number | null | undefined) { return n != null ? n.toFixed(1) : "—"; }
 function fmtInt(n: number | null | undefined) { return n != null ? String(Math.round(n)) : "—"; }
 
+// Classify BDL game status string into a canonical state.
+function gameState(status: string | null): "not_started" | "live" | "final" | "no_game" {
+  if (!status) return "no_game";
+  if (/^final/i.test(status)) return "final";
+  // BDL uses time strings like "7:30 pm ET" for unstarted games
+  if (/\d+:\d+\s*(am|pm)/i.test(status)) return "not_started";
+  // Quarter / halftime / OT strings indicate live game
+  return "live";
+}
+
 type BoxScore = {
   min: number; fgm: number; fga: number; fg3m: number;
   ftm: number; fta: number; reb: number; ast: number;
@@ -38,6 +48,7 @@ type Player = {
   live_fpts: number | null;
   box_score: BoxScore | null;
   opponent: string | null;
+  game_status: string | null;   // BDL status: "Final", "7:30 pm ET", "2nd Qtr", etc.
 };
 
 type LineupEntry = {
@@ -173,15 +184,27 @@ function MyLineupContent() {
     }
   }
 
-  // FPTS cell — uses official score (scored) or live box-score fpts (live/pending)
+  // FPTS cell — uses official score (scored) or live box-score fpts (live/pending).
+  // For unscored lineups, game_status drives the "no data" label:
+  //   final + no box_score  → DNP (player didn't play)
+  //   live  + no box_score  → 0 (in game, no stats yet)
+  //   not_started           → "—"
+  //   no_game               → "No Game"
   function fptsCellValue(p: Player, isScored: boolean): { text: string; color: string } {
     if (isScored) {
       const v = p.actual_fantasy_points;
       return { text: fmtFpts(v), color: v != null && v > 30 ? "#059669" : "#1e3a8a" };
     }
     const v = p.live_fpts ?? p.box_score?.fpts;
-    if (v == null) return { text: t("进行中", "Live"), color: "#9ca3af" };
-    return { text: fmtFpts(v), color: "#d97706" };
+    if (v != null) return { text: fmtFpts(v), color: "#d97706" };
+
+    const gs = gameState(p.game_status);
+    switch (gs) {
+      case "final":       return { text: t("DNP", "DNP"),          color: "#9ca3af" };
+      case "live":        return { text: "0",                       color: "#d97706" };
+      case "not_started": return { text: "—",                       color: "#9ca3af" };
+      default:            return { text: t("无比赛", "No Game"),    color: "#9ca3af" };
+    }
   }
 
   return (
@@ -238,7 +261,10 @@ function MyLineupContent() {
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
               const isScored    = entry.status === "scored";
               const hasLive     = !isScored && entry.live_total_fpts != null && entry.live_total_fpts > 0;
-              const liveCount   = !isScored ? entry.players.filter(p => p.live_fpts != null).length : 0;
+              // Count players whose game is final (box score available)
+              const liveCount   = !isScored
+                ? entry.players.filter(p => p.live_fpts != null && gameState(p.game_status) === "final").length
+                : 0;
 
               return (
                 <div key={entry.lineup_id} style={{
