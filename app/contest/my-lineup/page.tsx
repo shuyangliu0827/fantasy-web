@@ -260,11 +260,11 @@ function MyLineupContent() {
               const isExpanded  = expanded.has(entry.lineup_id);
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
               const isScored    = entry.status === "scored";
-              const hasLive     = !isScored && entry.live_total_fpts != null && entry.live_total_fpts > 0;
-              // Count players whose game is final (box score available)
-              const liveCount   = !isScored
-                ? entry.players.filter(p => p.live_fpts != null && gameState(p.game_status) === "final").length
+              // Count players whose team's game is final — includes DNP (no box score but game over).
+              const completedCount = !isScored
+                ? entry.players.filter(p => gameState(p.game_status) === "final").length
                 : 0;
+              const hasLive = !isScored && completedCount > 0;
 
               return (
                 <div key={entry.lineup_id} style={{
@@ -316,7 +316,7 @@ function MyLineupContent() {
                             {fmtFpts(entry.live_total_fpts)}
                           </div>
                           <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                            {liveCount}/5 {t("场次", "done")}
+                            {completedCount}/5 {t("场次", "done")}
                           </div>
                         </div>
                         {statusBadge(entry.status)}
@@ -473,7 +473,7 @@ function MyLineupContent() {
                                 textAlign: "center", border: "1px solid #f3f4f6",
                               }}>
                                 <div style={{ fontSize: 16, fontWeight: 800, color: "#374151" }}>
-                                  {liveCount}/5
+                                  {completedCount}/5
                                 </div>
                                 <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>
                                   {t("场次完成", "Games done")}
