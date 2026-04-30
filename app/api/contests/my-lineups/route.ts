@@ -66,20 +66,46 @@ export async function GET(req: Request) {
 
   if (lpErr) return NextResponse.json({ error: lpErr.message }, { status: 500 });
 
-  // ── 3. Fetch player metadata and salaries ────────────────────
+  // ── 3. Fetch player metadata, salaries, and live stats ───────
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
   const intIds = allPlayerIds.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
 
   const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))];
 
-  const [pscRes, cpRes] = await Promise.all([
+  // Collect contest dates for lineups not yet scored — used to fetch live fpts.
+  const unscoredDates = [
+    ...new Set(
+      weekLineups
+        .filter((l: any) => l.status !== "scored")
+        .map((l: any) => (l.contests as any)?.date)
+        .filter(Boolean),
+    ),
+  ] as string[];
+
+  const [pscRes, cpRes, liveRes] = await Promise.all([
     intIds.length
       ? supabase.from("player_stats_cache").select("player_id, name, position").in("player_id", intIds)
       : Promise.resolve({ data: [], error: null }),
     contestIds.length && allPlayerIds.length
       ? supabase.from("contest_players").select("contest_id, player_id, salary").in("contest_id", contestIds).in("player_id", allPlayerIds)
       : Promise.resolve({ data: [], error: null }),
+    // Live scores: read player_day_stats for unscored contest dates.
+    // Same source the settlement job uses, so scores are always consistent.
+    unscoredDates.length && allPlayerIds.length
+      ? supabase
+          .from("player_day_stats")
+          .select("player_id, date, fpts")
+          .in("date", unscoredDates)
+          .in("player_id", allPlayerIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
+
+  // Map: "YYYY-MM-DD:player_id" → fpts (null if stats not yet ingested)
+  const liveFptsMap = new Map<string, number | null>();
+  for (const row of (liveRes.data as any[] ?? [])) {
+    const key = `${row.date}:${String(row.player_id)}`;
+    liveFptsMap.set(key, row.fpts != null ? Number(row.fpts) : null);
+  }
 
   const metaMap = new Map<string, { name: string; position: string }>(
     ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
@@ -102,30 +128,47 @@ export async function GET(req: Request) {
       name:                  meta?.name     ?? "",
       position:              meta?.position ?? "",
       actual_fantasy_points: lp.actual_fantasy_points ?? null,
+      // live_fpts: real-time score from player_day_stats (available before settlement).
+      // Populated for unscored lineups so users can track progress during game day.
+      live_fpts:             null as number | null,
     });
   }
 
   // ── 5. Build result sorted by contest_date ASC (Mon → Sun) ──
   const result = weekLineups
     .map((l: any) => {
-      const contest = l.contests as any;
+      const contest      = l.contests as any;
+      const contestDate  = contest?.date ?? null;
+      const isScored     = l.status === "scored";
+
       const players = (playersByLineup.get(l.id) ?? [])
-        .map((p) => ({
-          ...p,
-          salary: salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0,
-        }))
+        .map((p) => {
+          const salary = salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0;
+          // For settled lineups actual_fantasy_points is authoritative.
+          // For unsettled lineups, fill live_fpts from player_day_stats.
+          const live_fpts = !isScored && contestDate
+            ? (liveFptsMap.get(`${contestDate}:${String(p.player_id)}`) ?? null)
+            : null;
+          return { ...p, salary, live_fpts };
+        })
         .sort((a: any, b: any) => a.slot - b.slot);
 
+      // Live total: sum of live_fpts for players whose game has finished.
+      const live_total_fpts = !isScored
+        ? players.reduce((sum: number, p: any) => sum + (p.live_fpts ?? 0), 0)
+        : null;
+
       return {
-        lineup_id:      l.id,
-        contest_id:     l.contest_id,
-        contest_date:   contest?.date   ?? null,
-        contest_status: contest?.status ?? null,
-        status:         l.status,
-        total_fpts:     l.total_fpts    ?? null,
-        rank:           l.rank          ?? null,
-        points_awarded: pointsMap.get(l.id) ?? 0,
-        submitted_at:   l.submitted_at  ?? null,
+        lineup_id:        l.id,
+        contest_id:       l.contest_id,
+        contest_date:     contestDate,
+        contest_status:   contest?.status ?? null,
+        status:           l.status,
+        total_fpts:       l.total_fpts    ?? null,
+        live_total_fpts,
+        rank:             l.rank          ?? null,
+        points_awarded:   pointsMap.get(l.id) ?? 0,
+        submitted_at:     l.submitted_at  ?? null,
         players,
       };
     })

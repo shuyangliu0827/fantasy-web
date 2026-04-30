@@ -27,6 +27,7 @@ type Player = {
   position: string;
   salary: number;
   actual_fantasy_points: number | null;
+  live_fpts: number | null;
 };
 
 type LineupEntry = {
@@ -36,6 +37,7 @@ type LineupEntry = {
   contest_status: string | null;
   status: string;
   total_fpts: number | null;
+  live_total_fpts: number | null;
   rank: number | null;
   points_awarded: number;
   submitted_at: string | null;
@@ -176,9 +178,11 @@ function MyLineupContent() {
         {user && !loading && !error && lineups.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {lineups.map((entry) => {
-              const isExpanded = expanded.has(entry.lineup_id);
+              const isExpanded  = expanded.has(entry.lineup_id);
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
-              const isScored = entry.status === "scored";
+              const isScored    = entry.status === "scored";
+              const hasLive     = !isScored && entry.live_total_fpts != null && entry.live_total_fpts > 0;
+              const liveCount   = !isScored ? entry.players.filter(p => p.live_fpts != null).length : 0;
 
               return (
                 <div key={entry.lineup_id} style={{
@@ -202,7 +206,7 @@ function MyLineupContent() {
                       </div>
                     </div>
 
-                    {/* Header right: scored summary or status badge */}
+                    {/* Header right: scored summary / live score / status badge */}
                     {isScored ? (
                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                         <div style={{ textAlign: "center" }}>
@@ -223,6 +227,19 @@ function MyLineupContent() {
                           </div>
                           <div style={{ fontSize: 10, color: "#9ca3af" }}>{t("积分", "Pts")}</div>
                         </div>
+                      </div>
+                    ) : hasLive ? (
+                      /* Live scores available — show running total */
+                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#d97706" }}>
+                            {fmtFpts(entry.live_total_fpts)}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#9ca3af" }}>
+                            {liveCount}/5 {t("场次", "done")}
+                          </div>
+                        </div>
+                        {statusBadge(entry.status)}
                       </div>
                     ) : (
                       statusBadge(entry.status)
@@ -266,15 +283,22 @@ function MyLineupContent() {
                             </div>
                             <div style={{ textAlign: "right", flexShrink: 0 }}>
                               {isScored ? (
+                                /* Official settled score */
                                 <span style={{
                                   fontSize: 14, fontWeight: 700,
                                   color: (p.actual_fantasy_points ?? 0) > 30 ? "#059669" : "#374151",
                                 }}>
                                   {fmtFpts(p.actual_fantasy_points)}
                                 </span>
+                              ) : p.live_fpts != null ? (
+                                /* Live score from player_day_stats — game finished, settlement pending */
+                                <span style={{ fontSize: 14, fontWeight: 700, color: "#d97706" }}>
+                                  {fmtFpts(p.live_fpts)}
+                                </span>
                               ) : (
+                                /* Game not yet finished */
                                 <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                                  {t("等待", "Pending")}
+                                  {t("进行中", "Live")}
                                 </span>
                               )}
                             </div>
@@ -284,7 +308,7 @@ function MyLineupContent() {
 
                       {/* Footer */}
                       <div style={{ borderTop: "1px solid #f3f4f6", padding: "12px 16px" }}>
-                        {/* Scored stats grid OR pending notice */}
+                        {/* Scored stats grid / live summary / pending notice */}
                         {isScored ? (
                           <div style={{
                             display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
@@ -303,6 +327,44 @@ function MyLineupContent() {
                                 <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{label}</div>
                               </div>
                             ))}
+                          </div>
+                        ) : hasLive ? (
+                          /* Some games finished — show live running total */
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{
+                              display: "grid", gridTemplateColumns: "1fr 1fr",
+                              gap: 8, marginBottom: 8,
+                            }}>
+                              <div style={{
+                                background: "#fffbeb", borderRadius: 8, padding: "8px 6px",
+                                textAlign: "center", border: "1px solid #fcd34d",
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "#d97706" }}>
+                                  {fmtFpts(entry.live_total_fpts)}
+                                </div>
+                                <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>
+                                  {t("实时总分", "Live Fpts")}
+                                </div>
+                              </div>
+                              <div style={{
+                                background: "#f9fafb", borderRadius: 8, padding: "8px 6px",
+                                textAlign: "center", border: "1px solid #f3f4f6",
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "#374151" }}>
+                                  {liveCount}/5
+                                </div>
+                                <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>
+                                  {t("场次完成", "Games done")}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{
+                              fontSize: 12, color: "#92400e", background: "#fef3c7",
+                              border: "1px solid #fcd34d", borderRadius: 6,
+                              padding: "6px 10px", fontWeight: 500,
+                            }}>
+                              {t("比赛结束后系统将自动结算排名和积分。", "Official rank and points will be assigned after settlement.")}
+                            </div>
                           </div>
                         ) : (
                           <div style={{
