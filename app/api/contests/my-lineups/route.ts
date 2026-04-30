@@ -72,7 +72,7 @@ export async function GET(req: Request) {
 
   const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))];
 
-  // Collect contest dates for lineups not yet scored — used to fetch live fpts.
+  // Collect contest dates for lineups not yet officially scored.
   const unscoredDates = [
     ...new Set(
       weekLineups
@@ -82,29 +82,39 @@ export async function GET(req: Request) {
     ),
   ] as string[];
 
-  const [pscRes, cpRes, liveRes] = await Promise.all([
+  // ── Fetch player metadata + salaries (parallel DB queries) ──
+  const [pscRes, cpRes] = await Promise.all([
     intIds.length
       ? supabase.from("player_stats_cache").select("player_id, name, position").in("player_id", intIds)
       : Promise.resolve({ data: [], error: null }),
     contestIds.length && allPlayerIds.length
       ? supabase.from("contest_players").select("contest_id, player_id, salary").in("contest_id", contestIds).in("player_id", allPlayerIds)
       : Promise.resolve({ data: [], error: null }),
-    // Live scores: read player_day_stats for unscored contest dates.
-    // Same source the settlement job uses, so scores are always consistent.
-    unscoredDates.length && allPlayerIds.length
-      ? supabase
-          .from("player_day_stats")
-          .select("player_id, date, fpts")
-          .in("date", unscoredDates)
-          .in("player_id", allPlayerIds)
-      : Promise.resolve({ data: [], error: null }),
   ]);
 
-  // Map: "YYYY-MM-DD:player_id" → fpts (null if stats not yet ingested)
-  const liveFptsMap = new Map<string, number | null>();
-  for (const row of (liveRes.data as any[] ?? [])) {
-    const key = `${row.date}:${String(row.player_id)}`;
-    liveFptsMap.set(key, row.fpts != null ? Number(row.fpts) : null);
+  // ── Fetch live fpts via nba-game-stats (same pipeline as league scoreboard) ──
+  // This route calls BDL directly (with 5-min in-memory cache) and writes results
+  // to player_day_stats. Reading from player_day_stats directly would miss live data
+  // that hasn't been fetched yet — hence we call the API, not the DB table.
+  const liveFptsMap = new Map<string, number>(); // "YYYY-MM-DD:player_id" → fpts
+  const origin = new URL(req.url).origin;
+
+  if (unscoredDates.length > 0) {
+    await Promise.all(
+      unscoredDates.map(async (date) => {
+        try {
+          const res = await fetch(`${origin}/api/nba-game-stats?date=${date}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.status !== "success" || !data.stats) return;
+          for (const [pid, stats] of Object.entries(data.stats as Record<string, { fpts: number }>)) {
+            liveFptsMap.set(`${date}:${pid}`, stats.fpts ?? 0);
+          }
+        } catch {
+          // BDL unavailable — live scores stay empty for this date, show "进行中"
+        }
+      }),
+    );
   }
 
   const metaMap = new Map<string, { name: string; position: string }>(
@@ -128,8 +138,8 @@ export async function GET(req: Request) {
       name:                  meta?.name     ?? "",
       position:              meta?.position ?? "",
       actual_fantasy_points: lp.actual_fantasy_points ?? null,
-      // live_fpts: real-time score from player_day_stats (available before settlement).
-      // Populated for unscored lineups so users can track progress during game day.
+      // live_fpts: real-time score from nba-game-stats (BDL live data, same as league scoreboard).
+      // Populated for unscored lineups once BDL has box-score data for the player.
       live_fpts:             null as number | null,
     });
   }
@@ -145,9 +155,10 @@ export async function GET(req: Request) {
         .map((p) => {
           const salary = salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0;
           // For settled lineups actual_fantasy_points is authoritative.
-          // For unsettled lineups, fill live_fpts from player_day_stats.
-          const live_fpts = !isScored && contestDate
-            ? (liveFptsMap.get(`${contestDate}:${String(p.player_id)}`) ?? null)
+          // For unsettled lineups, fill live_fpts from nba-game-stats (BDL live data).
+          const liveKey = `${contestDate}:${String(p.player_id)}`;
+          const live_fpts = !isScored && contestDate && liveFptsMap.has(liveKey)
+            ? liveFptsMap.get(liveKey)!
             : null;
           return { ...p, salary, live_fpts };
         })
