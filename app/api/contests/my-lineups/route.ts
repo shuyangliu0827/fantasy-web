@@ -9,6 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { SLOT_LABEL } from "@/lib/contest-positions";
 import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
+import { fetchStatsForDate } from "@/lib/player-game-stats";
 
 function db() {
   return createClient(
@@ -92,26 +93,20 @@ export async function GET(req: Request) {
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  // ── Fetch live fpts via nba-game-stats (same pipeline as league scoreboard) ──
-  // This route calls BDL directly (with 5-min in-memory cache) and writes results
-  // to player_day_stats. Reading from player_day_stats directly would miss live data
-  // that hasn't been fetched yet — hence we call the API, not the DB table.
+  // ── Fetch live fpts via shared lib (same BDL pipeline as nba-game-stats route) ──
+  // Direct import avoids server-to-server HTTP and shares the in-memory 5-min cache.
   const liveFptsMap = new Map<string, number>(); // "YYYY-MM-DD:player_id" → fpts
-  const origin = new URL(req.url).origin;
 
   if (unscoredDates.length > 0) {
     await Promise.all(
       unscoredDates.map(async (date) => {
         try {
-          const res = await fetch(`${origin}/api/nba-game-stats?date=${date}`);
-          if (!res.ok) return;
-          const data = await res.json();
-          if (data.status !== "success" || !data.stats) return;
-          for (const [pid, stats] of Object.entries(data.stats as Record<string, { fpts: number }>)) {
-            liveFptsMap.set(`${date}:${pid}`, stats.fpts ?? 0);
+          const statsForDate = await fetchStatsForDate(date);
+          for (const [pid, stats] of Object.entries(statsForDate)) {
+            liveFptsMap.set(`${date}:${pid}`, stats.fpts);
           }
         } catch {
-          // BDL unavailable — live scores stay empty for this date, show "进行中"
+          // BDL unavailable for this date — players show "进行中"
         }
       }),
     );
