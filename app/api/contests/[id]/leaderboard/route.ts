@@ -83,41 +83,35 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     || new Date() >= new Date((contest as any).lineup_lock_at);
 
   // Fetch submitted/locked/scored entries (exclude drafts).
-  // Try selecting points_awarded; if the column doesn't exist yet (migration pending),
-  // fall back to a query without it and default to 0.
+  // Note: user_lineups.user_id has no FK to public.users, so we avoid an
+  // implicit PostgREST join and fetch usernames via a separate query below.
   let entries: any[] | null = null;
   let count: number | null = null;
 
-  const baseSelect = "id, rank, user_id, status, total_fpts, submitted_at, users!inner(username)";
-  const fullSelect = `${baseSelect}, points_awarded`;
-
-  const fullResult = await supabase
+  const { data: lineupData, error: lineupErr, count: lineupCount } = await supabase
     .from("user_lineups")
-    .select(fullSelect, { count: "exact" })
+    .select("id, rank, user_id, status, total_fpts, submitted_at, points_awarded", { count: "exact" })
     .eq("contest_id", id)
     .in("status", ["submitted", "locked", "scored"])
     .order("rank",         { ascending: true,  nullsFirst: false })
     .order("submitted_at", { ascending: true,  nullsFirst: false })
     .range(offset, offset + limit - 1);
 
-  if (fullResult.error?.message?.includes("points_awarded")) {
-    // Migration 027 not yet applied — fall back without points_awarded.
-    const fallback = await supabase
-      .from("user_lineups")
-      .select(baseSelect, { count: "exact" })
-      .eq("contest_id", id)
-      .in("status", ["submitted", "locked", "scored"])
-      .order("rank",         { ascending: true,  nullsFirst: false })
-      .order("submitted_at", { ascending: true,  nullsFirst: false })
-      .range(offset, offset + limit - 1);
-    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
-    entries = fallback.data;
-    count   = fallback.count;
-  } else if (fullResult.error) {
-    return NextResponse.json({ error: fullResult.error.message }, { status: 500 });
-  } else {
-    entries = fullResult.data;
-    count   = fullResult.count;
+  if (lineupErr) return NextResponse.json({ error: lineupErr.message }, { status: 500 });
+  entries = lineupData;
+  count   = lineupCount;
+
+  // Fetch usernames for the current page of entries.
+  const pageUserIds = [...new Set((entries ?? []).map((e: any) => e.user_id as string))];
+  const usernameMap = new Map<string, string>();
+  if (pageUserIds.length > 0) {
+    const { data: usersData } = await supabase
+      .from("users")
+      .select("id, username")
+      .in("id", pageUserIds);
+    for (const u of (usersData as any[] ?? [])) {
+      usernameMap.set(u.id, u.username ?? "");
+    }
   }
 
   // After lock: enrich each entry with player details so the UI can show lineups.
@@ -171,7 +165,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const shaped = (entries ?? []).map((row: any) => ({
     rank:           row.rank           ?? null,
     user_id:        row.user_id,
-    username:       (row.users as any)?.username ?? "",
+    username:       usernameMap.get(row.user_id) ?? "",
     total_fpts:     row.total_fpts     ?? null,
     points_awarded: row.points_awarded ?? 0,
     status:         row.status,

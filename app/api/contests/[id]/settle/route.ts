@@ -56,11 +56,19 @@ function serviceDb() {
 }
 
 function checkAuth(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const auth = req.headers.get("Authorization");
-  if (auth === `Bearer ${secret}`) return true;
-  return new URL(req.url).searchParams.get("secret") === secret;
+  const cronSecret  = process.env.CRON_SECRET;
+  const svcKey      = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const authHeader  = req.headers.get("Authorization") ?? "";
+  const querySecret = new URL(req.url).searchParams.get("secret") ?? "";
+
+  // Primary: CRON_SECRET for Vercel cron / external scheduler.
+  if (cronSecret && (authHeader === `Bearer ${cronSecret}` || querySecret === cronSecret)) return true;
+
+  // Secondary: service_role key lets admins trigger settlement manually
+  // (e.g. curl -H "Authorization: Bearer <svc_key>" POST /api/contests/<id>/settle).
+  if (svcKey && authHeader === `Bearer ${svcKey}`) return true;
+
+  return false;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -111,6 +119,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
 
   // ── 4. Fetch actual fpts from player_day_stats ───────────────
+  // Source of truth: player_day_stats.fpts WHERE date = contest.date.
+  // Players absent from this table are treated as DNP (0 fpts).
+  // If stats haven't been ingested yet the row simply won't exist,
+  // so settle only after the nba-game-stats pipeline has run for contest.date.
   const { data: dayStats, error: dsErr } = await supabase
     .from("player_day_stats")
     .select("player_id, fpts")
@@ -119,17 +131,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (dsErr) return NextResponse.json({ error: dsErr.message }, { status: 500 });
 
-  const fptsMap = new Map<string, number>(
-    (dayStats as any[] ?? []).map((s) => [String(s.player_id), Number(s.fpts) || 0]),
-  );
+  // Map: player_id(text) → fpts(number). Players NOT in player_day_stats score 0 (DNP).
+  const fptsMap = new Map<string, number | null>();
+  for (const s of (dayStats as any[] ?? [])) {
+    fptsMap.set(String(s.player_id), s.fpts != null ? Number(s.fpts) : null);
+  }
 
   // ── 5. Group players by lineup, compute lineup totals ────────
-  type LPRow = { id: string; player_id: string; fpts: number };
+  // actual_fpts is null when no player_day_stats row found (DNP or stats not yet ingested).
+  // For total_fpts we treat null as 0 so ranking is still deterministic.
+  type LPRow = { id: string; player_id: string; actual_fpts: number | null; fpts_for_total: number };
   const playersByLineup = new Map<string, LPRow[]>();
   for (const lp of (lineupPlayers as any[] ?? [])) {
-    const fpts = fptsMap.get(String(lp.player_id)) ?? 0;
+    const actual_fpts = fptsMap.has(String(lp.player_id)) ? fptsMap.get(String(lp.player_id))! : null;
     if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
-    playersByLineup.get(lp.lineup_id)!.push({ id: lp.id, player_id: lp.player_id, fpts });
+    playersByLineup.get(lp.lineup_id)!.push({
+      id: lp.id,
+      player_id: lp.player_id,
+      actual_fpts,
+      fpts_for_total: actual_fpts ?? 0,
+    });
   }
 
   type LineupTotal = {
@@ -144,7 +165,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     id: l.id,
     user_id: l.user_id,
     submitted_at: l.submitted_at,
-    total_fpts: (playersByLineup.get(l.id) ?? []).reduce((sum, p) => sum + p.fpts, 0),
+    total_fpts: (playersByLineup.get(l.id) ?? []).reduce((sum, p) => sum + p.fpts_for_total, 0),
     players: playersByLineup.get(l.id) ?? [],
   }));
 
@@ -160,11 +181,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const totalEntries = lineupTotals.length;
 
   // ── 7. Write per-player actual_fantasy_points (service role) ─
+  // actual_fpts is null when player has no player_day_stats row (DNP assumption).
   for (const lineup of lineupTotals) {
     for (const player of lineup.players) {
       const { error } = await svcDb
         .from("user_lineup_players")
-        .update({ actual_fantasy_points: player.fpts })
+        .update({ actual_fantasy_points: player.actual_fpts })
         .eq("id", player.id);
       if (error) return NextResponse.json({ error: `ulp: ${error.message}` }, { status: 500 });
     }
@@ -186,7 +208,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { error: ulErr } = await svcDb
       .from("user_lineups")
-      .update({ total_fpts: lineup.total_fpts, rank, points_awarded: points, status: "scored" })
+      .update({
+        total_fpts:    lineup.total_fpts,
+        rank,
+        points_awarded: points,
+        status:        "scored",
+        completed_at:  new Date().toISOString(),
+      })
       .eq("id", lineup.id);
     if (ulErr) return NextResponse.json({ error: `lineup: ${ulErr.message}` }, { status: 500 });
 

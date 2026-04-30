@@ -2,8 +2,8 @@
 // app/contest/my-lineup/page.tsx
 //
 // "My Results" — shows the current week's submitted/locked/scored lineups,
-// sorted Mon → Sun (oldest first). Each card is expandable to show players
-// and, when scored, the total_fpts / rank / points_awarded summary.
+// sorted Mon → Sun (oldest first). Each card is expandable to show a full
+// box-score table: POS | PLAYER | OPP | MIN | FG | FT | 3PM | REB | AST | STL | BLK | TO | PTS | FPTS
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
@@ -17,7 +17,24 @@ import { contestFetch } from "@/lib/contest-fetch";
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
 function fmtMoney(n: number) { return `$${n.toLocaleString()}`; }
-function fmtFpts(n: number | null) { return n != null ? n.toFixed(1) : "—"; }
+function fmtFpts(n: number | null | undefined) { return n != null ? n.toFixed(1) : "—"; }
+function fmtInt(n: number | null | undefined) { return n != null ? String(Math.round(n)) : "—"; }
+
+// Classify BDL game status string into a canonical state.
+function gameState(status: string | null): "not_started" | "live" | "final" | "no_game" {
+  if (!status) return "no_game";
+  if (/^final/i.test(status)) return "final";
+  // BDL uses time strings like "7:30 pm ET" for unstarted games
+  if (/\d+:\d+\s*(am|pm)/i.test(status)) return "not_started";
+  // Quarter / halftime / OT strings indicate live game
+  return "live";
+}
+
+type BoxScore = {
+  min: number; fgm: number; fga: number; fg3m: number;
+  ftm: number; fta: number; reb: number; ast: number;
+  stl: number; blk: number; tov: number; pts: number; fpts: number;
+};
 
 type Player = {
   slot: number;
@@ -25,8 +42,13 @@ type Player = {
   player_id: string;
   name: string;
   position: string;
+  team: string;
   salary: number;
   actual_fantasy_points: number | null;
+  live_fpts: number | null;
+  box_score: BoxScore | null;
+  opponent: string | null;
+  game_status: string | null;   // BDL status: "Final", "7:30 pm ET", "2nd Qtr", etc.
 };
 
 type LineupEntry = {
@@ -36,11 +58,28 @@ type LineupEntry = {
   contest_status: string | null;
   status: string;
   total_fpts: number | null;
+  live_total_fpts: number | null;
   rank: number | null;
   points_awarded: number;
   submitted_at: string | null;
   players: Player[];
 };
+
+// Column definition for the box-score table
+const BOX_COLS = [
+  { key: "opp",  label: "OPP", width: 52 },
+  { key: "min",  label: "MIN", width: 38 },
+  { key: "fg",   label: "FG",  width: 46 },
+  { key: "ft",   label: "FT",  width: 46 },
+  { key: "3pm",  label: "3PM", width: 36 },
+  { key: "reb",  label: "REB", width: 36 },
+  { key: "ast",  label: "AST", width: 36 },
+  { key: "stl",  label: "STL", width: 36 },
+  { key: "blk",  label: "BLK", width: 36 },
+  { key: "to",   label: "TO",  width: 36 },
+  { key: "pts",  label: "PTS", width: 40 },
+  { key: "fpts", label: "FPTS", width: 46 },
+];
 
 function MyLineupContent() {
   const { t, lang } = useLang();
@@ -71,7 +110,6 @@ function MyLineupContent() {
     const json = await res.json();
     const entries: LineupEntry[] = json.lineups ?? [];
     setLineups(entries);
-    // Auto-expand all current-week entries so scores are immediately visible
     setExpanded(new Set<string>(entries.map((e) => e.lineup_id)));
     setLoading(false);
   }
@@ -126,12 +164,55 @@ function MyLineupContent() {
     );
   }
 
+  // Render a single cell value for a column key
+  function cellValue(p: Player, col: string): { text: string; color?: string } {
+    const bs = p.box_score;
+    if (col === "opp") return { text: p.opponent ?? "—", color: "#6b7280" };
+    if (!bs) return { text: "—", color: "#9ca3af" };
+    switch (col) {
+      case "min":  return { text: fmtInt(bs.min) };
+      case "fg":   return { text: `${bs.fgm}/${bs.fga}` };
+      case "ft":   return { text: `${bs.ftm}/${bs.fta}` };
+      case "3pm":  return { text: String(bs.fg3m) };
+      case "reb":  return { text: String(bs.reb) };
+      case "ast":  return { text: String(bs.ast) };
+      case "stl":  return { text: String(bs.stl) };
+      case "blk":  return { text: String(bs.blk) };
+      case "to":   return { text: String(bs.tov), color: bs.tov > 0 ? "#dc2626" : undefined };
+      case "pts":  return { text: String(bs.pts), color: "#111827" };
+      default:     return { text: "—" };
+    }
+  }
+
+  // FPTS cell — uses official score (scored) or live box-score fpts (live/pending).
+  // For unscored lineups, game_status drives the "no data" label:
+  //   final + no box_score  → DNP (player didn't play)
+  //   live  + no box_score  → 0 (in game, no stats yet)
+  //   not_started           → "—"
+  //   no_game               → "No Game"
+  function fptsCellValue(p: Player, isScored: boolean): { text: string; color: string } {
+    if (isScored) {
+      const v = p.actual_fantasy_points;
+      return { text: fmtFpts(v), color: v != null && v > 30 ? "#059669" : "#1e3a8a" };
+    }
+    const v = p.live_fpts ?? p.box_score?.fpts;
+    if (v != null) return { text: fmtFpts(v), color: "#d97706" };
+
+    const gs = gameState(p.game_status);
+    switch (gs) {
+      case "final":       return { text: t("DNP", "DNP"),          color: "#9ca3af" };
+      case "live":        return { text: "0",                       color: "#d97706" };
+      case "not_started": return { text: "—",                       color: "#9ca3af" };
+      default:            return { text: t("无比赛", "No Game"),    color: "#9ca3af" };
+    }
+  }
+
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
       <ContestNav contestId={null} />
 
-      <main style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px" }}>
+      <main style={{ maxWidth: 700, margin: "0 auto", padding: "20px 16px" }}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", marginBottom: 16 }}>
           {t("我的成绩", "My Results")}
         </h2>
@@ -176,9 +257,14 @@ function MyLineupContent() {
         {user && !loading && !error && lineups.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {lineups.map((entry) => {
-              const isExpanded = expanded.has(entry.lineup_id);
+              const isExpanded  = expanded.has(entry.lineup_id);
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
-              const isScored = entry.status === "scored";
+              const isScored    = entry.status === "scored";
+              const hasLive     = !isScored && entry.live_total_fpts != null && entry.live_total_fpts > 0;
+              // Count players whose game is final (box score available)
+              const liveCount   = !isScored
+                ? entry.players.filter(p => p.live_fpts != null && gameState(p.game_status) === "final").length
+                : 0;
 
               return (
                 <div key={entry.lineup_id} style={{
@@ -202,7 +288,6 @@ function MyLineupContent() {
                       </div>
                     </div>
 
-                    {/* Header right: scored summary or status badge */}
                     {isScored ? (
                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                         <div style={{ textAlign: "center" }}>
@@ -224,6 +309,18 @@ function MyLineupContent() {
                           <div style={{ fontSize: 10, color: "#9ca3af" }}>{t("积分", "Pts")}</div>
                         </div>
                       </div>
+                    ) : hasLive ? (
+                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#d97706" }}>
+                            {fmtFpts(entry.live_total_fpts)}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#9ca3af" }}>
+                            {liveCount}/5 {t("场次", "done")}
+                          </div>
+                        </div>
+                        {statusBadge(entry.status)}
+                      </div>
                     ) : (
                       statusBadge(entry.status)
                     )}
@@ -239,52 +336,102 @@ function MyLineupContent() {
                   {/* Expandable section */}
                   {isExpanded && (
                     <>
-                      {/* Player rows */}
-                      <div style={{ borderTop: "1px solid #f3f4f6" }}>
-                        {entry.players.map((p, i) => (
-                          <div key={p.player_id} style={{
-                            display: "flex", alignItems: "center", gap: 10,
-                            padding: "10px 16px",
-                            borderBottom: i < entry.players.length - 1 ? "1px solid #f3f4f6" : "none",
-                          }}>
-                            <span style={{
-                              width: 30, height: 22, borderRadius: 4, flexShrink: 0,
-                              background: "#1e3a8a", color: "#fff",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              fontSize: 10, fontWeight: 700,
-                            }}>
-                              {p.slot_label}
-                            </span>
-                            <PlayerAvatar name={p.name} size={26} />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                {p.name || p.player_id}
-                              </div>
-                              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>
-                                {p.position} · {fmtMoney(p.salary)}
-                              </div>
-                            </div>
-                            <div style={{ textAlign: "right", flexShrink: 0 }}>
-                              {isScored ? (
-                                <span style={{
-                                  fontSize: 14, fontWeight: 700,
-                                  color: (p.actual_fantasy_points ?? 0) > 30 ? "#059669" : "#374151",
+                      {/* Box-score table — horizontal scroll on narrow screens */}
+                      <div style={{ borderTop: "1px solid #f3f4f6", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+                        <table style={{
+                          width: "100%", borderCollapse: "collapse",
+                          fontSize: 12, minWidth: 580,
+                        }}>
+                          <thead>
+                            <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                              {/* Fixed left columns: POS + PLAYER */}
+                              <th style={{ padding: "6px 8px 6px 16px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap", width: 34 }}>
+                                {t("位置", "POS")}
+                              </th>
+                              <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>
+                                {t("球员", "PLAYER")}
+                              </th>
+                              {/* Dynamic stat columns */}
+                              {BOX_COLS.map((col) => (
+                                <th key={col.key} style={{
+                                  padding: "6px 4px", textAlign: "center",
+                                  fontWeight: 600, color: col.key === "fpts" ? "#1e3a8a" : "#6b7280",
+                                  whiteSpace: "nowrap", width: col.width,
                                 }}>
-                                  {fmtFpts(p.actual_fantasy_points)}
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: 12, color: "#9ca3af" }}>
-                                  {t("等待", "Pending")}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                                  {col.label}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entry.players.map((p, i) => {
+                              const fptsCell = fptsCellValue(p, isScored);
+                              return (
+                                <tr key={p.player_id} style={{
+                                  borderBottom: i < entry.players.length - 1 ? "1px solid #f3f4f6" : "none",
+                                }}>
+                                  {/* POS badge */}
+                                  <td style={{ padding: "8px 6px 8px 16px", verticalAlign: "middle" }}>
+                                    <span style={{
+                                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                      width: 28, height: 20, borderRadius: 4,
+                                      background: "#1e3a8a", color: "#fff",
+                                      fontSize: 9, fontWeight: 700, whiteSpace: "nowrap",
+                                    }}>
+                                      {p.slot_label}
+                                    </span>
+                                  </td>
+                                  {/* PLAYER name + avatar */}
+                                  <td style={{ padding: "8px 8px 8px 0", verticalAlign: "middle" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <PlayerAvatar name={p.name} size={22} />
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{
+                                          fontSize: 12, fontWeight: 600, color: "#111827",
+                                          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                          maxWidth: 110,
+                                        }}>
+                                          {p.name || p.player_id}
+                                        </div>
+                                        <div style={{ fontSize: 10, color: "#9ca3af" }}>
+                                          {p.position}{p.team ? ` · ${p.team}` : ""}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                  {/* Stat columns */}
+                                  {BOX_COLS.map((col) => {
+                                    if (col.key === "fpts") {
+                                      return (
+                                        <td key="fpts" style={{
+                                          padding: "8px 4px", textAlign: "center", verticalAlign: "middle",
+                                          fontWeight: 700, color: fptsCell.color,
+                                          whiteSpace: "nowrap",
+                                        }}>
+                                          {fptsCell.text}
+                                        </td>
+                                      );
+                                    }
+                                    const { text, color } = cellValue(p, col.key);
+                                    return (
+                                      <td key={col.key} style={{
+                                        padding: "8px 4px", textAlign: "center", verticalAlign: "middle",
+                                        color: color ?? "#374151", whiteSpace: "nowrap",
+                                        fontSize: col.key === "opp" ? 11 : 12,
+                                      }}>
+                                        {text}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
 
                       {/* Footer */}
                       <div style={{ borderTop: "1px solid #f3f4f6", padding: "12px 16px" }}>
-                        {/* Scored stats grid OR pending notice */}
                         {isScored ? (
                           <div style={{
                             display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
@@ -304,6 +451,43 @@ function MyLineupContent() {
                               </div>
                             ))}
                           </div>
+                        ) : hasLive ? (
+                          <div style={{ marginBottom: 10 }}>
+                            <div style={{
+                              display: "grid", gridTemplateColumns: "1fr 1fr",
+                              gap: 8, marginBottom: 8,
+                            }}>
+                              <div style={{
+                                background: "#fffbeb", borderRadius: 8, padding: "8px 6px",
+                                textAlign: "center", border: "1px solid #fcd34d",
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "#d97706" }}>
+                                  {fmtFpts(entry.live_total_fpts)}
+                                </div>
+                                <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>
+                                  {t("实时总分", "Live Fpts")}
+                                </div>
+                              </div>
+                              <div style={{
+                                background: "#f9fafb", borderRadius: 8, padding: "8px 6px",
+                                textAlign: "center", border: "1px solid #f3f4f6",
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: "#374151" }}>
+                                  {liveCount}/5
+                                </div>
+                                <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>
+                                  {t("场次完成", "Games done")}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{
+                              fontSize: 12, color: "#92400e", background: "#fef3c7",
+                              border: "1px solid #fcd34d", borderRadius: 6,
+                              padding: "6px 10px", fontWeight: 500,
+                            }}>
+                              {t("比赛结束后系统将自动结算排名和积分。", "Official rank and points will be assigned after settlement.")}
+                            </div>
+                          </div>
                         ) : (
                           <div style={{
                             fontSize: 12, color: "#92400e", background: "#fef3c7",
@@ -314,7 +498,6 @@ function MyLineupContent() {
                           </div>
                         )}
 
-                        {/* Total salary + leaderboard button */}
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                           <span style={{ fontSize: 12, color: "#6b7280" }}>
                             {t("总工资", "Total Salary")}

@@ -50,6 +50,13 @@ export default function UserProfilePage() {
   const [editSaving, setEditSaving] = useState(false);
   const [profileBio, setProfileBio] = useState<string | null>(null);
   const [profileUser, setProfileUser] = useState<{ id: string; name: string; username: string; avatar_url?: string; bio?: string } | null>(null);
+  const [dfStats, setDfStats] = useState<{
+    has_played: boolean;
+    total_points?: number;
+    weekly_points?: number;
+    participation_days?: number;
+    best_daily_rank?: number | null;
+  } | null>(null);
 
   const loadData = async () => {
     const user = currentUser;
@@ -80,6 +87,11 @@ export default function UserProfilePage() {
       joinedLeagues = await getUserJoinedLeagues(profileUserData.id);
       setUserLeagues(joinedLeagues);
       setProfileBio(profileUserData.bio || null);
+      // Fetch Daily Fantasy stats for this user
+      fetch(`/api/contests/user-df-stats?user_id=${profileUserData.id}`)
+        .then(r => r.json())
+        .then(data => setDfStats(data))
+        .catch(() => setDfStats({ has_played: false }));
     }
 
     const totalLikes = filtered.reduce((sum, i) => sum + (i.heat || 0), 0);
@@ -320,6 +332,56 @@ export default function UserProfilePage() {
             <div className="stat-card-sub">{t("最近活跃于球队与社区页面", "Recently active on team and community pages")}</div>
           </div>
         </div>
+
+        {/* ── Daily Fantasy Stats Card ── */}
+        {dfStats && (
+          <div className="card" style={{ padding: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: dfStats.has_played ? 14 : 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                {t("Daily Fantasy 积分", "Daily Fantasy")}
+              </div>
+              {dfStats.has_played && (
+                <a href="/contest/all-time" style={{ fontSize: 12, color: "#1e3a8a", textDecoration: "none", fontWeight: 500 }}>
+                  {t("总积分榜", "All-Time Board")} →
+                </a>
+              )}
+            </div>
+            {!dfStats.has_played ? (
+              <div style={{ fontSize: 14, color: "#9ca3af" }}>
+                {isOwnProfile
+                  ? t("你还没有参加过 Daily Fantasy", "You haven't joined Daily Fantasy yet")
+                  : t("该用户尚未参加 Daily Fantasy", "This user hasn't joined Daily Fantasy yet")}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                <div style={{ background: "#f0fdf4", borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>
+                    {(dfStats.total_points ?? 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{t("总积分", "Total Pts")}</div>
+                </div>
+                <div style={{ background: "#eff6ff", borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#1d4ed8" }}>
+                    {(dfStats.weekly_points ?? 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{t("本周积分", "This Week")}</div>
+                </div>
+                <div style={{ background: "#fefce8", borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#d97706" }}>
+                    {dfStats.participation_days ?? 0}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{t("参与天数", "Days Played")}</div>
+                </div>
+                <div style={{ background: "#fdf4ff", borderRadius: 10, padding: "12px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#9333ea" }}>
+                    {dfStats.best_daily_rank != null ? `#${dfStats.best_daily_rank}` : "—"}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{t("最佳单日排名", "Best Rank")}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Two-column: sidebar + content ── */}
         <div className="two-col-wrap">

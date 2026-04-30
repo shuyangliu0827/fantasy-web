@@ -3,12 +3,19 @@ export const dynamic = "force-dynamic";
 //
 // Returns submitted/locked/scored lineups for the authenticated user
 // within the current natural week (Mon–Sun UTC), sorted by contest_date ASC.
+//
+// Each player row includes:
+//   box_score  – full BDL box-score stats for the contest date (null if unavailable)
+//   opponent   – "vs LAL" or "@ BOS" string (null if no game found)
+//   live_fpts  – convenience alias of box_score.fpts for unscored lineups
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { SLOT_LABEL } from "@/lib/contest-positions";
 import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
+import { fetchStatsForDate, PlayerGameStats } from "@/lib/player-game-stats";
+import { fetchGamesForRange } from "@/lib/nba-games";
 
 function db() {
   return createClient(
@@ -44,7 +51,7 @@ export async function GET(req: Request) {
   if (weekLineups.length === 0) return NextResponse.json({ lineups: [] });
 
   // Try to include points_awarded; fall back if column not yet migrated.
-  let pointsMap = new Map<string, number>();
+  const pointsMap = new Map<string, number>();
   const { data: paRows, error: paErr } = await supabase
     .from("user_lineups")
     .select("id, points_awarded")
@@ -66,22 +73,72 @@ export async function GET(req: Request) {
 
   if (lpErr) return NextResponse.json({ error: lpErr.message }, { status: 500 });
 
-  // ── 3. Fetch player metadata and salaries ────────────────────
+  // ── 3. Fetch player metadata, salaries, box scores, and games ─
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
   const intIds = allPlayerIds.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
 
   const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))];
 
+  // All unique contest dates — fetch box scores for every date (scored or not).
+  const allDates = [
+    ...new Set(
+      weekLineups
+        .map((l: any) => (l.contests as any)?.date)
+        .filter(Boolean),
+    ),
+  ] as string[];
+
+  // ── Fetch player metadata + salaries (parallel) ──────────────
   const [pscRes, cpRes] = await Promise.all([
     intIds.length
-      ? supabase.from("player_stats_cache").select("player_id, name, position").in("player_id", intIds)
+      ? supabase.from("player_stats_cache").select("player_id, name, position, team").in("player_id", intIds)
       : Promise.resolve({ data: [], error: null }),
     contestIds.length && allPlayerIds.length
       ? supabase.from("contest_players").select("contest_id, player_id, salary").in("contest_id", contestIds).in("player_id", allPlayerIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const metaMap = new Map<string, { name: string; position: string }>(
+  // ── Fetch box-score stats for all contest dates ───────────────
+  // Keyed "date:player_id" → PlayerGameStats
+  const statsMap = new Map<string, PlayerGameStats>();
+  if (allDates.length > 0) {
+    await Promise.all(
+      allDates.map(async (date) => {
+        try {
+          const dayStats = await fetchStatsForDate(date);
+          for (const [pid, stats] of Object.entries(dayStats)) {
+            statsMap.set(`${date}:${pid}`, stats);
+          }
+        } catch {
+          // BDL unavailable for this date
+        }
+      }),
+    );
+  }
+
+  // ── Fetch game schedule for opponent labels + game status ─────
+  // Keyed "team_abbr:date" → { label, status }
+  type GameMeta = { label: string; status: string };
+  const opponentMap = new Map<string, GameMeta>();
+  if (allDates.length > 0) {
+    const minDate = allDates.reduce((a, b) => (a < b ? a : b));
+    const maxDate = allDates.reduce((a, b) => (a > b ? a : b));
+    try {
+      const gamesMap = await fetchGamesForRange(minDate, maxDate);
+      for (const [teamAbbr, dateGames] of Object.entries(gamesMap)) {
+        for (const [date, info] of Object.entries(dateGames)) {
+          opponentMap.set(`${teamAbbr}:${date}`, {
+            label:  info.isHome ? `vs ${info.opponent}` : `@ ${info.opponent}`,
+            status: info.status,
+          });
+        }
+      }
+    } catch {
+      // BDL schedule unavailable
+    }
+  }
+
+  const metaMap = new Map<string, { name: string; position: string; team: string }>(
     ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
   );
 
@@ -101,6 +158,7 @@ export async function GET(req: Request) {
       player_id:             lp.player_id,
       name:                  meta?.name     ?? "",
       position:              meta?.position ?? "",
+      team:                  meta?.team     ?? "",
       actual_fantasy_points: lp.actual_fantasy_points ?? null,
     });
   }
@@ -108,24 +166,42 @@ export async function GET(req: Request) {
   // ── 5. Build result sorted by contest_date ASC (Mon → Sun) ──
   const result = weekLineups
     .map((l: any) => {
-      const contest = l.contests as any;
+      const contest      = l.contests as any;
+      const contestDate  = contest?.date ?? null;
+      const isScored     = l.status === "scored";
+
       const players = (playersByLineup.get(l.id) ?? [])
-        .map((p) => ({
-          ...p,
-          salary: salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0,
-        }))
+        .map((p) => {
+          const salary    = salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0;
+          const statsKey  = contestDate ? `${contestDate}:${String(p.player_id)}` : null;
+          const box_score = statsKey ? (statsMap.get(statsKey) ?? null) : null;
+          const oppKey    = p.team && contestDate ? `${p.team}:${contestDate}` : null;
+          const gameMeta  = oppKey ? (opponentMap.get(oppKey) ?? null) : null;
+          const opponent  = gameMeta?.label  ?? null;
+          const game_status = gameMeta?.status ?? null;
+          // live_fpts: for unscored lineups, real-time fpts from BDL box score.
+          const live_fpts = !isScored && box_score ? box_score.fpts : null;
+
+          return { ...p, salary, box_score, opponent, game_status, live_fpts };
+        })
         .sort((a: any, b: any) => a.slot - b.slot);
 
+      // Live total: sum of live_fpts for players whose game has box-score data.
+      const live_total_fpts = !isScored
+        ? players.reduce((sum: number, p: any) => sum + (p.live_fpts ?? 0), 0)
+        : null;
+
       return {
-        lineup_id:      l.id,
-        contest_id:     l.contest_id,
-        contest_date:   contest?.date   ?? null,
-        contest_status: contest?.status ?? null,
-        status:         l.status,
-        total_fpts:     l.total_fpts    ?? null,
-        rank:           l.rank          ?? null,
-        points_awarded: pointsMap.get(l.id) ?? 0,
-        submitted_at:   l.submitted_at  ?? null,
+        lineup_id:        l.id,
+        contest_id:       l.contest_id,
+        contest_date:     contestDate,
+        contest_status:   contest?.status ?? null,
+        status:           l.status,
+        total_fpts:       l.total_fpts    ?? null,
+        live_total_fpts,
+        rank:             l.rank          ?? null,
+        points_awarded:   pointsMap.get(l.id) ?? 0,
+        submitted_at:     l.submitted_at  ?? null,
         players,
       };
     })
