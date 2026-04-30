@@ -65,10 +65,12 @@ export async function GET(req: Request) {
 
   const contestIds = (weekContests as any[]).map((c) => c.id);
 
-  // 2. Fetch all scored lineups for those contests, joining users for username.
+  // 2. Fetch all scored lineups for those contests.
+  // Note: user_lineups.user_id has no FK to public.users, so we avoid an
+  // implicit PostgREST join and instead fetch usernames in a separate query.
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
-    .select("user_id, points_awarded, rank, users!inner(username, name)")
+    .select("user_id, points_awarded, rank")
     .in("contest_id", contestIds)
     .eq("status", "scored");
 
@@ -89,7 +91,7 @@ export async function GET(req: Request) {
     if (!userMap.has(uid)) {
       userMap.set(uid, {
         user_id: uid,
-        username: (row.users as any)?.username ?? "",
+        username: "",
         weekly_points: 0,
         participation_days: 0,
         best_daily_rank: Infinity,
@@ -100,6 +102,19 @@ export async function GET(req: Request) {
     agg.participation_days += 1;
     if (row.rank != null && row.rank < agg.best_daily_rank) {
       agg.best_daily_rank = row.rank;
+    }
+  }
+
+  // 3b. Fetch usernames for all users who participated this week.
+  const activeUids = [...userMap.keys()];
+  if (activeUids.length > 0) {
+    const { data: usersData } = await supabase
+      .from("users")
+      .select("id, username")
+      .in("id", activeUids);
+    for (const u of (usersData as any[] ?? [])) {
+      const agg = userMap.get(u.id);
+      if (agg) agg.username = u.username ?? "";
     }
   }
 
