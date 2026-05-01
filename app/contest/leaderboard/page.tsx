@@ -136,6 +136,14 @@ function LeaderboardContent() {
                 · {t("锁定后可查看他人阵容", "Player details visible after lineup lock")}
               </span>
             )}
+            {data.locked && data.status !== "scored" && (
+              <span style={{
+                marginLeft: 8, padding: "1px 7px", borderRadius: 4,
+                background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 11,
+              }}>
+                {t("临时排名 — 结算后更新积分", "Preliminary — points after settlement")}
+              </span>
+            )}
           </div>
         )}
 

@@ -37,12 +37,13 @@ export async function GET(req: Request) {
 
   const supabase = db();
 
-  // Fetch all scored lineups with contest date for weekly filtering
+  // Include submitted/locked lineups so has_played=true and participation_days
+  // are correct even before formal settlement runs.
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
     .select("id, contest_id, points_awarded, rank, contests(date)")
     .eq("user_id", userId)
-    .eq("status", "scored");
+    .in("status", ["submitted", "locked", "scored"]);
 
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
   if (!lineups || lineups.length === 0) return NextResponse.json({ has_played: false });

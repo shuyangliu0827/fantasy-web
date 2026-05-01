@@ -23,10 +23,16 @@ type WeekEntry = {
   weekly_points: number; participation_days: number; best_daily_rank: number | null;
 };
 
-type WeeklyData = { week_start: string; week_end: string; entries: WeekEntry[] };
+type WeeklyData = {
+  week_start: string; week_end: string;
+  settled_contests: number; total_contests: number;
+  entries: WeekEntry[];
+};
 
 function fmtDate(iso: string, lang: string) {
-  return new Date(iso + "T00:00:00Z").toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", {
+  // Parse YYYY-MM-DD as local date — avoids UTC midnight→local-tz shift (Apr 30 UTC → Apr 29 ET).
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", {
     month: "short", day: "numeric",
   });
 }
@@ -80,9 +86,19 @@ export default function WeeklyPage() {
 
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
           {weekRange}
-          <span style={{ marginLeft: 8 }}>
-            · {t("本周已结算比赛积分汇总", "Aggregated from all scored contests this week")}
-          </span>
+          {data && (
+            <span style={{ marginLeft: 8 }}>
+              · {data.settled_contests}/{data.total_contests} {t("场已结算", "contests settled")}
+              {data.settled_contests < data.total_contests && (
+                <span style={{
+                  marginLeft: 6, padding: "1px 6px", borderRadius: 4,
+                  background: "#fef3c7", color: "#92400e", fontWeight: 600,
+                }}>
+                  {t("积分待更新", "points pending")}
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {loading && (
@@ -160,12 +176,16 @@ export default function WeeklyPage() {
                     </span>
                   </div>
 
-                  {/* Weekly points */}
+                  {/* Weekly points — grey when pending settlement */}
                   <span style={{
                     fontSize: 14, fontWeight: 800, textAlign: "right",
-                    color: entry.weekly_points > 0 ? "#059669" : "#9ca3af",
+                    color: entry.weekly_points > 0 ? "#059669"
+                         : (data.settled_contests < data.total_contests) ? "#d97706"
+                         : "#9ca3af",
                   }}>
-                    {entry.weekly_points}
+                    {entry.weekly_points > 0 ? entry.weekly_points
+                      : (data.settled_contests < data.total_contests) ? "—"
+                      : "0"}
                   </span>
 
                   {/* Participation days */}

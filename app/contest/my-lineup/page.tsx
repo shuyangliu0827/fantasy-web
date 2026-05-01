@@ -158,7 +158,10 @@ function MyLineupContent() {
 
   function formatDate(dateStr: string | null) {
     if (!dateStr) return "—";
-    return new Date(dateStr + "T00:00:00Z").toLocaleDateString(
+    // Parse YYYY-MM-DD as a local date (not UTC midnight) to avoid
+    // timezone shift: new Date("2026-04-30T00:00:00Z") in UTC-4 renders as Apr 29.
+    const [y, m, d] = dateStr.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(
       lang === "zh" ? "zh-CN" : "en-US",
       { month: "short", day: "numeric", weekday: "short" },
     );
