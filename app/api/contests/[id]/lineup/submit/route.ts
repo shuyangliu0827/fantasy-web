@@ -114,12 +114,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "one or more players not in contest pool" }, { status: 400 });
   }
 
-  const unavailable = (poolRows ?? []).filter((r) => r.is_available === false);
-  if (unavailable.length > 0) {
+  // contest_players.is_available is frozen at seed time (always true), so we
+  // cross-check against the live player_stats_cache.injury field instead.
+  const intIds = playerIds.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
+  const { data: cacheRows } = await supabase
+    .from("player_stats_cache")
+    .select("player_id, injury")
+    .in("player_id", intIds);
+
+  const liveOut = (cacheRows ?? []).filter((r) =>
+    r.injury?.toLowerCase().startsWith("out"),
+  );
+  if (liveOut.length > 0) {
     return NextResponse.json(
       {
         error: "one or more players not available",
-        player_ids: unavailable.map((r) => r.player_id),
+        player_ids: liveOut.map((r) => String(r.player_id)),
       },
       { status: 400 },
     );

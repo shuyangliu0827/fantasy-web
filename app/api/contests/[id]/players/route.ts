@@ -143,8 +143,13 @@ export async function GET(
       last_5_avg_fp:    Number(cp.last_5_avg_fp) || 0,
       season_avg_fp:    Number(cp.season_avg_fp) || 0,
       value:            Math.round(calcValue(projected, salary) * 100) / 100,
-      injury_status:    cp.injury_status ?? null,
-      is_available:     cp.is_available !== false,
+      injury_status:    meta?.injury ?? cp.injury_status ?? null,
+      // is_available: override the frozen seed-time snapshot with the live
+      // player_stats_cache.injury value.  contest_players.is_available is
+      // always written as `true` at seed time so cannot be trusted at
+      // read time.  A player whose injury starts with "out" (case-insensitive)
+      // is marked unavailable regardless of what was seeded.
+      is_available: !(meta?.injury?.toLowerCase().startsWith("out") ?? false),
     };
   });
 

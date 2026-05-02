@@ -230,11 +230,19 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
 
     console.log("[nba-stats] BDL /stats fetch complete", { source: "api-nba-stats", reason, season: CURRENT_SEASON, pagesFetched, uniquePlayers: playerMap.size });
 
-    // 2. Fetch current injuries
+    // 2. Fetch current injuries (cursor-paginated — the endpoint can return
+    //    more than 100 rows during a busy injury period; missing entries would
+    //    leave injured players with injury=null and allow them into the pool).
     const injuryMap = new Map<number, string>();
     try {
-      const injRes = await fetchAPI("/player_injuries", { per_page: "100" });
-      for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
+      let injCursor: number | undefined;
+      do {
+        const injParams: Record<string, string> = { per_page: "100" };
+        if (injCursor) injParams.cursor = String(injCursor);
+        const injRes = await fetchAPI("/player_injuries", injParams);
+        for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
+        injCursor = injRes.meta?.next_cursor;
+      } while (injCursor);
     } catch { /* non-fatal */ }
 
     // 3. Build cache rows
