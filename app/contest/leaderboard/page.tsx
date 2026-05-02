@@ -69,22 +69,24 @@ function LeaderboardContent() {
     setError(null);
     let cid = contestId;
     if (!cid) {
-      // Use /api/contests/nearby to pick the best contest to show:
-      // - Today's contest if first game has already started (now >= lineup_lock_at)
-      // - Otherwise fall back to the most recent scored contest
+      // Use /api/contests/nearby to pick the best contest to show.
+      // "Today" is computed in America/New_York (NBA slate date) so the
+      // comparison is consistent with how contests.date is set (ET game day).
       const res  = await fetch("/api/contests/nearby");
       const json = await res.json().catch(() => null);
       const contests: { id: string; date: string; status: string; lineup_lock_at: string | null }[] =
         json?.contests ?? [];
 
-      const todayUTC = new Date().toISOString().slice(0, 10);
-      const now      = Date.now();
+      // NBA slate date in ET (matches contests.date which is set by cron at 10am EDT)
+      const todaySlate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const now        = Date.now();
 
-      const todayContest = contests.find((c) => c.date === todayUTC);
+      const todayContest = contests.find((c) => c.date === todaySlate);
       const lockAt       = todayContest?.lineup_lock_at ? new Date(todayContest.lineup_lock_at).getTime() : null;
       const todayStarted = lockAt != null && now >= lockAt;
 
       if (todayContest && todayStarted) {
+        // Today's games have started — show today's contest
         cid = todayContest.id;
         setContestDate(todayContest.date);
         if (todayContest.status === "scored") {
@@ -93,14 +95,19 @@ function LeaderboardContent() {
           setContextMsg(t("今日比赛进行中，当前排名为临时排名", "Today's contest in progress — preliminary standings"));
         }
       } else {
-        // Fall back to the most recent scored contest
-        const scored = [...contests].reverse().find((c) => c.status === "scored");
-        if (scored) {
-          cid = scored.id;
-          setContestDate(scored.date);
-          setContextMsg(t("今日比赛尚未开始，当前展示最近已结算每日榜", "Today's games haven't started — showing most recent final results"));
+        // Fall back to the most recent past contest (any status) by ET slate date.
+        // Using date < todaySlate avoids missing yesterday's locked-but-unsettled contest.
+        const recent = [...contests].reverse().find((c) => c.date < todaySlate);
+        if (recent) {
+          cid = recent.id;
+          setContestDate(recent.date);
+          if (recent.status === "scored") {
+            setContextMsg(t("今日比赛尚未开始，当前展示最近已结算每日榜", "Today's games haven't started — showing most recent final results"));
+          } else {
+            setContextMsg(t("今日比赛尚未开始，最近每日榜结算处理中", "Today's games haven't started — recent results pending settlement"));
+          }
         } else if (todayContest) {
-          // No scored past contest, but today's exists and hasn't locked yet
+          // No past contest exists; show today's pre-lock contest
           cid = todayContest.id;
           setContestDate(todayContest.date);
           setContextMsg(t("今日比赛尚未开始", "Today's contest hasn't started yet"));
