@@ -13,7 +13,7 @@
 // Data source: GET /api/contests/[id]/leaderboard
 // (backend enforces the visibility rules via the `locked` flag).
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
@@ -52,6 +52,8 @@ function LeaderboardContent() {
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolvedId, setResolvedId] = useState<string | null>(contestId);
+  const [contestDate, setContestDate] = useState<string | null>(null);
+  const [contextMsg,  setContextMsg]  = useState<string | null>(null);
   const [modal,   setModal]   = useState<Entry | null>(null);
   const [page,    setPage]    = useState(0);
 
@@ -67,12 +69,53 @@ function LeaderboardContent() {
     setError(null);
     let cid = contestId;
     if (!cid) {
-      const res = await fetch("/api/contests/today");
+      // Use /api/contests/nearby to pick the best contest to show.
+      // "Today" is computed in America/New_York (NBA slate date) so the
+      // comparison is consistent with how contests.date is set (ET game day).
+      const res  = await fetch("/api/contests/nearby");
       const json = await res.json().catch(() => null);
-      cid = json?.id ?? null;
+      const contests: { id: string; date: string; status: string; lineup_lock_at: string | null }[] =
+        json?.contests ?? [];
+
+      // NBA slate date in ET (matches contests.date which is set by cron at 10am EDT)
+      const todaySlate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+      const now        = Date.now();
+
+      const todayContest = contests.find((c) => c.date === todaySlate);
+      const lockAt       = todayContest?.lineup_lock_at ? new Date(todayContest.lineup_lock_at).getTime() : null;
+      const todayStarted = lockAt != null && now >= lockAt;
+
+      if (todayContest && todayStarted) {
+        // Today's games have started — show today's contest
+        cid = todayContest.id;
+        setContestDate(todayContest.date);
+        if (todayContest.status === "scored") {
+          setContextMsg(t("今日比赛已结算", "Today's contest — final results"));
+        } else {
+          setContextMsg(t("今日比赛进行中，当前排名为临时排名", "Today's contest in progress — preliminary standings"));
+        }
+      } else {
+        // Fall back to the most recent past contest (any status) by ET slate date.
+        // Using date < todaySlate avoids missing yesterday's locked-but-unsettled contest.
+        const recent = [...contests].reverse().find((c) => c.date < todaySlate);
+        if (recent) {
+          cid = recent.id;
+          setContestDate(recent.date);
+          if (recent.status === "scored") {
+            setContextMsg(t("今日比赛尚未开始，当前展示最近已结算每日榜", "Today's games haven't started — showing most recent final results"));
+          } else {
+            setContextMsg(t("今日比赛尚未开始，最近每日榜结算处理中", "Today's games haven't started — recent results pending settlement"));
+          }
+        } else if (todayContest) {
+          // No past contest exists; show today's pre-lock contest
+          cid = todayContest.id;
+          setContestDate(todayContest.date);
+          setContextMsg(t("今日比赛尚未开始", "Today's contest hasn't started yet"));
+        }
+      }
     }
     if (!cid) {
-      setError(t("今日暂无赛事。", "No contest found for today."));
+      setError(t("暂无赛事。", "No contest found."));
       setLoading(false);
       return;
     }
@@ -92,6 +135,16 @@ function LeaderboardContent() {
           ? { ...json, entries: [...prev.entries, ...json.entries] }
           : json,
     );
+    // If contestDate wasn't set from nearby lookup (explicit ?id= param), try to get it from nearby
+    if (!contestDate && contestId) {
+      fetch("/api/contests/nearby")
+        .then((r) => r.json())
+        .then((nj) => {
+          const found = (nj?.contests ?? []).find((c: { id: string; date: string }) => c.id === contestId);
+          if (found) setContestDate(found.date);
+        })
+        .catch(() => {});
+    }
     setLoading(false);
   }
 
@@ -118,9 +171,22 @@ function LeaderboardContent() {
 
       <main style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>
-            {t("每日排行榜", "Daily Leaderboard")}
-          </h2>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+              {t("每日排行榜", "Daily Leaderboard")}
+            </h2>
+            {contestDate && (
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                {(() => {
+                  const [y, m, d] = contestDate.split("-").map(Number);
+                  return new Date(y, m - 1, d).toLocaleDateString(
+                    t("zh-CN", "en-US"),
+                    { month: "short", day: "numeric", year: "numeric" },
+                  );
+                })()}
+              </div>
+            )}
+          </div>
           {data && (
             <span style={{ fontSize: 12, color: "#6b7280" }}>
               {data.total} {t("人", "entries")}
@@ -128,13 +194,29 @@ function LeaderboardContent() {
           )}
         </div>
 
-        {data && (
+        {(contextMsg || data) && (
           <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>
-            {statusLabel(data.status)}
-            {!data.locked && (
-              <span style={{ marginLeft: 6, color: "#f59e0b", fontWeight: 600 }}>
-                · {t("锁定后可查看他人阵容", "Player details visible after lineup lock")}
-              </span>
+            {contextMsg && (
+              <span style={{ marginRight: data ? 8 : 0 }}>{contextMsg}</span>
+            )}
+            {data && (
+              <>
+                {contextMsg && <span style={{ marginRight: 6 }}>·</span>}
+                {statusLabel(data.status)}
+                {!data.locked && (
+                  <span style={{ marginLeft: 6, color: "#f59e0b", fontWeight: 600 }}>
+                    · {t("锁定后可查看他人阵容", "Player details visible after lineup lock")}
+                  </span>
+                )}
+                {data.locked && data.status !== "scored" && (
+                  <span style={{
+                    marginLeft: 8, padding: "1px 7px", borderRadius: 4,
+                    background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 11,
+                  }}>
+                    {t("临时排名 — 结算后更新积分", "Preliminary — points after settlement")}
+                  </span>
+                )}
+              </>
             )}
           </div>
         )}

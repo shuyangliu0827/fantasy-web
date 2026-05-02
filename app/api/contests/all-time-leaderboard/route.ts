@@ -40,10 +40,12 @@ export async function GET() {
   }
 
   // ── 2. Participation + rank stats from user_lineups (anon key) ─
+  // Include submitted/locked lineups so players appear on the board even
+  // before formal settlement. points_awarded = 0 for unsettled rows.
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
     .select("user_id, contest_id, rank, points_awarded")
-    .eq("status", "scored");
+    .in("status", ["submitted", "locked", "scored"]);
 
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
 

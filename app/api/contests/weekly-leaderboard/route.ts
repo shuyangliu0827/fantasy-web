@@ -3,31 +3,13 @@ export const dynamic = "force-dynamic";
 //
 // GET /api/contests/weekly-leaderboard?week=YYYY-MM-DD
 //
-// Returns the weekly points leaderboard for the calendar week (Mon–Sun UTC)
-// that contains the given date.  If `week` is omitted, defaults to today.
+// Returns the weekly points leaderboard for the Mon–Sun UTC calendar week.
+// Includes ALL users who submitted a lineup this week — not just scored ones —
+// so the board is never empty while contests are pending settlement.
 //
-// Data is aggregated from user_lineups WHERE status='scored' joined with
-// contests WHERE date BETWEEN week_start AND week_end.
-// Uses points_awarded (written by settlement job) — never front-end computed.
-//
-// ── Response ──────────────────────────────────────────────────
-// {
-//   "week_start": "2026-04-27",
-//   "week_end":   "2026-05-03",
-//   "entries": [
-//     {
-//       "weekly_rank":        1,
-//       "user_id":            "...",
-//       "username":           "marcus",
-//       "weekly_points":      900,
-//       "participation_days": 3,
-//       "best_daily_rank":    1
-//     },
-//     ...
-//   ]
-// }
-//
-// Before any contest in the week is scored, entries is [].
+// Points source: user_lineups.points_awarded (written by settlement job).
+// Unsettled lineups contribute 0 points; settled_contests/total_contests
+// in the response lets the UI show a "X of Y settled" notice.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -43,79 +25,83 @@ function db() {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const weekParam = url.searchParams.get("week");
-  const anchor = weekParam ? new Date(weekParam + "T00:00:00Z") : new Date();
+  const anchor    = weekParam ? new Date(weekParam + "T00:00:00Z") : new Date();
   const weekStart = toDateStr(getWeekStart(anchor));
   const weekEnd   = toDateStr(getWeekEnd(anchor));
 
   const supabase = db();
 
-  // 1. Get all scored contests in the week.
+  // 1. Get ALL contests in the week (any status — not just scored).
   const { data: weekContests, error: wcErr } = await supabase
     .from("contests")
-    .select("id")
+    .select("id, status")
     .gte("date", weekStart)
-    .lte("date", weekEnd)
-    .eq("status", "scored");
+    .lte("date", weekEnd);
 
   if (wcErr) return NextResponse.json({ error: wcErr.message }, { status: 500 });
 
-  if (!weekContests || weekContests.length === 0) {
-    return NextResponse.json({ week_start: weekStart, week_end: weekEnd, entries: [] });
+  const allContest    = (weekContests as any[]) ?? [];
+  const total_contests   = allContest.length;
+  const settled_contests = allContest.filter((c) => c.status === "scored").length;
+
+  if (total_contests === 0) {
+    return NextResponse.json({
+      week_start: weekStart, week_end: weekEnd,
+      settled_contests: 0, total_contests: 0, entries: [],
+    });
   }
 
-  const contestIds = (weekContests as any[]).map((c) => c.id);
+  const contestIds = allContest.map((c) => c.id);
 
-  // 2. Fetch all scored lineups for those contests.
-  // Note: user_lineups.user_id has no FK to public.users, so we avoid an
-  // implicit PostgREST join and instead fetch usernames in a separate query.
+  // 2. Fetch all submitted / locked / scored lineups for those contests.
+  // points_awarded is 0 (default) for unsettled lineups — that's correct.
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
-    .select("user_id, points_awarded, rank")
+    .select("user_id, points_awarded, rank, contest_id")
     .in("contest_id", contestIds)
-    .eq("status", "scored");
+    .in("status", ["submitted", "locked", "scored"]);
 
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
 
-  // 3. Aggregate per user in JS.
-  type UserAgg = {
-    user_id: string;
-    username: string;
-    weekly_points: number;
-    participation_days: number;
-    best_daily_rank: number;
-  };
-
-  const userMap = new Map<string, UserAgg>();
-  for (const row of (lineups as any[] ?? [])) {
-    const uid = row.user_id as string;
-    if (!userMap.has(uid)) {
-      userMap.set(uid, {
-        user_id: uid,
-        username: "",
-        weekly_points: 0,
-        participation_days: 0,
-        best_daily_rank: Infinity,
-      });
-    }
-    const agg = userMap.get(uid)!;
-    agg.weekly_points += Number(row.points_awarded) || 0;
-    agg.participation_days += 1;
-    if (row.rank != null && row.rank < agg.best_daily_rank) {
-      agg.best_daily_rank = row.rank;
-    }
+  if (!lineups || lineups.length === 0) {
+    return NextResponse.json({
+      week_start: weekStart, week_end: weekEnd,
+      settled_contests, total_contests, entries: [],
+    });
   }
 
-  // 3b. Fetch usernames for all users who participated this week.
-  const activeUids = [...userMap.keys()];
-  if (activeUids.length > 0) {
-    const { data: usersData } = await supabase
-      .from("users")
-      .select("id, username")
-      .in("id", activeUids);
-    for (const u of (usersData as any[] ?? [])) {
-      const agg = userMap.get(u.id);
-      if (agg) agg.username = u.username ?? "";
+  // 3. Aggregate per user.
+  type UserAgg = {
+    user_id: string; username: string;
+    weekly_points: number; participation_days: number; best_daily_rank: number;
+  };
+
+  const userMap    = new Map<string, UserAgg>();
+  const contestSet = new Map<string, Set<string>>(); // uid → Set<contest_id>
+
+  for (const row of (lineups as any[])) {
+    const uid = row.user_id as string;
+    if (!userMap.has(uid)) {
+      userMap.set(uid, { user_id: uid, username: "", weekly_points: 0, participation_days: 0, best_daily_rank: Infinity });
+      contestSet.set(uid, new Set());
     }
+    const agg  = userMap.get(uid)!;
+    const cSet = contestSet.get(uid)!;
+    if (!cSet.has(row.contest_id)) {
+      cSet.add(row.contest_id);
+      agg.participation_days += 1;
+    }
+    agg.weekly_points += Number(row.points_awarded) || 0;
+    if (row.rank != null && row.rank < agg.best_daily_rank) agg.best_daily_rank = row.rank;
+  }
+
+  // 3b. Fetch usernames.
+  const activeUids = [...userMap.keys()];
+  const { data: usersData } = await supabase
+    .from("users").select("id, username").in("id", activeUids);
+  for (const u of (usersData as any[] ?? [])) {
+    const agg = userMap.get(u.id);
+    if (agg) agg.username = u.username ?? "";
   }
 
   // 4. Sort: weekly_points DESC, participation_days DESC, username ASC.
@@ -127,14 +113,12 @@ export async function GET(req: Request) {
       return a.username.localeCompare(b.username);
     });
 
-  // 5. Assign weekly ranks (competition ranking, gaps on ties by weekly_points).
+  // 5. Assign weekly ranks (competition ranking — gaps on ties by weekly_points).
   let rankCursor = 1;
   const entries = sorted.map((u, i) => {
-    if (i === 0 || sorted[i].weekly_points !== sorted[i - 1].weekly_points) {
-      rankCursor = i + 1;
-    }
+    if (i === 0 || sorted[i].weekly_points !== sorted[i - 1].weekly_points) rankCursor = i + 1;
     return { weekly_rank: rankCursor, ...u };
   });
 
-  return NextResponse.json({ week_start: weekStart, week_end: weekEnd, entries });
+  return NextResponse.json({ week_start: weekStart, week_end: weekEnd, settled_contests, total_contests, entries });
 }
