@@ -8,16 +8,18 @@ export const dynamic = "force-dynamic";
 // bucket before game-day morning, and already have a browseable pool.
 //
 // For each day in [today+1 … today+days]:
-//   - Skip if a contest row already exists for that date.
-//   - Call BDL to get scheduled games. Skip if none.
-//   - Insert a contest row with status="pending" and a fallback lock time.
-//   - Build a provisional contest_players pool from player_stats_cache:
-//       same logic as create-today (playing teams → non-injured players →
-//       sort by fpts_avg → quartile tiers).
+//   - Skip non-pending (open/locked/scored) contests — those have user lineups.
+//   - Call BDL to get currently-scheduled games. Skip if none.
+//   - If no games but a pending contest with pool exists (stale if-necessary
+//     game was removed from schedule) → clear the stale pool so phantom
+//     players don't appear.
+//   - Create a "pending" contest stub if one doesn't exist yet.
+//   - Always rebuild the provisional pool for pending contests so eliminated
+//     playoff teams are evicted from the pool the next day after their series ends.
 //
 // On game-day morning, /api/contests/create-today upgrades the pending row:
 //   status → "open", lineup_lock_at → real BDL tip-off, pool → rebuilt fresh.
-// That rebuild replaces the provisional pool with the authoritative one.
+// That rebuild is the authoritative one.
 //
 // ── Authorization ─────────────────────────────────────────────
 // Same CRON_SECRET as create-today.
@@ -29,18 +31,21 @@ export const dynamic = "force-dynamic";
 //
 // ── Sample response 200 ──────────────────────────────────────
 // {
-//   "seeded": 2, "backfilled": 1, "skipped": 1,
+//   "seeded": 2, "refreshed": 1, "skipped": 1,
 //   "results": [
-//     { "date": "2026-04-19", "action": "created",    "pool_size": 68 },
-//     { "date": "2026-04-20", "action": "exists"                      },
-//     { "date": "2026-04-21", "action": "backfilled", "pool_size": 54 },
-//     { "date": "2026-04-22", "action": "no_games"                    }
+//     { "date": "2026-04-19", "action": "created",   "pool_size": 68 },
+//     { "date": "2026-04-20", "action": "exists"                     },  ← open/scored
+//     { "date": "2026-04-21", "action": "refreshed", "pool_size": 54 },  ← pending, rebuilt
+//     { "date": "2026-04-22", "action": "no_games"                   },
+//     { "date": "2026-04-23", "action": "cleared_no_games"           }   ← stale pool cleared
 //   ]
 // }
-// "created"    — new contest stub + pool inserted.
-// "backfilled" — contest existed but had 0 contest_players; pool added.
-// "exists"     — contest existed and already had a pool; skipped.
-// "no_games"   — BDL returned no games for this date; skipped.
+// "created"          — new contest stub + pool inserted.
+// "refreshed"        — pending contest pool rebuilt from fresh BDL data.
+// "backfilled"       — pending contest had 0 players; pool added.
+// "exists"           — non-pending contest (has user lineups); skipped.
+// "no_games"         — BDL returned no games, no contest row.
+// "cleared_no_games" — BDL returned no games; stale pending pool cleared.
 //
 // Error responses:
 //   401 { "error": "unauthorized" }
@@ -88,8 +93,8 @@ export async function GET(req: Request) {
   todayUtc.setUTCHours(0, 0, 0, 0);
 
   const results: { date: string; action: string; id?: string; pool_size?: number }[] = [];
-  let seeded  = 0;
-  let noGames = 0;
+  let seeded    = 0;
+  let noGames   = 0;
 
   for (let i = 1; i <= days; i++) {
     const d = new Date(todayUtc);
@@ -103,24 +108,16 @@ export async function GET(req: Request) {
       .eq("date", dateStr)
       .maybeSingle();
 
-    // If it exists, check whether it already has a player pool.
-    if (existing) {
-      const { count } = await supabase
-        .from("contest_players")
-        .select("id", { count: "exact", head: true })
-        .eq("contest_id", existing.id);
-
-      if ((count ?? 0) > 0) {
-        // Pool already present — nothing to do.
-        results.push({ date: dateStr, action: "exists" });
-        continue;
-      }
-      // Pool is empty (seeded before provisional pool was added) — fall
-      // through to BDL + pool-building using the existing contest id.
+    // Non-pending contests (open/locked/scored) may have user lineups.
+    // Only create-today (or ?force=true) is allowed to rebuild those.
+    if (existing && existing.status !== "pending") {
+      results.push({ date: dateStr, action: "exists" });
+      continue;
     }
 
-    // 2. Fetch BDL games for this date to collect playing teams.
-    //    Same normalisation as create-today so team codes match player_stats_cache.
+    // 2. Fetch BDL games for this date to collect currently-scheduled teams.
+    //    Re-fetching every day for pending contests lets us evict teams whose
+    //    playoff series ended since the pool was first seeded.
     const playingTeams = new Set<string>();
     try {
       const { data: games } = await getGames({ dates: [dateStr] });
@@ -135,18 +132,42 @@ export async function GET(req: Request) {
     }
 
     if (playingTeams.size === 0) {
-      results.push({ date: dateStr, action: "no_games" });
+      if (existing) {
+        // Stale pending contest: a once-scheduled game (e.g. playoff if-necessary)
+        // has been removed from BDL's schedule. Clear the pool so phantom
+        // players from eliminated teams no longer appear to users.
+        await supabase.from("contest_players").delete().eq("contest_id", existing.id);
+        results.push({ date: dateStr, action: "cleared_no_games", id: existing.id });
+      } else {
+        results.push({ date: dateStr, action: "no_games" });
+      }
       noGames++;
       continue;
     }
 
     // 3. Create the contest stub only if one doesn't already exist.
     let contestId: string;
+    let hadPool   = false;
     let action: string;
+
     if (existing) {
-      // Backfill path: use the existing (empty-pool) contest.
+      // Check whether the pending contest already has a pool.
+      const { count } = await supabase
+        .from("contest_players")
+        .select("id", { count: "exact", head: true })
+        .eq("contest_id", existing.id);
+
+      hadPool   = (count ?? 0) > 0;
       contestId = existing.id;
-      action    = "backfilled";
+
+      if (hadPool) {
+        // Clear the stale provisional pool before rebuilding with fresh BDL data.
+        // Pending contests have no user lineups so this is safe.
+        await supabase.from("contest_players").delete().eq("contest_id", existing.id);
+        action = "refreshed";
+      } else {
+        action = "backfilled";
+      }
     } else {
       const { data: created, error: insertErr } = await supabase
         .from("contests")
@@ -174,8 +195,6 @@ export async function GET(req: Request) {
         .from("contest_players")
         .insert(poolRows.map((row) => ({ ...row, contest_id: contestId })));
 
-      // Surface the insert failure in the per-date result so a missing
-      // migration / schema mismatch doesn't silently leave an empty pool.
       if (cpErr) {
         results.push({ date: dateStr, action: `error: ${cpErr.message}`, id: contestId });
         continue;
@@ -186,6 +205,7 @@ export async function GET(req: Request) {
     seeded++;
   }
 
+  const refreshed  = results.filter((r) => r.action === "refreshed").length;
   const backfilled = results.filter((r) => r.action === "backfilled").length;
-  return NextResponse.json({ seeded, backfilled, skipped: noGames, results });
+  return NextResponse.json({ seeded, refreshed, backfilled, skipped: noGames, results });
 }
