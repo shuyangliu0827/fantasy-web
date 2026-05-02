@@ -50,6 +50,8 @@ import { createClient } from "@supabase/supabase-js";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 import { calcFantasyPoints } from "@/lib/scoring-config";
 import { calcValue } from "@/lib/contest-salary";
+import { getGames } from "@/lib/balldontlie";
+import { normalizeTeamCode } from "@/lib/i18n";
 
 function db() {
   return createClient(
@@ -65,10 +67,10 @@ export async function GET(
   const { id } = await params;
   const supabase = db();
 
-  // Verify contest exists
+  // Verify contest exists (include date for schedule validation)
   const { data: contest, error: contestErr } = await supabase
     .from("contests")
-    .select("id, status")
+    .select("id, status, date")
     .eq("id", id)
     .maybeSingle();
 
@@ -145,6 +147,63 @@ export async function GET(
       is_available:     cp.is_available !== false,
     };
   });
+
+  // ── Real-time schedule validation ─────────────────────────────
+  // For pending/open contests, re-fetch the current BDL schedule for this
+  // date and filter out players from teams whose games have been removed
+  // (e.g. eliminated playoff teams whose if-necessary game no longer exists).
+  // Scored/locked contests are left unfiltered — historical data is correct.
+  const contestDate = (contest as any).date as string | null;
+  const needsValidation = contestDate && contest.status !== "scored" && contest.status !== "locked";
+
+  if (needsValidation) {
+    let latestActiveTeams: Set<string> | null = null;
+    let bdlAvailable = false;
+
+    try {
+      const { data: games } = await getGames({ dates: [contestDate!] });
+      latestActiveTeams = new Set<string>();
+      bdlAvailable = true;
+      for (const g of games ?? []) {
+        if (g.home_team?.abbreviation)    latestActiveTeams.add(normalizeTeamCode(g.home_team.abbreviation));
+        if (g.visitor_team?.abbreviation) latestActiveTeams.add(normalizeTeamCode(g.visitor_team.abbreviation));
+      }
+    } catch {
+      // BDL unavailable — return stale pool without filtering so users
+      // aren't blocked by a transient API outage.
+    }
+
+    if (latestActiveTeams !== null) {
+      const seededTeams = [...new Set(players.map((p) => p.team).filter(Boolean))];
+      const noConfirmedGames = latestActiveTeams.size === 0;
+
+      const filteredPlayers = noConfirmedGames
+        ? []
+        : players.filter((p) => !p.team || latestActiveTeams!.has(p.team));
+
+      const removedStaleTeams = seededTeams.filter((t) => t && !latestActiveTeams!.has(t));
+
+      const debug = {
+        contestDate,
+        seededTeams,
+        latestActiveTeams: [...latestActiveTeams],
+        removedStaleTeams,
+        playersBeforeFilter: players.length,
+        playersAfterFilter:  filteredPlayers.length,
+        staleRowsFound:      players.length - filteredPlayers.length,
+        noConfirmedGames,
+        bdlAvailable,
+      };
+
+      return NextResponse.json({
+        contest_id: id,
+        status:     contest.status,
+        players:    filteredPlayers,
+        noConfirmedGames,
+        debug,
+      });
+    }
+  }
 
   return NextResponse.json({ contest_id: id, status: contest.status, players });
 }

@@ -164,6 +164,10 @@ export default function ContestPage() {
   // (e.g., a missing migration on the deployed DB).
   const [playersError, setPlayersError] = useState<string | null>(null);
 
+  // Set when the players API confirms that no games are scheduled for this
+  // date in the current BDL schedule (stale playoff pool that was cleared).
+  const [noConfirmedGames, setNoConfirmedGames] = useState(false);
+
   // ── AI lineup post state ─────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false);
   const [aiTone, setAiTone] = useState<Tone>("analytical");
@@ -249,6 +253,7 @@ export default function ContestPage() {
     setNoGamesForPlaceholder(false);
     setResolvingPlaceholder(false);
     setPlayersError(null);
+    setNoConfirmedGames(false);
 
     // Placeholder upcoming card (no DB row yet) — ask the by-date resolver
     // whether games are scheduled. If yes, it creates the contest stub and
@@ -291,8 +296,9 @@ export default function ContestPage() {
     const pr = await fetch(`/api/contests/${real.id}/players`);
     if (requestedContestIdRef.current !== real.id) return;
     if (pr.ok) {
-      const { players: pool } = await pr.json();
+      const { players: pool, noConfirmedGames: noGames } = await pr.json();
       setPlayers(pool ?? []);
+      setNoConfirmedGames(!!noGames);
       setPlayersError(null);
     } else {
       // Surface the upstream error so an empty pool is debuggable instead
@@ -1520,6 +1526,22 @@ export default function ContestPage() {
                   </div>
                   <div style={{ fontSize: 12, color: "#7f1d1d" }}>
                     {playersError}
+                  </div>
+                </div>
+              ) : noConfirmedGames ? (
+                <div style={{
+                  padding: "20px 16px", background: "#fefce8",
+                  border: "1px solid #fde047", borderRadius: 10,
+                  fontSize: 13, color: "#713f12", lineHeight: 1.6,
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                    {t("该日期暂无确认比赛", "No confirmed games for this date")}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#854d0e" }}>
+                    {t(
+                      "球员池将在赛程确认后更新。季后赛赛程根据系列赛结果实时调整，请稍后再来查看。",
+                      "The player pool will update once the schedule is confirmed. Playoff schedules adjust based on series results — check back closer to game day.",
+                    )}
                   </div>
                 </div>
               ) : sortedPool.length === 0 ? (
