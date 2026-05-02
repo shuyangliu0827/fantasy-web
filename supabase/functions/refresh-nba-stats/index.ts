@@ -128,12 +128,64 @@ Deno.serve(async () => {
       await new Promise(r => setTimeout(r, REQ_DELAY_MS));
     }
 
-    // 4. Fetch current injuries (1 API call)
+    // 4. Fetch current injuries (cursor-paginated — the endpoint returns >100
+    //    rows during heavy injury periods; truncating would leave injured players
+    //    with injury=null and let them into the pool).
     const injuryMap = new Map<number, string>();
+    let injFetchOk = false;
+    let injPagesFetched = 0;
     try {
-      const injRes = await fetchRaw(`${API_BASE}/player_injuries?per_page=100`);
-      for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
-    } catch { /* non-fatal */ }
+      let injCursor: number | undefined;
+      do {
+        const qs = `per_page=100${injCursor ? `&cursor=${injCursor}` : ""}`;
+        const injRes = await fetchRaw(`${API_BASE}/player_injuries?${qs}`);
+        injPagesFetched++;
+        for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
+        injCursor = injRes.meta?.next_cursor;
+      } while (injCursor);
+      injFetchOk = true;
+    } catch { /* non-fatal — will use null for this batch */ }
+
+    console.log(`[refresh-nba-stats][4] Injuries fetched`, {
+      source: "edge-refresh",
+      injuriesFetched: injuryMap.size,
+      injPagesFetched,
+      injFetchOk,
+    });
+
+    // 4b. Stale injury clearing — only when we successfully fetched the full list.
+    //     Find player_stats_cache rows whose injury is still set but whose player_id
+    //     is no longer in the BDL injury list, and clear them to null.
+    //     This runs every invocation so recovering players appear available immediately
+    //     rather than waiting for their batch slot.
+    let staleInjuriesCleared = 0;
+    if (injFetchOk) {
+      const { data: staleRows } = await supabase
+        .from("player_stats_cache")
+        .select("player_id")
+        .not("injury", "is", null);
+
+      const staleIds = (staleRows ?? [])
+        .map((r) => r.player_id as number)
+        .filter((pid) => !injuryMap.has(pid));
+
+      if (staleIds.length > 0) {
+        for (let i = 0; i < staleIds.length; i += 50) {
+          const chunk = staleIds.slice(i, i + 50);
+          await supabase
+            .from("player_stats_cache")
+            .update({ injury: null, updated_at: new Date().toISOString() })
+            .in("player_id", chunk);
+        }
+        staleInjuriesCleared = staleIds.length;
+      }
+
+      console.log(`[refresh-nba-stats][4c] Stale injuries cleared`, {
+        source: "edge-refresh",
+        staleInjuriesCleared,
+        staleIds,
+      });
+    }
 
     // 5. Build rows for this batch
     const rows: Record<string, number | string | null>[] = [];
@@ -258,6 +310,9 @@ Deno.serve(async () => {
         players_updated: rows.length,
         next_index: nextIndex,
         season: CURRENT_SEASON,
+        injuriesFetched: injuryMap.size,
+        injPagesFetched,
+        staleInjuriesCleared,
         updated_at: new Date().toISOString(),
       }),
       { headers: { "Content-Type": "application/json" } }

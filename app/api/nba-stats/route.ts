@@ -234,6 +234,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
     //    more than 100 rows during a busy injury period; missing entries would
     //    leave injured players with injury=null and allow them into the pool).
     const injuryMap = new Map<number, string>();
+    let injFetchOk = false;
     try {
       let injCursor: number | undefined;
       do {
@@ -243,7 +244,47 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
         for (const inj of injRes.data || []) injuryMap.set(inj.player.id, inj.status);
         injCursor = injRes.meta?.next_cursor;
       } while (injCursor);
+      injFetchOk = true;
     } catch { /* non-fatal */ }
+
+    console.log("[nba-stats] injuries fetched", {
+      source: "api-nba-stats",
+      injuriesFetched: injuryMap.size,
+      injFetchOk,
+    });
+
+    // 2b. Stale injury clearing — only when the full injury list was fetched
+    //     successfully.  Any player_stats_cache row with injury != null whose
+    //     player_id is absent from the current BDL list has recovered; clear it
+    //     so they become available for future contest pools.
+    let staleInjuriesCleared = 0;
+    if (injFetchOk) {
+      const { data: staleRows } = await supabase
+        .from("player_stats_cache")
+        .select("player_id")
+        .not("injury", "is", null);
+
+      const staleIds = (staleRows ?? [])
+        .map((r: { player_id: number }) => r.player_id)
+        .filter((pid: number) => !injuryMap.has(pid));
+
+      if (staleIds.length > 0) {
+        for (let i = 0; i < staleIds.length; i += 50) {
+          const chunk = staleIds.slice(i, i + 50);
+          await supabase
+            .from("player_stats_cache")
+            .update({ injury: null, updated_at: new Date().toISOString() })
+            .in("player_id", chunk);
+        }
+        staleInjuriesCleared = staleIds.length;
+      }
+
+      console.log("[nba-stats] stale injuries cleared", {
+        source: "api-nba-stats",
+        staleInjuriesCleared,
+        staleIds,
+      });
+    }
 
     // 3. Build cache rows
     const rows: CacheRow[] = [];
@@ -294,7 +335,14 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
     if (error) {
       console.error("[nba-stats] fallback upsert failed", { source: "api-nba-stats", reason, rowsAttempted: rows.length, error });
     } else {
-      console.log("[nba-stats] fallback refresh complete", { source: "api-nba-stats", reason, season: CURRENT_SEASON, rowsWritten: rows.length });
+      console.log("[nba-stats] fallback refresh complete", {
+        source: "api-nba-stats",
+        reason,
+        season: CURRENT_SEASON,
+        rowsWritten: rows.length,
+        injuriesFetched: injuryMap.size,
+        staleInjuriesCleared,
+      });
     }
   } catch (err) {
     console.error("[nba-stats] fallback refresh error", { source: "api-nba-stats", reason, error: err });
