@@ -49,7 +49,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
 import { calcFantasyPoints } from "@/lib/scoring-config";
-import { calcValue } from "@/lib/contest-salary";
+import { calcProjectedPoints, calcSalary, calcValue } from "@/lib/contest-salary";
 import { getGames } from "@/lib/balldontlie";
 import { normalizeTeamCode } from "@/lib/i18n";
 
@@ -143,8 +143,13 @@ export async function GET(
       last_5_avg_fp:    Number(cp.last_5_avg_fp) || 0,
       season_avg_fp:    Number(cp.season_avg_fp) || 0,
       value:            Math.round(calcValue(projected, salary) * 100) / 100,
-      injury_status:    cp.injury_status ?? null,
-      is_available:     cp.is_available !== false,
+      injury_status:    meta?.injury ?? cp.injury_status ?? null,
+      // is_available: override the frozen seed-time snapshot with the live
+      // player_stats_cache.injury value.  contest_players.is_available is
+      // always written as `true` at seed time so cannot be trusted at
+      // read time.  A player whose injury starts with "out" (case-insensitive)
+      // is marked unavailable regardless of what was seeded.
+      is_available: !(meta?.injury?.toLowerCase().startsWith("out") ?? false),
     };
   });
 
@@ -174,6 +179,87 @@ export async function GET(
     }
 
     if (latestActiveTeams !== null) {
+      // ── Lazy gap fill ──────────────────────────────────────────────
+      // Players excluded from contest_players at seed time (e.g. injured
+      // players who have since recovered) won't appear unless we insert them
+      // now.  For pending/open contests, find eligible players from active
+      // teams who are missing from the pool and add them.
+      if (latestActiveTeams.size > 0) {
+        const poolPlayerIds = new Set(pool.map((r) => r.player_id));
+
+        const { data: gapCandidates } = await supabase
+          .from("player_stats_cache")
+          .select("player_id, name, team, fpts_avg, pts_avg, fgm_avg, fga_avg, fg3m_avg, ftm_avg, fta_avg, reb_avg, ast_avg, stl_avg, blk_avg, tov_avg, injury, position")
+          .in("team", [...latestActiveTeams])
+          .gt("fpts_avg", 0);
+
+        const missing = (gapCandidates ?? []).filter(
+          (r) =>
+            !poolPlayerIds.has(String(r.player_id)) &&
+            !(r.injury?.toLowerCase().startsWith("out") ?? false),
+        );
+
+        if (missing.length > 0) {
+          const newRows = missing.map((r) => {
+            const fpts      = Number(r.fpts_avg) || 0;
+            const projected = calcProjectedPoints(fpts, fpts);
+            const salary    = calcSalary(projected);
+            return {
+              contest_id:       id,
+              player_id:        String(r.player_id),
+              tier:             4,
+              salary,
+              projected_points: Math.round(projected * 100) / 100,
+              last_5_avg_fp:    Math.round(fpts * 100) / 100,
+              season_avg_fp:    Math.round(fpts * 100) / 100,
+              injury_status:    null,
+              is_available:     true,
+            };
+          });
+
+          await supabase
+            .from("contest_players")
+            .upsert(newRows, { onConflict: "contest_id,player_id" });
+
+          // Append gap-fill players to the in-memory `players` array so the
+          // rest of the response-build logic sees them without a second query.
+          for (const r of missing) {
+            const fpts      = Number(r.fpts_avg) || 0;
+            const projected = calcProjectedPoints(fpts, fpts);
+            const salary    = calcSalary(projected);
+            players.push({
+              player_id:        String(r.player_id),
+              tier:             4,
+              fpts_scored:      null,
+              name:             r.name ?? "",
+              team:             r.team ?? "",
+              position:         getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
+              fpts_avg: Math.round(calcFantasyPoints({
+                pts:  r.pts_avg  || 0,
+                fgm:  r.fgm_avg  || 0,
+                fga:  r.fga_avg  || 0,
+                fg3m: r.fg3m_avg || 0,
+                ftm:  r.ftm_avg  || 0,
+                fta:  r.fta_avg  || 0,
+                reb:  r.reb_avg  || 0,
+                ast:  r.ast_avg  || 0,
+                stl:  r.stl_avg  || 0,
+                blk:  r.blk_avg  || 0,
+                tov:  r.tov_avg  || 0,
+              }) * 10) / 10,
+              injury:           r.injury ?? null,
+              salary,
+              projected_points: Math.round(projected * 100) / 100,
+              last_5_avg_fp:    Math.round(fpts * 100) / 100,
+              season_avg_fp:    Math.round(fpts * 100) / 100,
+              value:            Math.round(calcValue(projected, salary) * 100) / 100,
+              injury_status:    r.injury ?? null,
+              is_available:     true,
+            });
+          }
+        }
+      }
+
       const seededTeams = [...new Set(players.map((p) => p.team).filter(Boolean))];
       const noConfirmedGames = latestActiveTeams.size === 0;
 
