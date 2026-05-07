@@ -1,18 +1,25 @@
 "use client";
 // app/contest/my-lineup/page.tsx
 //
-// "My Results" — shows the current week's submitted/locked/scored lineups,
-// sorted Mon → Sun (oldest first). Each card is expandable to show a full
-// box-score table: POS | PLAYER | OPP | MIN | FG | FT | 3PM | REB | AST | STL | BLK | TO | PTS | FPTS
+// "My Results" — shows submitted/locked/scored lineups for the selected
+// Daily Fantasy season week, sorted Mon → Sun (oldest first).
+// A dropdown week selector at the top lets users navigate between weeks.
+// Selected week is persisted in the URL as ?week_start=YYYY-MM-DD.
 
-import { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/store";
 import { contestFetch } from "@/lib/contest-fetch";
+import {
+  getSeasonWeekNumber,
+  formatChineseDateShort,
+  getCurrentWeekStartStr,
+  parseDateStrUtc,
+} from "@/lib/contest-weeks";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
@@ -20,13 +27,10 @@ function fmtMoney(n: number) { return `$${n.toLocaleString()}`; }
 function fmtFpts(n: number | null | undefined) { return n != null ? n.toFixed(1) : "—"; }
 function fmtInt(n: number | null | undefined) { return n != null ? String(Math.round(n)) : "—"; }
 
-// Classify BDL game status string into a canonical state.
 function gameState(status: string | null): "not_started" | "live" | "final" | "no_game" {
   if (!status) return "no_game";
   if (/^final/i.test(status)) return "final";
-  // BDL uses time strings like "7:30 pm ET" for unstarted games
   if (/\d+:\d+\s*(am|pm)/i.test(status)) return "not_started";
-  // Quarter / halftime / OT strings indicate live game
   return "live";
 }
 
@@ -48,7 +52,7 @@ type Player = {
   live_fpts: number | null;
   box_score: BoxScore | null;
   opponent: string | null;
-  game_status: string | null;   // BDL status: "Final", "7:30 pm ET", "2nd Qtr", etc.
+  game_status: string | null;
 };
 
 type LineupEntry = {
@@ -65,7 +69,20 @@ type LineupEntry = {
   players: Player[];
 };
 
-// Column definition for the box-score table
+type WeekItem = {
+  weekStart: string;
+  weekEnd: string;
+  weekNum: number;
+  count: number;
+  isCurrent: boolean;
+};
+
+type SeasonWeeksData = {
+  seasonWeek1Start: string;
+  currentWeekStart: string;
+  weeks: WeekItem[];
+};
+
 const BOX_COLS = [
   { key: "opp",  label: "OPP", width: 52 },
   { key: "min",  label: "MIN", width: 38 },
@@ -81,26 +98,208 @@ const BOX_COLS = [
   { key: "fpts", label: "FPTS", width: 46 },
 ];
 
+// ── Week label helpers ────────────────────────────────────────────────────────
+
+function fmtEnShort(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function weekButtonLabel(
+  week: WeekItem,
+  seasonWeek1Start: string,
+  lang: string,
+): string {
+  const s1 = parseDateStrUtc(seasonWeek1Start);
+  const ws  = parseDateStrUtc(week.weekStart);
+  const num = getSeasonWeekNumber(ws, s1);
+
+  if (lang === "zh") {
+    const range = `${formatChineseDateShort(week.weekStart)} - ${formatChineseDateShort(week.weekEnd)}`;
+    const cur   = week.isCurrent ? " · 当前周" : "";
+    return `Week ${num} · ${range}${cur}`;
+  }
+  const range = `${fmtEnShort(week.weekStart)} – ${fmtEnShort(week.weekEnd)}`;
+  const cur   = week.isCurrent ? " · Current week" : "";
+  return `Week ${num} · ${range}${cur}`;
+}
+
+function weekDropdownLabel(
+  week: WeekItem,
+  seasonWeek1Start: string,
+  lang: string,
+): string {
+  const s1 = parseDateStrUtc(seasonWeek1Start);
+  const ws  = parseDateStrUtc(week.weekStart);
+  const num = getSeasonWeekNumber(ws, s1);
+  const countLabel = lang === "zh" ? `${week.count} 场记录` : `${week.count} entries`;
+
+  if (lang === "zh") {
+    const range = `${formatChineseDateShort(week.weekStart)} - ${formatChineseDateShort(week.weekEnd)}`;
+    const cur   = week.isCurrent ? " · 当前周" : "";
+    return `Week ${num} · ${range}${cur} · ${countLabel}`;
+  }
+  const range = `${fmtEnShort(week.weekStart)} – ${fmtEnShort(week.weekEnd)}`;
+  const cur   = week.isCurrent ? " · Current week" : "";
+  return `Week ${num} · ${range}${cur} · ${countLabel}`;
+}
+
+// ── Week dropdown component ───────────────────────────────────────────────────
+
+function WeekDropdown({
+  weeks,
+  selectedWeekStart,
+  seasonWeek1Start,
+  onSelect,
+  lang,
+}: {
+  weeks: WeekItem[];
+  selectedWeekStart: string;
+  seasonWeek1Start: string;
+  onSelect: (ws: string) => void;
+  lang: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const selected = weeks.find((w) => w.weekStart === selectedWeekStart) ?? weeks[weeks.length - 1];
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const buttonLabel = selected
+    ? weekButtonLabel(selected, seasonWeek1Start, lang)
+    : (lang === "zh" ? "选择周" : "Select week");
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      {/* Trigger button */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "8px 14px", borderRadius: 8,
+          border: "1px solid #d1d5db", background: "#fff",
+          cursor: "pointer", fontSize: 13, fontWeight: 600,
+          color: "#1e3a8a", whiteSpace: "nowrap",
+          boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+        }}
+      >
+        <span>{buttonLabel}</span>
+        <span style={{
+          fontSize: 11, color: "#9ca3af",
+          transform: open ? "rotate(180deg)" : "none",
+          transition: "transform 0.15s", display: "inline-block",
+        }}>▼</span>
+      </button>
+
+      {/* Dropdown list */}
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0,
+          background: "#fff", border: "1px solid #e5e7eb",
+          borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+          zIndex: 100, minWidth: 280, maxHeight: 320, overflowY: "auto",
+          padding: "4px 0",
+        }}>
+          {[...weeks].reverse().map((week) => {
+            const isSelected = week.weekStart === selectedWeekStart;
+            const label = weekDropdownLabel(week, seasonWeek1Start, lang);
+            return (
+              <button
+                key={week.weekStart}
+                onClick={() => { onSelect(week.weekStart); setOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  width: "100%", padding: "9px 14px", border: "none",
+                  background: isSelected ? "#eff6ff" : "transparent",
+                  color: isSelected ? "#1e3a8a" : "#374151",
+                  cursor: "pointer", fontSize: 12, fontWeight: isSelected ? 700 : 500,
+                  textAlign: "left", lineHeight: 1.4,
+                  borderLeft: isSelected ? "3px solid #1e3a8a" : "3px solid transparent",
+                }}
+              >
+                <span style={{ flex: 1 }}>{label}</span>
+                {week.isCurrent && (
+                  <span style={{
+                    marginLeft: 8, fontSize: 10, fontWeight: 700,
+                    background: "#dbeafe", color: "#1e40af",
+                    padding: "2px 6px", borderRadius: 99, whiteSpace: "nowrap",
+                  }}>
+                    {lang === "zh" ? "当前周" : "Current"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page component ───────────────────────────────────────────────────────
+
 function MyLineupContent() {
   const { t, lang } = useLang();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [user]    = useState(() => getSessionUser());
-  const [lineups, setLineups] = useState<LineupEntry[]>([]);
-  const [error,   setError]   = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user] = useState(() => getSessionUser());
+
+  // ── Week state ──────────────────────────────────────────────────
+  const currentWeekStart = getCurrentWeekStartStr();
+  const weekStartFromUrl = searchParams.get("week_start") ?? currentWeekStart;
+  const [selectedWeekStart, setSelectedWeekStart] = useState(weekStartFromUrl);
+
+  const [weeksData, setWeeksData]   = useState<SeasonWeeksData | null>(null);
+  const [weeksLoading, setWeeksLoading] = useState(true);
+
+  // ── Lineup state ────────────────────────────────────────────────
+  const [lineups,  setLineups]  = useState<LineupEntry[]>([]);
+  const [error,    setError]    = useState<string | null>(null);
+  const [loading,  setLoading]  = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
+  // Load season weeks once
   useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    load();
+    if (!user) { setWeeksLoading(false); return; }
+    loadWeeks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function load() {
+  async function loadWeeks() {
+    setWeeksLoading(true);
+    const res = await contestFetch("/api/contests/season-weeks");
+    if (res.ok) {
+      const json: SeasonWeeksData = await res.json();
+      setWeeksData(json);
+      // If no week_start in URL, default to current week
+      if (!searchParams.get("week_start")) {
+        setSelectedWeekStart(json.currentWeekStart);
+      }
+    }
+    setWeeksLoading(false);
+  }
+
+  // Load lineups whenever selectedWeekStart changes
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    loadLineups(selectedWeekStart);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWeekStart]);
+
+  async function loadLineups(ws: string) {
     setLoading(true);
     setError(null);
-    const res = await contestFetch("/api/contests/my-lineups");
+    const res = await contestFetch(`/api/contests/my-lineups?week_start=${ws}`);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.error ?? `HTTP ${res.status}`);
@@ -114,11 +313,18 @@ function MyLineupContent() {
     setLoading(false);
   }
 
+  function selectWeek(ws: string) {
+    setSelectedWeekStart(ws);
+    // Update URL without full navigation
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("week_start", ws);
+    router.replace(`/contest/my-lineup?${params.toString()}`, { scroll: false });
+  }
+
   function toggleExpand(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }
@@ -158,8 +364,6 @@ function MyLineupContent() {
 
   function formatDate(dateStr: string | null) {
     if (!dateStr) return "—";
-    // Parse YYYY-MM-DD as a local date (not UTC midnight) to avoid
-    // timezone shift: new Date("2026-04-30T00:00:00Z") in UTC-4 renders as Apr 29.
     const [y, m, d] = dateStr.split("-").map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(
       lang === "zh" ? "zh-CN" : "en-US",
@@ -167,7 +371,6 @@ function MyLineupContent() {
     );
   }
 
-  // Render a single cell value for a column key
   function cellValue(p: Player, col: string): { text: string; color?: string } {
     const bs = p.box_score;
     if (col === "opp") return { text: p.opponent ?? "—", color: "#6b7280" };
@@ -187,12 +390,6 @@ function MyLineupContent() {
     }
   }
 
-  // FPTS cell — uses official score (scored) or live box-score fpts (live/pending).
-  // For unscored lineups, game_status drives the "no data" label:
-  //   final + no box_score  → DNP (player didn't play)
-  //   live  + no box_score  → 0 (in game, no stats yet)
-  //   not_started           → "—"
-  //   no_game               → "No Game"
   function fptsCellValue(p: Player, isScored: boolean): { text: string; color: string } {
     if (isScored) {
       const v = p.actual_fantasy_points;
@@ -200,13 +397,12 @@ function MyLineupContent() {
     }
     const v = p.live_fpts ?? p.box_score?.fpts;
     if (v != null) return { text: fmtFpts(v), color: "#d97706" };
-
     const gs = gameState(p.game_status);
     switch (gs) {
-      case "final":       return { text: t("DNP", "DNP"),          color: "#9ca3af" };
-      case "live":        return { text: "0",                       color: "#d97706" };
-      case "not_started": return { text: "—",                       color: "#9ca3af" };
-      default:            return { text: t("无比赛", "No Game"),    color: "#9ca3af" };
+      case "final":       return { text: t("DNP", "DNP"),       color: "#9ca3af" };
+      case "live":        return { text: "0",                    color: "#d97706" };
+      case "not_started": return { text: "—",                    color: "#9ca3af" };
+      default:            return { text: t("无比赛", "No Game"), color: "#9ca3af" };
     }
   }
 
@@ -216,9 +412,22 @@ function MyLineupContent() {
       <ContestNav contestId={null} />
 
       <main style={{ maxWidth: 700, margin: "0 auto", padding: "20px 16px" }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", marginBottom: 16 }}>
-          {t("我的成绩", "My Results")}
-        </h2>
+        {/* Header row: title + week dropdown */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+            {t("我的成绩", "My Results")}
+          </h2>
+
+          {user && !weeksLoading && weeksData && weeksData.weeks.length > 0 && (
+            <WeekDropdown
+              weeks={weeksData.weeks}
+              selectedWeekStart={selectedWeekStart}
+              seasonWeek1Start={weeksData.seasonWeek1Start}
+              onSelect={selectWeek}
+              lang={lang}
+            />
+          )}
+        </div>
 
         {!user && (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280", fontSize: 14 }}>
@@ -226,23 +435,23 @@ function MyLineupContent() {
           </div>
         )}
 
-        {user && loading && (
+        {user && (loading || weeksLoading) && (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#6b7280", fontSize: 14 }}>
             {t("加载中…", "Loading…")}
           </div>
         )}
 
-        {user && !loading && error && (
+        {user && !loading && !weeksLoading && error && (
           <div style={{ color: "#dc2626", fontSize: 14, padding: "20px 0" }}>{error}</div>
         )}
 
-        {user && !loading && !error && lineups.length === 0 && (
+        {user && !loading && !weeksLoading && !error && lineups.length === 0 && (
           <div style={{
             background: "#fff", borderRadius: 12, padding: 32,
             border: "1px solid #e5e7eb", textAlign: "center",
           }}>
             <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 16 }}>
-              {t("你还没有提交过阵容。", "You haven't submitted any lineups yet.")}
+              {t("这一周还没有 Daily Fantasy 成绩。", "No Daily Fantasy results for this week.")}
             </div>
             <button
               onClick={() => router.push("/contest")}
@@ -257,13 +466,12 @@ function MyLineupContent() {
           </div>
         )}
 
-        {user && !loading && !error && lineups.length > 0 && (
+        {user && !loading && !weeksLoading && !error && lineups.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {lineups.map((entry) => {
               const isExpanded  = expanded.has(entry.lineup_id);
               const totalSalary = entry.players.reduce((s, p) => s + p.salary, 0);
               const isScored    = entry.status === "scored";
-              // Count players whose team's game is final — includes DNP (no box score but game over).
               const completedCount = !isScored
                 ? entry.players.filter(p => gameState(p.game_status) === "final").length
                 : 0;
@@ -274,7 +482,7 @@ function MyLineupContent() {
                   background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb",
                   overflow: "hidden",
                 }}>
-                  {/* Card header — always visible */}
+                  {/* Card header */}
                   <div
                     onClick={() => toggleExpand(entry.lineup_id)}
                     style={{
@@ -339,7 +547,6 @@ function MyLineupContent() {
                   {/* Expandable section */}
                   {isExpanded && (
                     <>
-                      {/* Box-score table — horizontal scroll on narrow screens */}
                       <div style={{ borderTop: "1px solid #f3f4f6", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                         <table style={{
                           width: "100%", borderCollapse: "collapse",
@@ -347,14 +554,12 @@ function MyLineupContent() {
                         }}>
                           <thead>
                             <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                              {/* Fixed left columns: POS + PLAYER */}
                               <th style={{ padding: "6px 8px 6px 16px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap", width: 34 }}>
                                 {t("位置", "POS")}
                               </th>
                               <th style={{ padding: "6px 8px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>
                                 {t("球员", "PLAYER")}
                               </th>
-                              {/* Dynamic stat columns */}
                               {BOX_COLS.map((col) => (
                                 <th key={col.key} style={{
                                   padding: "6px 4px", textAlign: "center",
@@ -373,7 +578,6 @@ function MyLineupContent() {
                                 <tr key={p.player_id} style={{
                                   borderBottom: i < entry.players.length - 1 ? "1px solid #f3f4f6" : "none",
                                 }}>
-                                  {/* POS badge */}
                                   <td style={{ padding: "8px 6px 8px 16px", verticalAlign: "middle" }}>
                                     <span style={{
                                       display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -384,7 +588,6 @@ function MyLineupContent() {
                                       {p.slot_label}
                                     </span>
                                   </td>
-                                  {/* PLAYER name + avatar */}
                                   <td style={{ padding: "8px 8px 8px 0", verticalAlign: "middle" }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                       <PlayerAvatar name={p.name} size={22} />
@@ -402,7 +605,6 @@ function MyLineupContent() {
                                       </div>
                                     </div>
                                   </td>
-                                  {/* Stat columns */}
                                   {BOX_COLS.map((col) => {
                                     if (col.key === "fpts") {
                                       return (

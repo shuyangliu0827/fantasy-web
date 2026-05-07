@@ -2,7 +2,10 @@ export const dynamic = "force-dynamic";
 // GET /api/contests/my-lineups
 //
 // Returns submitted/locked/scored lineups for the authenticated user
-// within the current natural week (Mon–Sun UTC), sorted by contest_date ASC.
+// within a specified week (Mon–Sun UTC), sorted by contest_date ASC.
+//
+// Query params:
+//   week_start  – YYYY-MM-DD of the Monday to show (defaults to current week)
 //
 // Each player row includes:
 //   box_score  – full BDL box-score stats for the contest date (null if unavailable)
@@ -13,7 +16,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUserId } from "@/lib/contest-auth";
 import { SLOT_LABEL } from "@/lib/contest-positions";
-import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
+import { getWeekStart, toDateStr } from "@/lib/contest-points";
 import { fetchStatsForDate, PlayerGameStats } from "@/lib/player-game-stats";
 import { fetchGamesForRange } from "@/lib/nba-games";
 
@@ -30,6 +33,20 @@ export async function GET(req: Request) {
 
   const supabase = db();
 
+  // Determine the week to show from query param, default to current week.
+  const url = new URL(req.url);
+  const weekStartParam = url.searchParams.get("week_start");
+  let weekStartDate: Date;
+  if (weekStartParam && /^\d{4}-\d{2}-\d{2}$/.test(weekStartParam)) {
+    const [y, m, d] = weekStartParam.split("-").map(Number);
+    weekStartDate = new Date(Date.UTC(y, m - 1, d));
+  } else {
+    weekStartDate = getWeekStart();
+  }
+  // Compute week end (Sunday) from the resolved Monday
+  const weekEndDate = new Date(weekStartDate);
+  weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6);
+
   // ── 1. Fetch all user lineups with contest info ──────────────
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
@@ -41,9 +58,9 @@ export async function GET(req: Request) {
   if (lErr) return NextResponse.json({ error: lErr.message }, { status: 500 });
   if (!lineups || lineups.length === 0) return NextResponse.json({ lineups: [] });
 
-  // ── Filter to current natural week (Mon–Sun UTC) by contest_date ──
-  const weekStart = toDateStr(getWeekStart());
-  const weekEnd   = toDateStr(getWeekEnd());
+  // ── Filter to requested week (Mon–Sun UTC) by contest_date ───
+  const weekStart = toDateStr(weekStartDate);
+  const weekEnd   = toDateStr(weekEndDate);
   const weekLineups = (lineups as any[]).filter((l) => {
     const date = (l.contests as any)?.date;
     return date && date >= weekStart && date <= weekEnd;
