@@ -1,30 +1,25 @@
 export const dynamic = "force-dynamic";
 // GET /api/contests/season-weeks
 //
-// Returns the list of Daily Fantasy season weeks that are relevant to the
-// current user: the current week + all weeks where the user has submitted
-// lineups (submitted / locked / scored).
+// Returns every Daily Fantasy season week from Week 1 to the current week,
+// regardless of whether the user has any lineup records in that week.
 //
-// Also returns seasonWeek1Start: the Monday of the week containing the
-// very first contest ever created in the system.
+// season_week_1_start = Monday of the week containing the earliest contest row.
+// Fallback: current week Monday when no contests exist yet.
 //
 // Response:
 // {
 //   "seasonWeek1Start": "2026-04-06",
 //   "currentWeekStart": "2026-05-04",
 //   "weeks": [
-//     {
-//       "weekStart": "2026-04-06",
-//       "weekEnd":   "2026-04-12",
-//       "weekNum":   1,
-//       "count":     3,
-//       "isCurrent": false
-//     },
+//     { "weekStart": "2026-04-06", "weekEnd": "2026-04-12", "weekNum": 1, "count": 0, "isCurrent": false },
+//     { "weekStart": "2026-04-13", "weekEnd": "2026-04-19", "weekNum": 2, "count": 2, "isCurrent": false },
 //     ...
+//     { "weekStart": "2026-05-04", "weekEnd": "2026-05-10", "weekNum": 5, "count": 1, "isCurrent": true }
 //   ]
 // }
 //
-// Weeks are sorted ascending (oldest first).
+// Weeks are sorted ascending (oldest first). No future weeks are included.
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -53,65 +48,53 @@ export async function GET(req: Request) {
     .limit(1)
     .single();
 
-  const currentWeekMonday = getWeekStart(new Date());
-  const currentWeekStartStr = toDateStr(currentWeekMonday);
+  const currentWeekMonday    = getWeekStart(new Date());
+  const currentWeekStartStr  = toDateStr(currentWeekMonday);
 
   let seasonWeek1Start: Date;
   if (firstContest?.date) {
     seasonWeek1Start = getWeekStart(parseDateStrUtc(firstContest.date));
   } else {
-    // Fallback: if no contests exist yet, treat current week as week 1
     seasonWeek1Start = currentWeekMonday;
   }
   const seasonWeek1StartStr = toDateStr(seasonWeek1Start);
 
-  // ── 2. Fetch all contest dates where this user has a lineup ────
+  // ── 2. Fetch user lineup counts grouped by contest date ────────
   const { data: lineups } = await supabase
     .from("user_lineups")
     .select("contests(date)")
     .eq("user_id", userId)
     .in("status", ["submitted", "locked", "scored"]);
 
-  // Collect all contest dates from user lineups
-  const contestDates: string[] = [];
-  for (const l of (lineups as any[] ?? [])) {
-    const date = (l.contests as any)?.date;
-    if (date) contestDates.push(date as string);
-  }
-
-  // ── 3. Compute the set of week-start strings to include ────────
-  // Always include current week. Add weeks for each user contest date.
-  const weekStartSet = new Set<string>();
-  weekStartSet.add(currentWeekStartStr);
-
-  for (const date of contestDates) {
-    const ws = toDateStr(getWeekStart(parseDateStrUtc(date)));
-    weekStartSet.add(ws);
-  }
-
-  // ── 4. Count user lineups per week ────────────────────────────
+  // Aggregate record count by week-start string
   const countByWeek = new Map<string, number>();
-  for (const date of contestDates) {
+  for (const l of (lineups as any[] ?? [])) {
+    const date = (l.contests as any)?.date as string | undefined;
+    if (!date) continue;
     const ws = toDateStr(getWeekStart(parseDateStrUtc(date)));
     countByWeek.set(ws, (countByWeek.get(ws) ?? 0) + 1);
   }
 
-  // ── 5. Build sorted week list ─────────────────────────────────
-  const weekStarts = Array.from(weekStartSet).sort();
+  // ── 3. Enumerate every week from Week 1 to current week ────────
+  const weeks = [];
+  let cursor = new Date(seasonWeek1Start);
 
-  const weeks = weekStarts.map((ws) => {
-    const weekStartDate = parseDateStrUtc(ws);
-    const weekEndDate   = new Date(weekStartDate);
-    weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6);
+  while (cursor <= currentWeekMonday) {
+    const ws          = toDateStr(cursor);
+    const weekEndDate = new Date(cursor);
+    weekEndDate.setUTCDate(cursor.getUTCDate() + 6);
 
-    return {
-      weekStart:  ws,
-      weekEnd:    toDateStr(weekEndDate),
-      weekNum:    getSeasonWeekNumber(weekStartDate, seasonWeek1Start),
-      count:      countByWeek.get(ws) ?? 0,
-      isCurrent:  ws === currentWeekStartStr,
-    };
-  });
+    weeks.push({
+      weekStart: ws,
+      weekEnd:   toDateStr(weekEndDate),
+      weekNum:   getSeasonWeekNumber(cursor, seasonWeek1Start),
+      count:     countByWeek.get(ws) ?? 0,
+      isCurrent: ws === currentWeekStartStr,
+    });
+
+    cursor = new Date(cursor);
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
 
   return NextResponse.json({
     seasonWeek1Start: seasonWeek1StartStr,
@@ -119,3 +102,4 @@ export async function GET(req: Request) {
     weeks,
   });
 }
+
