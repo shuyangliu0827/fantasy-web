@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
-import { getSessionUser, createInsight } from "@/lib/store";
+import { getSessionUser, createInsight, uploadImage } from "@/lib/store";
+import PostImageUploader from "@/components/PostImageUploader";
 import { translateTeam } from "@/lib/i18n";
 import { useLang } from "@/lib/lang";
 import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/contest-fetch";
@@ -183,6 +184,8 @@ export default function ContestPage() {
   const [aiInitialBody, setAiInitialBody] = useState("");
   const [aiEditedTracked, setAiEditedTracked] = useState(false);
   const [aiPublishing, setAiPublishing] = useState(false);
+  const [aiPostImages, setAiPostImages]         = useState<string[]>([]);
+  const [aiPostUploading, setAiPostUploading]   = useState(false);
 
   // ── Clock ───────────────────────────────────────────────────
   useEffect(() => {
@@ -609,6 +612,8 @@ export default function ContestPage() {
     setAiInitialBody("");
     setAiEditedTracked(false);
     setAiError(null);
+    setAiPostImages([]);
+    setAiPostUploading(false);
   }
 
   function discardAiPost(reason: "user_close" | "after_publish") {
@@ -710,8 +715,10 @@ export default function ContestPage() {
     setAiPublishing(true);
     setAiError(null);
     const result = await createInsight({
-      title: aiEditTitle,
-      body: aiEditBody.trim() || aiInitialBody,
+      title:     aiEditTitle,
+      body:      aiEditBody.trim() || aiInitialBody,
+      cover_url: aiPostImages[0],
+      images:    aiPostImages.length > 0 ? aiPostImages : undefined,
     });
     setAiPublishing(false);
     if (!result.ok) {
@@ -1413,7 +1420,22 @@ export default function ContestPage() {
                             outline: "none", boxSizing: "border-box", resize: "vertical",
                           }}
                         />
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        {/* Image uploader */}
+                        <div style={{ marginTop: 12 }}>
+                          <PostImageUploader
+                            uploadedUrls={aiPostImages}
+                            onUpload={(newUrls) => setAiPostImages((prev) => [...prev, ...newUrls])}
+                            onRemove={(i) => setAiPostImages((prev) => prev.filter((_, idx) => idx !== i))}
+                            uploading={aiPostUploading}
+                            onUploading={setAiPostUploading}
+                            uploadFn={(file) => uploadImage(file, "posts")}
+                            maxImages={4}
+                            maxMB={10}
+                            lang={lang}
+                          />
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                           <button
                             onClick={() => setAiSelectedIdx(null)}
                             style={{
@@ -1427,13 +1449,13 @@ export default function ContestPage() {
                           </button>
                           <button
                             onClick={publishAiPost}
-                            disabled={aiPublishing}
+                            disabled={aiPublishing || aiPostUploading}
                             style={{
                               flex: 2, padding: "9px 0",
-                              background: aiPublishing ? "#a7f3d0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                              background: (aiPublishing || aiPostUploading) ? "#a7f3d0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
                               border: "none", borderRadius: 8,
                               fontSize: 13, fontWeight: 700, color: "#fff",
-                              cursor: aiPublishing ? "not-allowed" : "pointer",
+                              cursor: (aiPublishing || aiPostUploading) ? "not-allowed" : "pointer",
                             }}
                           >
                             {aiPublishing ? t("发布中…", "Publishing…") : t("发布", "Publish")}
