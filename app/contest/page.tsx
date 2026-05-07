@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
-import { getSessionUser, createInsight } from "@/lib/store";
+import { getSessionUser, createInsight, uploadImage } from "@/lib/store";
+import PostImageUploader from "@/components/PostImageUploader";
+import LineupShareCard, { type SharePlayer } from "@/components/LineupShareCard";
 import { translateTeam } from "@/lib/i18n";
 import { useLang } from "@/lib/lang";
 import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/contest-fetch";
@@ -183,6 +185,9 @@ export default function ContestPage() {
   const [aiInitialBody, setAiInitialBody] = useState("");
   const [aiEditedTracked, setAiEditedTracked] = useState(false);
   const [aiPublishing, setAiPublishing] = useState(false);
+  const [aiPostImages, setAiPostImages]         = useState<string[]>([]);
+  const [aiPostUploading, setAiPostUploading]   = useState(false);
+  const lineupShareCardRef = useRef<HTMLDivElement>(null);
 
   // ── Clock ───────────────────────────────────────────────────
   useEffect(() => {
@@ -609,6 +614,24 @@ export default function ContestPage() {
     setAiInitialBody("");
     setAiEditedTracked(false);
     setAiError(null);
+    setAiPostImages([]);
+    setAiPostUploading(false);
+  }
+
+  async function generateAndUploadLineupImage(): Promise<string | null> {
+    const el = lineupShareCardRef.current;
+    if (!el) return null;
+    try {
+      const { toPng } = await import("html-to-image");
+      const dataUrl = await toPng(el, { cacheBust: true, backgroundColor: "#ffffff", pixelRatio: 2 });
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `lineup-${contest?.id ?? "post"}-${Date.now()}.png`, { type: "image/png" });
+      const result = await uploadImage(file, "posts");
+      return result.ok ? result.url : null;
+    } catch {
+      return null;
+    }
   }
 
   function discardAiPost(reason: "user_close" | "after_publish") {
@@ -709,9 +732,24 @@ export default function ContestPage() {
     }
     setAiPublishing(true);
     setAiError(null);
+
+    // If user uploaded images, use them; otherwise auto-generate a lineup card image.
+    let finalImages = aiPostImages;
+    let autoGenFailed = false;
+    if (finalImages.length === 0) {
+      const autoUrl = await generateAndUploadLineupImage();
+      if (autoUrl) {
+        finalImages = [autoUrl];
+      } else {
+        autoGenFailed = true;
+      }
+    }
+
     const result = await createInsight({
-      title: aiEditTitle,
-      body: aiEditBody.trim() || aiInitialBody,
+      title:     aiEditTitle,
+      body:      aiEditBody.trim() || aiInitialBody,
+      cover_url: finalImages[0],
+      images:    finalImages.length > 0 ? finalImages : undefined,
     });
     setAiPublishing(false);
     if (!result.ok) {
@@ -722,8 +760,12 @@ export default function ContestPage() {
       tone: aiTone,
       style: aiStyle,
       versionStyle: aiVersions?.[aiSelectedIdx ?? 0]?.style,
+      hasAutoImage: finalImages.length > 0 && aiPostImages.length === 0,
     });
-    showFlash("ok", t("已发布到 Insights", "Published to Insights"));
+    const msg = autoGenFailed
+      ? t("已发布（阵容配图生成失败，仅发布文字）", "Published (lineup image failed — text only)")
+      : t("已发布到 Insights", "Published to Insights");
+    showFlash("ok", msg);
     discardAiPost("after_publish");
   }
 
@@ -1413,7 +1455,33 @@ export default function ContestPage() {
                             outline: "none", boxSizing: "border-box", resize: "vertical",
                           }}
                         />
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        {/* Image uploader */}
+                        <div style={{ marginTop: 12 }}>
+                          <PostImageUploader
+                            uploadedUrls={aiPostImages}
+                            onUpload={(newUrls) => setAiPostImages((prev) => [...prev, ...newUrls])}
+                            onRemove={(i) => setAiPostImages((prev) => prev.filter((_, idx) => idx !== i))}
+                            uploading={aiPostUploading}
+                            onUploading={setAiPostUploading}
+                            uploadFn={(file) => uploadImage(file, "posts")}
+                            maxImages={4}
+                            maxMB={10}
+                            lang={lang}
+                          />
+                        </div>
+
+                        {/* Default image hint */}
+                        <div style={{
+                          marginTop: 8, padding: "6px 10px",
+                          background: "#f0fdf4", border: "1px solid #bbf7d0",
+                          borderRadius: 6, fontSize: 11, color: "#15803d",
+                        }}>
+                          {aiPostImages.length > 0
+                            ? t("将使用你上传的图片作为配图。", "Your uploaded image(s) will be used as the post cover.")
+                            : t("将自动生成阵容配图。", "A lineup card image will be auto-generated as the post cover.")}
+                        </div>
+
+                        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                           <button
                             onClick={() => setAiSelectedIdx(null)}
                             style={{
@@ -1427,13 +1495,13 @@ export default function ContestPage() {
                           </button>
                           <button
                             onClick={publishAiPost}
-                            disabled={aiPublishing}
+                            disabled={aiPublishing || aiPostUploading}
                             style={{
                               flex: 2, padding: "9px 0",
-                              background: aiPublishing ? "#a7f3d0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                              background: (aiPublishing || aiPostUploading) ? "#a7f3d0" : "linear-gradient(135deg, #10b981 0%, #059669 100%)",
                               border: "none", borderRadius: 8,
                               fontSize: 13, fontWeight: 700, color: "#fff",
-                              cursor: aiPublishing ? "not-allowed" : "pointer",
+                              cursor: (aiPublishing || aiPostUploading) ? "not-allowed" : "pointer",
                             }}
                           >
                             {aiPublishing ? t("发布中…", "Publishing…") : t("发布", "Publish")}
@@ -1581,6 +1649,40 @@ export default function ContestPage() {
           </>
         )}
       </main>
+
+      {/* ── Off-screen lineup share card (for auto-image capture) ─── */}
+      {/* Rendered when user is on the final AI post editor. html-to-image
+          captures this element; it must be in the DOM but is invisible. */}
+      {aiSelectedIdx !== null && contest && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed", left: -9999, top: 0,
+            zIndex: -1, pointerEvents: "none", width: 360,
+          }}
+        >
+          <LineupShareCard
+            ref={lineupShareCardRef}
+            contestDate={contest.date}
+            players={slots.map((pid, idx): SharePlayer | null => {
+              if (!pid) return null;
+              const p = playerMap.get(pid);
+              if (!p) return null;
+              return {
+                slotLabel: SLOT_LABEL[idx + 1],
+                name: p.name,
+                team: p.team,
+                position: p.position,
+                tier: p.tier,
+                salary: p.salary,
+              };
+            })}
+            totalSalary={capState.totalSalary}
+            remaining={capState.remaining}
+            lang={lang}
+          />
+        </div>
+      )}
 
       {/* ── Slot-picker modal (multi-position players) ───────── */}
       {slotPickModal && (
