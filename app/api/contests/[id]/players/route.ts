@@ -47,11 +47,11 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { calcFantasyPoints } from "@/lib/scoring-config";
-import { calcProjectedPoints, calcSalary, calcValue } from "@/lib/contest-salary";
-import { getGames } from "@/lib/balldontlie";
-import { normalizeTeamCode } from "@/lib/i18n";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
+import { calcProjectedPoints, calcSalary, calcValue } from "@/lib/fantasy/daily/salary";
+import { getGames } from "@/lib/nba/balldontlie";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
 
 function db() {
   return createClient(

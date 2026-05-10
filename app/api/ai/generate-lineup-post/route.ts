@@ -19,12 +19,12 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
-import { getAuthUserId } from "@/lib/contest-auth";
-import { validateGenerateBody } from "@/lib/ai/input-safety";
+import { getAuthUserId } from "@/lib/fantasy/daily/auth";
+import { validateGenerateBody } from "@/lib/ai/posts/lineup-post/input-safety";
 import {
   buildSystemPrompt,
   buildUserPrompt,
-} from "@/lib/ai/lineup-post-prompt";
+} from "@/lib/ai/posts/lineup-post/prompt";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

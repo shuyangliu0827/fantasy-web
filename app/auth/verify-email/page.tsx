@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { resendConfirmationEmail } from "@/lib/store";
+import { resendConfirmationEmail } from "@/lib/shared/store";
 
 function VerifyEmailContent() {
   const { t } = useLang();

@@ -6,7 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
-import { getCurrentSeasonLabel, getCurrentSeasonYear } from "@/lib/season";
+import { getCurrentSeasonLabel, getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -14,14 +14,14 @@ import {
   League,
   LeagueMember,
   supabase,
-} from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+} from "@/lib/shared/store";
+import { generateMatchupsForWeek } from "@/lib/fantasy/season/matchup";
 import {
   NBA_FINALS_END_UTC,
   getOfficialLeagueStartDate,
   getWeekDateStrings,
   getWeekStatus as getCanonicalWeekStatus,
-} from "@/lib/week-utils";
+} from "@/lib/fantasy/shared/week-utils";
 
 /** Format "Mar 16 - 22" or "Mar 30 - Apr 5" from two YYYY-MM-DD strings (UTC). */
 function formatScheduleDateRange(startStr: string, endStr: string): string {

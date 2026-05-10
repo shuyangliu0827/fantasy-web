@@ -1,4 +1,4 @@
-// lib/compare-types.ts
+// lib/compare/types.ts
 // Single source of truth for all Player Compare feature interfaces.
 
 export type Timeframe = 'season' | 'last7' | 'last15' | 'lastSeason';

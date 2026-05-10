@@ -16,7 +16,7 @@ import {
   League,
   LeagueMember,
   supabase,
-} from "@/lib/store";
+} from "@/lib/shared/store";
 
 export default function MembersPage() {
   const { t } = useLang();

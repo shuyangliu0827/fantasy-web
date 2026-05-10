@@ -5,17 +5,17 @@
    - Drafts, Watchlist, MyTeams, Players → localStorage
    ========================================================= */
 
-   import { supabase } from "./supabase";
-   import { getCurrentSeasonLabel } from "./season";
+   import { supabase } from "@/lib/shared/supabase";
+   import { getCurrentSeasonLabel } from "@/lib/fantasy/shared/season";
    export { supabase };
-   import { ALL_PLAYERS } from "./players-data";
-   import { PLAYER_POSITIONS } from "./player-positions";
-   import { getCurrentRoster, getHistoricalRosterForDate } from "./roster-history";
+   import { ALL_PLAYERS } from "@/lib/players/data";
+   import { PLAYER_POSITIONS } from "@/lib/players/positions";
+   import { getCurrentRoster, getHistoricalRosterForDate } from "@/lib/fantasy/season/roster-history";
    export { getCurrentRoster, getHistoricalRosterForDate };
-   export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "./lineup";
-   import { getTodayStr, formatDateStr, addUtcDays, getLocalDateStr } from "./week-utils";
-   import { resolveBdlIds } from "./player-identity";
-   import { buildInsightInsertPayload } from "./insight-insert";
+   export { isEligibleForSlot, autoSetLineup, SLOT_ELIGIBLE } from "@/lib/fantasy/daily/lineup";
+   import { getTodayStr, formatDateStr, addUtcDays, getLocalDateStr } from "@/lib/fantasy/shared/week-utils";
+   import { resolveBdlIds } from "@/lib/players/identity";
+   import { buildInsightInsertPayload } from "@/lib/posts/insight-insert";
    
    // ==================== Types ====================
    

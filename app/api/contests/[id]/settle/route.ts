@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 //   409 { "error": "contest_not_yet_locked" }
 
 import { NextResponse } from "next/server";
-import { settleContest } from "@/lib/contest-settler";
+import { settleContest } from "@/lib/fantasy/daily/settler";
 
 function checkAuth(req: Request): boolean {
   const cronSecret  = process.env.CRON_SECRET;

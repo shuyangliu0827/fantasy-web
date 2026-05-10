@@ -1,4 +1,4 @@
-import type { AppLanguage } from "./language-labels";
+import type { AppLanguage } from "@/lib/shared/language-labels";
 
 export type LineupInsightPlayer = {
   id?: string;

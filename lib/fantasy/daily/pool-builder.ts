@@ -20,7 +20,7 @@
 // the contests table itself.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcProjectedPoints, calcSalary } from "./contest-salary";
+import { calcProjectedPoints, calcSalary } from "./salary";
 
 export type PoolRow = {
   player_id:        string;

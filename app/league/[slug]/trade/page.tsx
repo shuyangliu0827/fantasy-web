@@ -6,8 +6,8 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang"
-import { translateTeam } from "@/lib/i18n";
-import { PLAYER_POSITIONS } from "@/lib/player-positions";
+import { translateTeam } from "@/lib/shared/i18n";
+import { PLAYER_POSITIONS } from "@/lib/players/positions";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -21,7 +21,7 @@ import {
   RosterPlayer,
   TradeProposal,
   supabase,
-} from "@/lib/store";
+} from "@/lib/shared/store";
 
 type TeamInfo = { id: string; name: string; user_id: string };
 

@@ -4,7 +4,7 @@
 
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS } from "./constants";
-import type { DecisionView, ScenarioRecommendation } from "@/lib/compare-types";
+import type { DecisionView, ScenarioRecommendation } from "@/lib/compare/types";
 
 interface DecisionViewTabsProps {
   view: DecisionView;

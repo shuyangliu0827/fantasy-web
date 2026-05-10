@@ -5,7 +5,7 @@
 
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS, PLAYER_COLORS } from "./constants";
-import type { CompareStats } from "@/lib/compare-types";
+import type { CompareStats } from "@/lib/compare/types";
 
 interface CategoryPreviewProps {
   players: CompareStats[];

@@ -4,7 +4,7 @@
 // Season weeks are Monday–Sunday UTC, numbered from the first contest's week.
 // No ISO week numbers used.
 
-import { getWeekStart, toDateStr } from "./contest-points";
+import { getWeekStart, toDateStr } from "./points";
 
 /** Returns a Date from a YYYY-MM-DD string, interpreted as UTC midnight. */
 export function parseDateStrUtc(s: string): Date {

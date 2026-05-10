@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { formatDateStr } from "@/lib/week-utils";
-import { STRATEGY_PRESETS, type StrategyKey, RADAR_STATS, RADAR_MAX_VALUES } from "@/lib/compare-strategy-presets";
-import { generateCompareResult, reweightPlayer, ESPN_DEFAULT_WEIGHTS } from "@/lib/compare-engine";
-import type { PointsWeights } from "@/lib/compare-engine";
-import type { CompareMode, CompareResult, DecisionView, Timeframe } from "@/lib/compare-types";
+import { formatDateStr } from "@/lib/fantasy/shared/week-utils";
+import { STRATEGY_PRESETS, type StrategyKey, RADAR_STATS, RADAR_MAX_VALUES } from "@/lib/compare/strategy-presets";
+import { generateCompareResult, reweightPlayer, ESPN_DEFAULT_WEIGHTS } from "@/lib/compare/engine";
+import type { PointsWeights } from "@/lib/compare/engine";
+import type { CompareMode, CompareResult, DecisionView, Timeframe } from "@/lib/compare/types";
 
 // Components
 import ModeSwitch from "@/components/compare/ModeSwitch";

@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { getPlayers, getWatchlist } from "@/lib/store";
-import { PLAYER_POSITIONS } from "@/lib/player-positions";
-import { useIsMobile } from "@/lib/useIsMobile";
+import { getPlayers, getWatchlist } from "@/lib/shared/store";
+import { PLAYER_POSITIONS } from "@/lib/players/positions";
+import { useIsMobile } from "@/lib/shared/use-is-mobile";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

@@ -2,7 +2,7 @@
 // Pure, side-effect-free helpers for roster ownership history.
 // No Supabase dependency — safe to import in tests and server-side code.
 
-import type { RosterPlayer } from "./store";
+import type { RosterPlayer } from "@/lib/shared/store";
 
 /**
  * Returns only currently active roster players (no releasedAt set),

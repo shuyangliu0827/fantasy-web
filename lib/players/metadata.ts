@@ -1,4 +1,4 @@
-import { PLAYER_POSITIONS } from "./player-positions.ts";
+import { PLAYER_POSITIONS } from "./positions";
 
 const POSITION_ORDER: Record<string, number> = { PG: 1, SG: 2, SF: 3, PF: 4, C: 5 };
 const CANONICAL_PAIRS = new Set(["PG/SG", "SG/SF", "SF/PF", "PF/C"]);

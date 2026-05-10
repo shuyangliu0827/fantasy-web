@@ -16,9 +16,9 @@
 // and user_lineup_players.player_id exactly.
 
 import { createClient } from "@supabase/supabase-js";
-import { filterValidStats } from "@/lib/canonical-pipeline";
-import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/scoring-config";
-import { parseMinutes } from "@/lib/balldontlie";
+import { filterValidStats } from "@/lib/shared/canonical-pipeline";
+import { ESPN_DEFAULT_WEIGHTS, calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
+import { parseMinutes } from "@/lib/nba/balldontlie";
 
 const API_BASE  = "https://api.balldontlie.io/v1";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes

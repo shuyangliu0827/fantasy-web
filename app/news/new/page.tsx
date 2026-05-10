@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createNewsInsight, canUserPublishNews, getSessionUser, uploadImage } from "@/lib/store";
+import { createNewsInsight, canUserPublishNews, getSessionUser, uploadImage } from "@/lib/shared/store";
 import { useLang } from "@/lib/lang";
 import LightHeader from "@/components/LightHeader";
 

@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createInsight, getSessionUser, uploadImage } from "@/lib/store";
+import { createInsight, getSessionUser, uploadImage } from "@/lib/shared/store";
 import { useLang } from "@/lib/lang";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 

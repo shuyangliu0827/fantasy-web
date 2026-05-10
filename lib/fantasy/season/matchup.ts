@@ -1,4 +1,4 @@
-import type { LeagueMember } from "./store";
+import type { LeagueMember } from "@/lib/shared/store";
 
 export type GeneratedMatchup = {
   id: number;

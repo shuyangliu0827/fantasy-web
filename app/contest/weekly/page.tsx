@@ -13,8 +13,8 @@ import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
 import { useLang } from "@/lib/lang";
-import { getSessionUser } from "@/lib/store";
-import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
+import { getSessionUser } from "@/lib/shared/store";
+import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/fantasy/daily/points";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

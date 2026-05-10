@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa, type League } from "@/lib/store";
+import { getLeagueBySlug, getSessionUser, reshuffleDraftOrder, supabase as storeSupa, type League } from "@/lib/shared/store";
 
 type FantasyTeam = {
   id: string;

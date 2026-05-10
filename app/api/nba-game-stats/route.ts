@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // (shared with app/api/contests/my-lineups/route.ts for Daily Fantasy live scores).
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchStatsForDate } from "@/lib/player-game-stats";
+import { fetchStatsForDate } from "@/lib/players/game-stats";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

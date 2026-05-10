@@ -5,12 +5,12 @@ import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
-import { formatDateStr } from "@/lib/week-utils";
-import { STRATEGY_PRESETS, type StrategyKey, RADAR_STATS, RADAR_MAX_VALUES } from "@/lib/compare-strategy-presets";
-import { generateCompareResult, reweightPlayer, ESPN_DEFAULT_WEIGHTS } from "@/lib/compare-engine";
-import type { PointsWeights } from "@/lib/compare-engine";
-import type { CompareMode, CompareResult, DecisionView, Timeframe } from "@/lib/compare-types";
-import { getLeagueBySlug, getSessionUser, type League } from "@/lib/store";
+import { formatDateStr } from "@/lib/fantasy/shared/week-utils";
+import { STRATEGY_PRESETS, type StrategyKey, RADAR_STATS, RADAR_MAX_VALUES } from "@/lib/compare/strategy-presets";
+import { generateCompareResult, reweightPlayer, ESPN_DEFAULT_WEIGHTS } from "@/lib/compare/engine";
+import type { PointsWeights } from "@/lib/compare/engine";
+import type { CompareMode, CompareResult, DecisionView, Timeframe } from "@/lib/compare/types";
+import { getLeagueBySlug, getSessionUser, type League } from "@/lib/shared/store";
 
 import ModeSwitch from "@/components/compare/ModeSwitch";
 import TimeframeSelector from "@/components/compare/TimeframeSelector";

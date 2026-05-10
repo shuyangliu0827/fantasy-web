@@ -10,7 +10,7 @@
  *             from the potentially-stale fantasy_teams.wins/losses counters.
  */
 
-import type { DateStatsMap } from "./fantasy-scoring";
+import type { DateStatsMap } from "@/lib/fantasy/shared/scoring-rules";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

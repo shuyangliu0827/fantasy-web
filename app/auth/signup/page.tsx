@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { signup } from "@/lib/store";
+import { signup } from "@/lib/shared/store";
 
 export default function SignupPage() {
   const { t } = useLang();

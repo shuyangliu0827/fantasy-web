@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/contest-points";
+import { getWeekStart, getWeekEnd, toDateStr } from "@/lib/fantasy/daily/points";
 
 function db() {
   return createClient(

@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
-import { getSessionUser } from "@/lib/store";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
+import { getSessionUser } from "@/lib/shared/store";
 import HeroSection from "@/components/HeroSection";
 import DraftWinsSection from "@/components/DraftWinsSection";
 import BrandCurtain from "@/components/BrandCurtain";
-import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/heroPlayers";
+import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/players/hero-players";
 
 const NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },

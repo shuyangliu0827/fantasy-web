@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS } from "./constants";
-import { ESPN_DEFAULT_WEIGHTS, type PointsWeights } from "@/lib/compare-engine";
+import { ESPN_DEFAULT_WEIGHTS, type PointsWeights } from "@/lib/compare/engine";
 
 interface ScoringWeightsPanelProps {
   weights: PointsWeights;

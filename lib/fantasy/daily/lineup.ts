@@ -4,8 +4,8 @@
  * No Supabase dependency — safe to import in tests and server-side code.
  */
 
-import { PLAYER_POSITIONS } from "./player-positions.ts";
-import type { RosterPlayer, LineupMap } from "./store.ts";
+import { PLAYER_POSITIONS } from "@/lib/players/positions";
+import type { RosterPlayer, LineupMap } from "@/lib/shared/store";
 
 // ── Slot eligibility ─────────────────────────────────────────────────────────
 

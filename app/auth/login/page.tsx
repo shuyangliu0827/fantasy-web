@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { login } from "@/lib/store";
+import { login } from "@/lib/shared/store";
 
 export default function LoginPage() {
   const { t } = useLang();
