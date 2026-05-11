@@ -50,6 +50,8 @@ Tests use Node's built-in `node:test` + `node:assert/strict` — no external tes
 
 **Rule D** — W/L/T/PF/PA must be computed from `matchups` rows via `computeStandingsFromMatchups`, not from `fantasy_teams.wins/losses` counters (which can become stale).
 
+**Rule E** — Real-world basketball leagues live in `basketball_leagues` (UUID-keyed players, custom games, custom box scores); the existing `leagues` table is **fantasy season-long only**. Never merge them. Access control for any `basketball_*` table goes through `lib/basketball/access.ts` (`requirePlatformAdmin` / `requireLeagueAdmin` / `requireStatsPermission` / `requireViewPermission`). Visibility (`public` / `invite_only` / `private`) is on `basketball_leagues.visibility`; platform admin grants live in `platform_admins`. See `CUSTOM_LEAGUE_INFRASTRUCTURE_PLAN.md`.
+
 ### Draft system
 
 `DraftRoom.tsx` (client component) is the live draft path. It uses **Supabase Realtime broadcast** (not `postgres_changes`) to sync picks across clients, with localStorage persistence (`bp_draft_picks_<leagueId>`). On subscribe, it sends `sync_request` to receive current state from connected peers. The legacy `app/api/draft/route.ts` (in-memory) is no longer the primary draft path.
