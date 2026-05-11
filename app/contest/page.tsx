@@ -9,6 +9,7 @@ import PostImageUploader from "@/components/PostImageUploader";
 import LineupShareCard, { type SharePlayer } from "@/components/LineupShareCard";
 import { translateTeam } from "@/lib/shared/i18n";
 import { useLang } from "@/lib/lang";
+import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
 import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/fantasy/daily/fetch";
 import { isEligibleForContestSlot, SLOT_LABEL, parsePositions } from "@/lib/fantasy/daily/positions";
 import {
@@ -72,11 +73,11 @@ function fmtMoney(n: number): string {
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
-const TIER_LABEL: Record<number, string> = {
-  1: "Elite",
-  2: "Solid",
-  3: "Value",
-  4: "Deep Cut",
+const TIER_LABEL: Record<number, [string, string]> = {
+  1: ["精英", "Elite"],
+  2: ["稳健", "Solid"],
+  3: ["价值", "Value"],
+  4: ["深水炸弹", "Deep Cut"],
 };
 
 const TIER_COLOR: Record<number, { bg: string; color: string; border: string }> = {
@@ -86,34 +87,56 @@ const TIER_COLOR: Record<number, { bg: string; color: string; border: string }> 
   4: { bg: "rgba(100,116,139,0.10)", color: "#64748b", border: "rgba(100,116,139,0.2)" },
 };
 
-const STATUS_PILL: Record<string, { label: string; bg: string; color: string }> = {
-  pending:  { label: "Upcoming",  bg: "#fef3c7", color: "#92400e" },
-  open:     { label: "Open",      bg: "#d1fae5", color: "#065f46" },
-  locked:   { label: "Locked",    bg: "#fee2e2", color: "#991b1b" },
-  scored:   { label: "Scored",    bg: "#dbeafe", color: "#1e40af" },
+const STATUS_PILL: Record<string, { bg: string; color: string }> = {
+  pending:  { bg: "#fef3c7", color: "#92400e" },
+  open:     { bg: "#d1fae5", color: "#065f46" },
+  locked:   { bg: "#fee2e2", color: "#991b1b" },
+  scored:   { bg: "#dbeafe", color: "#1e40af" },
 };
 
-// Calendar-card pill derived from date bucket, not DB status. Past contests
-// always read "Past" (regardless of DB status), today reads "Open", and any
-// date in the future reads "Upcoming".
-const BUCKET_PILL: Record<"past" | "present" | "upcoming", { label: string; bg: string; color: string }> = {
-  past:     { label: "Past",     bg: "#f3f4f6", color: "#6b7280" },
-  present:  { label: "Open",     bg: "#d1fae5", color: "#065f46" },
-  upcoming: { label: "Upcoming", bg: "#fef3c7", color: "#92400e" },
+// Calendar-card pill derived from date bucket, not DB status.
+const BUCKET_PILL: Record<"past" | "present" | "upcoming", { bg: string; color: string }> = {
+  past:     { bg: "#f3f4f6", color: "#6b7280" },
+  present:  { bg: "#d1fae5", color: "#065f46" },
+  upcoming: { bg: "#fef3c7", color: "#92400e" },
 };
 
 // ── Helpers ───────────────────────────────────────────────────
 
-function formatDate(iso: string): string {
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
-    weekday: "long", month: "short", day: "numeric",
-  });
+function formatDate(iso: string, lang: "zh" | "en" = "en"): string {
+  const d = new Date(iso + "T00:00:00");
+  if (lang === "zh") {
+    const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${weekdays[d.getDay()]}`;
+  }
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
 }
 
-function formatDateShort(iso: string): string {
-  return new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
-    month: "short", day: "numeric",
-  });
+function formatDateShort(iso: string, lang: "zh" | "en" = "en"): string {
+  const d = new Date(iso + "T00:00:00");
+  if (lang === "zh") {
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function getBucketLabel(bucket: "past" | "present" | "upcoming", lang: "zh" | "en"): string {
+  if (lang === "zh") {
+    return bucket === "past" ? "已结束" : bucket === "present" ? "开放中" : "未开始";
+  }
+  return bucket === "past" ? "Past" : bucket === "present" ? "Open" : "Upcoming";
+}
+
+function getStatusLabel(status: string, lang: "zh" | "en"): string {
+  const map: Record<string, [string, string]> = {
+    pending: ["未开始", "Upcoming"],
+    open:    ["开放中", "Open"],
+    locked:  ["已锁定", "Locked"],
+    scored:  ["已结算", "Scored"],
+  };
+  const pair = map[status];
+  if (!pair) return status;
+  return lang === "zh" ? pair[0] : pair[1];
 }
 
 // ── Page ──────────────────────────────────────────────────────
@@ -447,8 +470,9 @@ export default function ContestPage() {
     if (!player) return;
 
     if (player.is_available === false) {
+      const displayName = getPlayerDisplayName(player, lang);
       showFlash("err", t(
-        `${player.name} 当日不可用。`,
+        `${displayName} 当日不可用。`,
         `${player.name} is unavailable for this contest.`,
       ));
       return;
@@ -457,8 +481,9 @@ export default function ContestPage() {
     const projectedTotal = capState.totalSalary + (player.salary || 0);
     if (projectedTotal > SALARY_CAP) {
       const over = projectedTotal - SALARY_CAP;
+      const displayName = getPlayerDisplayName(player, lang);
       showFlash("err", t(
-        `加上 ${player.name}（${fmtMoney(player.salary)}）会超出工资帽 ${fmtMoney(over)}。`,
+        `加上 ${displayName}（${fmtMoney(player.salary)}）会超出工资帽 ${fmtMoney(over)}。`,
         `Adding ${player.name} (${fmtMoney(player.salary)}) would exceed the cap by ${fmtMoney(over)}.`,
       ));
       return;
@@ -470,9 +495,10 @@ export default function ContestPage() {
       .filter((i) => i !== -1);
 
     if (eligibleSlots.length === 0) {
-      const pos = player.position === "N/A" ? "unknown position" : player.position;
+      const pos = player.position === "N/A" ? (lang === "zh" ? "未知位置" : "unknown position") : player.position;
+      const displayName = getPlayerDisplayName(player, lang);
       showFlash("err", t(
-        `${player.name}（${pos}）没有可用的位置。`,
+        `${displayName}（${pos}）没有可用的位置。`,
         `${player.name} (${pos}) doesn't fit any open slot.`,
       ));
       return;
@@ -707,8 +733,8 @@ export default function ContestPage() {
     const v = aiVersions[idx];
     if (!v) return;
     track("ai_post_version_selected", { style: v.style, index: idx });
-    const fallbackTitleZh = `${formatDate(contest!.date)} 我的阵容`;
-    const fallbackTitleEn = `My ${formatDateShort(contest!.date)} lineup`;
+    const fallbackTitleZh = `${formatDate(contest!.date, "zh")} 我的阵容`;
+    const fallbackTitleEn = `My ${formatDateShort(contest!.date, "en")} lineup`;
     setAiSelectedIdx(idx);
     setAiEditTitle(lang === "zh" ? fallbackTitleZh : fallbackTitleEn);
     setAiEditBody(v.post);
@@ -796,28 +822,31 @@ export default function ContestPage() {
         {/* Clicking a card switches selectedContest via loadContestDetail. */}
         {pastContests.length > 0 && (
           <ContestSection
-            label="Past"
+            label={t("已结束", "Past")}
             contests={pastContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
             bucket="past"
+            lang={lang}
           />
         )}
         <ContestSection
-          label="Today"
+          label={t("今天", "Today")}
           contests={[presentContest]}
           selectedId={contest?.id ?? null}
           onSelect={loadContestDetail}
           highlight
           bucket="present"
+          lang={lang}
         />
         {upcomingContests.length > 0 && (
           <ContestSection
-            label="Upcoming"
+            label={t("即将开赛", "Upcoming")}
             contests={upcomingContests}
             selectedId={contest?.id ?? null}
             onSelect={loadContestDetail}
             bucket="upcoming"
+            lang={lang}
           />
         )}
 
@@ -830,12 +859,12 @@ export default function ContestPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <div>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: "#6b7280", textTransform: "uppercase" }}>
-                  {bucket === "past" ? "Past Contest"
-                    : bucket === "upcoming" ? "Upcoming Contest"
-                    : "Daily Contest"}
+                  {bucket === "past" ? t("历史竞赛", "Past Contest")
+                    : bucket === "upcoming" ? t("即将开赛", "Upcoming Contest")
+                    : t("每日竞赛", "Daily Contest")}
                 </span>
                 <div style={{ fontSize: 17, fontWeight: 800, color: "#111827", marginTop: 2 }}>
-                  {formatDate(contest.date)}
+                  {formatDate(contest.date, lang)}
                 </div>
               </div>
               {/* Status pill — past dates always show "Past" so the header
@@ -843,14 +872,17 @@ export default function ContestPage() {
               {(() => {
                 const headerPill = bucket === "past"
                   ? BUCKET_PILL.past
-                  : (STATUS_PILL[contest.status] ?? { label: contest.status, bg: "#f3f4f6", color: "#374151" });
+                  : (STATUS_PILL[contest.status] ?? { bg: "#f3f4f6", color: "#374151" });
+                const headerLabel = bucket === "past"
+                  ? getBucketLabel("past", lang)
+                  : getStatusLabel(contest.status, lang);
                 return (
                   <span style={{
                     padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
                     background: headerPill.bg,
                     color:      headerPill.color,
                   }}>
-                    {headerPill.label}
+                    {headerLabel}
                   </span>
                 );
               })()}
@@ -861,7 +893,7 @@ export default function ContestPage() {
         {/* ── Loading ─────────────────────────────────────────── */}
         {loading && (
           <div style={{ padding: "48px 16px", textAlign: "center", color: "#9ca3af", fontSize: 14 }}>
-            Loading contest…
+            {t("加载中…", "Loading contest…")}
           </div>
         )}
 
@@ -957,8 +989,8 @@ export default function ContestPage() {
                 background: "#eff6ff", border: "1px solid #bfdbfe",
                 borderRadius: 10, fontSize: 13, color: "#1e3a8a", fontWeight: 500,
               }}>
-                <a href="/auth/login" style={{ fontWeight: 700, color: "#1d4ed8" }}>Log in</a>
-                {" "}to save and submit your lineup.
+                <a href="/auth/login" style={{ fontWeight: 700, color: "#1d4ed8" }}>{t("登录", "Log in")}</a>
+                {" "}{t("以保存并提交阵容。", "to save and submit your lineup.")}
               </div>
             )}
 
@@ -970,10 +1002,10 @@ export default function ContestPage() {
                 borderRadius: 10, fontSize: 13, color: "#991b1b", fontWeight: 600,
               }}>
                 {contest.status === "scored"
-                  ? "Results are in — see your score below."
+                  ? t("比赛已结算，查看你的得分。", "Results are in — see your score below.")
                   : bucket === "past"
-                  ? "Viewing your submitted lineup — this contest has ended."
-                  : "Lineup locked. Awaiting results."}
+                  ? t("正在查看已提交阵容，本次竞赛已结束。", "Viewing your submitted lineup — this contest has ended.")
+                  : t("阵容已锁定，等待结果。", "Lineup locked. Awaiting results.")}
               </div>
             )}
 
@@ -987,10 +1019,10 @@ export default function ContestPage() {
                 display: "flex", justifyContent: "space-between", alignItems: "center",
               }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-                  {isReadOnly && isSubmitted ? "My Submitted Lineup" : "My Lineup"}
+                  {isReadOnly && isSubmitted ? t("我的已提交阵容", "My Submitted Lineup") : t("我的阵容", "My Lineup")}
                 </span>
                 <span style={{ fontSize: 12, color: "#6b7280" }}>
-                  {filledCount}/5 selected
+                  {t(`已选 ${filledCount}/5`, `${filledCount}/5 selected`)}
                 </span>
               </div>
 
@@ -1021,7 +1053,7 @@ export default function ContestPage() {
                         <PlayerAvatar name={p.name} size={28} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {p.name}
+                            {getPlayerDisplayName(p, lang)}
                           </div>
                           <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>
                             {translateTeam(p.team, lang)} · {p.position}
@@ -1065,7 +1097,7 @@ export default function ContestPage() {
                       </>
                     ) : (
                       <span style={{ fontSize: 13, color: "#9ca3af", flex: 1 }}>
-                        Select a {SLOT_LABEL[idx + 1]} below
+                        {t(`请选一位 ${SLOT_LABEL[idx + 1]}`, `Select a ${SLOT_LABEL[idx + 1]} below`)}
                       </span>
                     )}
                   </div>
@@ -1517,16 +1549,16 @@ export default function ContestPage() {
             {/* ── Player pool ───────────────────────────────── */}
             <div style={{ padding: "20px 16px 0" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 10 }}>
-                Player Pool
+                {t("球员池", "Player Pool")}
                 <span style={{ fontSize: 12, fontWeight: 400, color: "#9ca3af", marginLeft: 6 }}>
-                  ({players.length} players)
+                  {t(`（${players.length} 人）`, `(${players.length} players)`)}
                 </span>
               </div>
 
               {/* Search */}
               <input
                 type="text"
-                placeholder="Search players…"
+                placeholder={t("搜索球员…", "Search players…")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{
@@ -1541,20 +1573,20 @@ export default function ContestPage() {
               {/* Tier filters */}
               <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
                 <FilterPill
-                  label="All Tiers"
+                  label={t("全部档位", "All Tiers")}
                   active={tierFilter === null}
                   onClick={() => setTierFilter(null)}
                   color="#374151"
                   activeBg="#1e3a8a"
                 />
-                {[1, 2, 3, 4].map((t) => (
+                {([1, 2, 3, 4] as const).map((tier) => (
                   <FilterPill
-                    key={t}
-                    label={`T${t} ${TIER_LABEL[t]}`}
-                    active={tierFilter === t}
-                    onClick={() => setTierFilter(tierFilter === t ? null : t)}
-                    color={TIER_COLOR[t].color}
-                    activeBg={TIER_COLOR[t].color}
+                    key={tier}
+                    label={`T${tier} ${lang === "zh" ? TIER_LABEL[tier][0] : TIER_LABEL[tier][1]}`}
+                    active={tierFilter === tier}
+                    onClick={() => setTierFilter(tierFilter === tier ? null : tier)}
+                    color={TIER_COLOR[tier].color}
+                    activeBg={TIER_COLOR[tier].color}
                   />
                 ))}
               </div>
@@ -1563,7 +1595,7 @@ export default function ContestPage() {
                   Matching uses parsePositions so "PG/SG" appears under both PG and SG. */}
               <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
                 <FilterPill
-                  label="All"
+                  label={t("全部", "All")}
                   active={posFilter === null}
                   onClick={() => setPosFilter(null)}
                   color="#374151"
@@ -1706,7 +1738,7 @@ export default function ContestPage() {
             </div>
             <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
               {t(
-                `把 ${slotPickModal.player.name} 放在哪个位置？`,
+                `把 ${getPlayerDisplayName(slotPickModal.player, "zh")} 放在哪个位置？`,
                 `Where do you want to place ${slotPickModal.player.name}?`,
               )}
             </div>
@@ -1746,7 +1778,7 @@ export default function ContestPage() {
 // ── Sub-components ────────────────────────────────────────────
 
 function ContestSection({
-  label, contests, selectedId, onSelect, highlight = false, bucket,
+  label, contests, selectedId, onSelect, highlight = false, bucket, lang,
 }: {
   label: string;
   contests: Contest[];
@@ -1754,8 +1786,10 @@ function ContestSection({
   onSelect: (c: Contest) => void;
   highlight?: boolean;
   bucket: "past" | "present" | "upcoming";
+  lang: "zh" | "en";
 }) {
   const pill = BUCKET_PILL[bucket];
+  const bucketLabel = getBucketLabel(bucket, lang);
   return (
     <div style={{ padding: "12px 16px 0" }}>
       <div style={{
@@ -1785,7 +1819,7 @@ function ContestSection({
                 fontSize: 12, fontWeight: 700,
                 color: isSelected ? "#fff" : "#111827",
               }}>
-                {formatDateShort(c.date)}
+                {formatDateShort(c.date, lang)}
               </div>
               <div style={{ marginTop: 3 }}>
                 <span style={{
@@ -1795,7 +1829,7 @@ function ContestSection({
                   background: isSelected ? "rgba(255,255,255,0.2)" : pill.bg,
                   color:      isSelected ? "#fff"                    : pill.color,
                 }}>
-                  {pill.label}
+                  {bucketLabel}
                 </span>
               </div>
             </button>
@@ -1910,7 +1944,7 @@ function PlayerCard({
           fontSize: 14, fontWeight: 600, color: "#111827",
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
         }}>
-          {p.name}
+          {getPlayerDisplayName(p, lang as "zh" | "en")}
         </div>
         <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           <span>{translateTeam(p.team, lang as "en" | "zh")}</span>
