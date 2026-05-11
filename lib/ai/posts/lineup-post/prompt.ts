@@ -1,4 +1,4 @@
-// lib/ai/lineup-post-prompt.ts
+// lib/ai/posts/lineup-post/prompt.ts
 //
 // Prompt assembly for the AI lineup-post generator.
 // Pure string construction — no SDK calls, no Supabase, no network.
@@ -17,7 +17,7 @@ import type {
   LineupPlayerInput,
   Style,
   Tone,
-} from "./input-safety.ts";
+} from "./input-safety";
 
 export const OUTPUT_SCHEMA_HINT = `{"versions":[{"style":"analysis","post":"..."},{"style":"casual","post":"..."},{"style":"bold","post":"..."}]}`;
 

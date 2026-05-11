@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
-import { createLeague } from "@/lib/store";
+import { createLeague } from "@/lib/shared/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

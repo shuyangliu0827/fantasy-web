@@ -1,4 +1,4 @@
-// lib/compare-engine.ts
+// lib/compare/engine.ts
 // Pure TypeScript recommendation engine for player comparison.
 // No React, no network calls. Takes CompareStats[], returns analysis.
 // Can run server-side (in API route) or client-side (on view tab switch).
@@ -12,8 +12,8 @@ import type {
   QuickDecision,
   RiskNote,
   ScenarioRecommendation,
-} from './compare-types';
-import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS, type PointsWeights } from './scoring-config';
+} from './types';
+import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS, type PointsWeights } from '@/lib/fantasy/shared/scoring-config';
 
 // ─────────────────────────────────────────────────────────────
 // Stability computation (exported so API route can reuse)

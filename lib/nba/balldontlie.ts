@@ -7,8 +7,8 @@
 // caching decisions. This file only handles request construction and
 // response parsing.
 
-import { getCurrentSeasonYear } from "./season";
-import { getTodayStr } from "./week-utils";
+import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { getTodayStr } from "@/lib/fantasy/shared/week-utils";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 

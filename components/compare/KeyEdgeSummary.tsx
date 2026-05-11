@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS, PLAYER_COLORS } from "./constants";
-import type { KeyEdge } from "@/lib/compare-types";
+import type { KeyEdge } from "@/lib/compare/types";
 
 interface KeyEdgeSummaryProps {
   edges: KeyEdge[];

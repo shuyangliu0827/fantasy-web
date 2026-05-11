@@ -6,10 +6,10 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang"
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
-import { PLAYER_POSITIONS } from "@/lib/player-positions";
-import { getCanonicalPlayerPosition, normalizePosition, toCanonicalPlayerKey } from "@/lib/player-metadata";
+import { PLAYER_POSITIONS } from "@/lib/players/positions";
+import { getCanonicalPlayerPosition, normalizePosition, toCanonicalPlayerKey } from "@/lib/players/metadata";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -26,7 +26,7 @@ import {
   Player,
   RosterPlayer,
   supabase,
-} from "@/lib/store";
+} from "@/lib/shared/store";
 
 // Live stats from /api/nba-stats — same canonical path as rankings / cheat sheet / trade.
 type LiveFAStats = {

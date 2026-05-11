@@ -52,9 +52,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getGames } from "@/lib/balldontlie";
-import { normalizeTeamCode } from "@/lib/i18n";
-import { buildContestPool } from "@/lib/contest-pool-builder";
+import { getGames } from "@/lib/nba/balldontlie";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
+import { buildContestPool } from "@/lib/fantasy/daily/pool-builder";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const DEFAULT_DAYS = 7;

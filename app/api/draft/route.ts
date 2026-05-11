@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 // 选秀系统API
 
 import { NextResponse } from "next/server";
-import { getCurrentSeasonYear } from "@/lib/season";
+import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
 
 // 临时内存存储 - 生产环境应使用真实数据库
 // 这里使用简化的内存结构来演示逻辑

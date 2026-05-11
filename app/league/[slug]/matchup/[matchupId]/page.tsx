@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang"
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import {
   DailyLineupMap,
@@ -22,8 +22,8 @@ import {
   getSessionUser,
   getTeamRoster,
   supabase,
-} from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
+} from "@/lib/shared/store";
+import { generateMatchupsForWeek } from "@/lib/fantasy/season/matchup";
 import {
   BENCH_SLOTS,
   STARTER_SLOTS,
@@ -34,7 +34,7 @@ import {
   getWeeklyStarterIds,
   type DateStatsMap,
   type PlayerGameStats,
-} from "@/lib/fantasy-scoring";
+} from "@/lib/fantasy/shared/scoring-rules";
 import {
   CANONICAL_TIMEZONE,
   getOfficialLeagueStartDate,
@@ -42,9 +42,9 @@ import {
   getWeekDateStrings,
   getTodayStr,
   parseDateStr,
-} from "@/lib/week-utils";
-import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
+} from "@/lib/fantasy/shared/week-utils";
+import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 
 type CachedPlayerStats = {
   id: number;

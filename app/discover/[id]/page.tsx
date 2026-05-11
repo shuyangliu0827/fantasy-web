@@ -4,8 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
-import { useIsMobile } from "@/lib/useIsMobile";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
+import { useIsMobile } from "@/lib/shared/use-is-mobile";
 import {
   getSessionUser,
   getInsightById,
@@ -19,7 +19,7 @@ import {
   isInsightLiked,
   Comment,
   Insight
-} from "@/lib/store";
+} from "@/lib/shared/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 

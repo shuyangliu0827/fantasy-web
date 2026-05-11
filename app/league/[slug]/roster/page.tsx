@@ -24,12 +24,12 @@ import {
   LineupMap,
   DailyLineupMap,
   supabase,
-} from "@/lib/store";
-import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/scoring-config";
-import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr, getLocalDateStr, localToUtcMidnight } from "@/lib/week-utils";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { buildLineupInsight, renderLineupPostDraft, type LineupInsight } from "@/lib/lineup-post-insight";
-import { LANGUAGE_LABELS, type AppLanguage } from "@/lib/language-labels";
+} from "@/lib/shared/store";
+import { getLeaguePointsWeights, calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
+import { formatDateStr, normalizeUtcDate, addUtcDays, getTodayStr, getLocalDateStr, localToUtcMidnight } from "@/lib/fantasy/shared/week-utils";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { buildLineupInsight, renderLineupPostDraft, type LineupInsight } from "@/lib/posts/lineup-post-insight";
+import { LANGUAGE_LABELS, type AppLanguage } from "@/lib/shared/language-labels";
 
 // ── Types ──
 

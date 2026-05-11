@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 // Returns games indexed by team abbreviation and date for quick roster lookups.
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchGamesForRange } from "@/lib/nba-games";
+import { fetchGamesForRange } from "@/lib/nba/games";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

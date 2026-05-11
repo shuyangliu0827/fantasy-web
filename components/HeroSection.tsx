@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
-import type { HeroPlayer } from "@/lib/heroPlayers";
+import type { HeroPlayer } from "@/lib/players/hero-players";
 
 interface Props {
   player: HeroPlayer;

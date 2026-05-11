@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { listNewsInsights, canUserPublishNews, getSessionUser, type Insight } from "@/lib/store";
+import { listNewsInsights, canUserPublishNews, getSessionUser, type Insight } from "@/lib/shared/store";
 import LightHeader from "@/components/LightHeader";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";

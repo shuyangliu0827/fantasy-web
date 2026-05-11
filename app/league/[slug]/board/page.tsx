@@ -14,7 +14,7 @@ import {
   League,
   LeagueMember,
   supabase,
-} from "@/lib/store";
+} from "@/lib/shared/store";
 
 type Message = {
   id: string;

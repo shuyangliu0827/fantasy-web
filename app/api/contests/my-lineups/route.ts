@@ -14,11 +14,11 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUserId } from "@/lib/contest-auth";
-import { SLOT_LABEL } from "@/lib/contest-positions";
-import { getWeekStart, toDateStr } from "@/lib/contest-points";
-import { fetchStatsForDate, PlayerGameStats } from "@/lib/player-game-stats";
-import { fetchGamesForRange } from "@/lib/nba-games";
+import { getAuthUserId } from "@/lib/fantasy/daily/auth";
+import { SLOT_LABEL } from "@/lib/fantasy/daily/positions";
+import { getWeekStart, toDateStr } from "@/lib/fantasy/daily/points";
+import { fetchStatsForDate, PlayerGameStats } from "@/lib/players/game-stats";
+import { fetchGamesForRange } from "@/lib/nba/games";
 
 function db() {
   return createClient(

@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS, PLAYER_COLORS } from "./constants";
-import type { RiskNote } from "@/lib/compare-types";
+import type { RiskNote } from "@/lib/compare/types";
 
 interface RiskNotesProps {
   notes: RiskNote[];

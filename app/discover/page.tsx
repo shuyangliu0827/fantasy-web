@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
-import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/store";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
+import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/shared/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 

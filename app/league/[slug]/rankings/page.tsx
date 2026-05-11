@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
-import { getLeagueBySlug, getSessionUser, type League } from "@/lib/store";
+import { getLeagueBySlug, getSessionUser, type League } from "@/lib/shared/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

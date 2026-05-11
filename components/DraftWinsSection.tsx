@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
-import { getCurrentSeasonLabel } from "@/lib/season";
-import type { HeroPlayer } from "@/lib/heroPlayers";
+import { getCurrentSeasonLabel } from "@/lib/fantasy/shared/season";
+import type { HeroPlayer } from "@/lib/players/hero-players";
 
 interface Props {
   player: HeroPlayer;

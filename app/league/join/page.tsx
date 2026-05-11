@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listLeagues, League } from "@/lib/store";
+import { getSessionUser, listLeagues, League } from "@/lib/shared/store";
 
 export default function JoinLeaguePage() {
   const { t } = useLang();

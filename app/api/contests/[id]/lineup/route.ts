@@ -76,10 +76,10 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUserId } from "@/lib/contest-auth";
-import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/contest-positions";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { SALARY_CAP, ROSTER_SIZE } from "@/lib/contest-salary";
+import { getAuthUserId } from "@/lib/fantasy/daily/auth";
+import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/fantasy/daily/positions";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { SALARY_CAP, ROSTER_SIZE } from "@/lib/fantasy/daily/salary";
 
 function db() {
   return createClient(

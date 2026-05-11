@@ -1,8 +1,8 @@
-import type { DailyLineupMap, LineupMap, RosterPlayer } from "./store.ts";
-import { calcFantasyPoints } from "./scoring-config.ts";
-import type { PointsWeights } from "./scoring-config.ts";
-export { CANONICAL_TIMEZONE, STARTER_SLOTS, BENCH_SLOTS } from "./week-utils.ts";
-import { VALID_ACTIVE_STARTER_SLOTS } from "./week-utils.ts";
+import type { DailyLineupMap, LineupMap, RosterPlayer } from "@/lib/shared/store";
+import { calcFantasyPoints } from "./scoring-config";
+import type { PointsWeights } from "./scoring-config";
+export { CANONICAL_TIMEZONE, STARTER_SLOTS, BENCH_SLOTS } from "./week-utils";
+import { VALID_ACTIVE_STARTER_SLOTS } from "./week-utils";
 
 export type PlayerGameStats = {
   min: number;

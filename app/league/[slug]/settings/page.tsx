@@ -15,8 +15,8 @@ import {
   updateTeamDraftPositions,
   League,
   supabase,
-} from "@/lib/store";
-import { ESPN_DEFAULT_WEIGHTS, PointsWeights } from "@/lib/scoring-config";
+} from "@/lib/shared/store";
+import { ESPN_DEFAULT_WEIGHTS, PointsWeights } from "@/lib/fantasy/shared/scoring-config";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

@@ -18,10 +18,10 @@ import {
   getSessionUser,
   saveWeeklyMatchupResult,
   supabase,
-} from "@/lib/store";
-import { generateMatchupsForWeek } from "@/lib/fantasy-matchups";
-import { fillMissingWeekLineups, getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy-scoring";
-import { getLeaguePointsWeights } from "@/lib/scoring-config";
+} from "@/lib/shared/store";
+import { generateMatchupsForWeek } from "@/lib/fantasy/season/matchup";
+import { fillMissingWeekLineups, getWeeklyMatchupScore, type DateStatsMap, type PlayerGameStats } from "@/lib/fantasy/shared/scoring-rules";
+import { getLeaguePointsWeights } from "@/lib/fantasy/shared/scoring-config";
 import {
   CANONICAL_TIMEZONE,
   formatDateStr,
@@ -30,7 +30,7 @@ import {
   getSeasonTotalWeeks,
   getScoringWeekRange,
   getWeekStatus,
-} from "@/lib/week-utils";
+} from "@/lib/fantasy/shared/week-utils";
 
 type CachedPlayerStats = {
   id: number;

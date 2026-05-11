@@ -4,9 +4,9 @@
 
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import { FONT, COLORS } from "./constants";
-import type { CompareStats } from "@/lib/compare-types";
+import type { CompareStats } from "@/lib/compare/types";
 
 interface PlayerSelectCardProps {
   player: CompareStats | null;

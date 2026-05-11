@@ -4,26 +4,26 @@ import { useState, useEffect, useRef } from "react";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
-import { getSessionUser, createInsight, uploadImage } from "@/lib/store";
+import { getSessionUser, createInsight, uploadImage } from "@/lib/shared/store";
 import PostImageUploader from "@/components/PostImageUploader";
 import LineupShareCard, { type SharePlayer } from "@/components/LineupShareCard";
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import { useLang } from "@/lib/lang";
-import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/contest-fetch";
-import { isEligibleForContestSlot, SLOT_LABEL, parsePositions } from "@/lib/contest-positions";
+import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/fantasy/daily/fetch";
+import { isEligibleForContestSlot, SLOT_LABEL, parsePositions } from "@/lib/fantasy/daily/positions";
 import {
   SALARY_CAP,
   ROSTER_SIZE,
   computeCapState,
-} from "@/lib/contest-salary";
+} from "@/lib/fantasy/daily/salary";
 import {
   type Tone,
   type Style,
   TONE_VALUES,
   STYLE_VALUES,
   MAX_CUSTOM_INSTRUCTION_LEN,
-} from "@/lib/ai/input-safety";
-import { track } from "@/lib/analytics";
+} from "@/lib/ai/posts/lineup-post/input-safety";
+import { track } from "@/lib/shared/analytics";
 
 // ── Types ─────────────────────────────────────────────────────
 

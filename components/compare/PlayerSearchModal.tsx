@@ -5,7 +5,7 @@
 import { useState } from "react";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import { FONT, COLORS } from "./constants";
 
 export interface PlayerSummary {

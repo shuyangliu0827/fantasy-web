@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { listLeagues, getLeagueMemberCount, getSessionUser, supabase } from "@/lib/store";
+import { listLeagues, getLeagueMemberCount, getSessionUser, supabase } from "@/lib/shared/store";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

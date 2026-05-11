@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
-import { requestPasswordReset } from "@/lib/store";
+import { requestPasswordReset } from "@/lib/shared/store";
 
 export default function ForgotPasswordPage() {
   const { t } = useLang();

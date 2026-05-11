@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS, PLAYER_COLORS } from "./constants";
-import type { CompareStats } from "@/lib/compare-types";
+import type { CompareStats } from "@/lib/compare/types";
 
 type StatFormat = "decimal1" | "decimal2" | "pct" | "integer" | "score";
 

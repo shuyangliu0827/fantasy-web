@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getPlayerHeadshotUrl } from "@/lib/player-headshots";
+import { getPlayerHeadshotUrl } from "@/lib/players/headshots";
 
 // Deterministic color palette for fallback initials
 const COLORS = [

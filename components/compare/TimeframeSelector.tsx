@@ -4,7 +4,7 @@
 
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS } from "./constants";
-import type { Timeframe } from "@/lib/compare-types";
+import type { Timeframe } from "@/lib/compare/types";
 
 interface TimeframeSelectorProps {
   timeframe: Timeframe;

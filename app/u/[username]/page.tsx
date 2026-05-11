@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
-import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight } from "@/lib/store";
+import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight } from "@/lib/shared/store";
 
 type DraftHistory = {
   id: string;

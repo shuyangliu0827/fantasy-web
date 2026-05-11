@@ -32,11 +32,11 @@ import { createClient } from "@supabase/supabase-js";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = process.env.BDL_API_KEY ?? "";
-import { getCurrentSeasonYear } from "@/lib/season";
-import { calcFantasyPoints } from "@/lib/scoring-config";
-import { parseMinutes } from "@/lib/balldontlie";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { normalizeTeamCode } from "@/lib/i18n";
+import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
+import { parseMinutes } from "@/lib/nba/balldontlie";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
 // call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.

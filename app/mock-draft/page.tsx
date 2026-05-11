@@ -5,8 +5,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useLang } from "@/lib/lang";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import LightHeader from "@/components/LightHeader";
-import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/store";
-import { useIsMobile } from "@/lib/useIsMobile";
+import { getPlayers, getSessionUser, createDraft, updateDraft, addDraftPick, listDrafts, Player, Draft } from "@/lib/shared/store";
+import { useIsMobile } from "@/lib/shared/use-is-mobile";
 
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";

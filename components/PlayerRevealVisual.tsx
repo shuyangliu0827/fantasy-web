@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from "react";
-import type { HeroPlayer } from "@/lib/heroPlayers";
+import type { HeroPlayer } from "@/lib/players/hero-players";
 
 interface Props {
   player: HeroPlayer;

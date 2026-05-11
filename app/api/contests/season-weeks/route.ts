@@ -23,9 +23,9 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUserId } from "@/lib/contest-auth";
-import { getWeekStart, toDateStr } from "@/lib/contest-points";
-import { getSeasonWeekNumber, parseDateStrUtc } from "@/lib/contest-weeks";
+import { getAuthUserId } from "@/lib/fantasy/daily/auth";
+import { getWeekStart, toDateStr } from "@/lib/fantasy/daily/points";
+import { getSeasonWeekNumber, parseDateStrUtc } from "@/lib/fantasy/daily/weeks";
 
 function db() {
   return createClient(

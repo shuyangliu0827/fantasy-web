@@ -6,7 +6,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueNav from "@/components/LeagueNav";
 import { useLang } from "@/lib/lang";
-import { getCurrentSeasonYear } from "@/lib/season";
+import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
 import {
   getSessionUser,
   getLeagueBySlug,
@@ -14,8 +14,8 @@ import {
   League,
   LeagueMember,
   supabase,
-} from "@/lib/store";
-import { computeStandingsFromMatchups } from "@/lib/canonical-pipeline";
+} from "@/lib/shared/store";
+import { computeStandingsFromMatchups } from "@/lib/shared/canonical-pipeline";
 
 type FantasyTeamRecord = {
   id: string;

@@ -22,7 +22,7 @@
 // This file must only be imported in client components ("use client").
 // supabase.auth.getSession() is a browser-only operation.
 
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/shared/supabase";
 
 /**
  * Fetches a Daily Contest API endpoint with the current user's Bearer token.

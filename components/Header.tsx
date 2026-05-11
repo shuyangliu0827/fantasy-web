@@ -4,8 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
-import { getSessionUser } from "@/lib/store";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
+import { getSessionUser } from "@/lib/shared/store";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 
 export default function Header() {
   const { lang, setLang, t } = useLang();

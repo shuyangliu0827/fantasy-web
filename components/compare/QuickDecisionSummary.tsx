@@ -4,9 +4,9 @@
 
 import PlayerAvatar from "@/components/PlayerAvatar";
 import { useLang } from "@/lib/lang";
-import { translateTeam } from "@/lib/i18n";
+import { translateTeam } from "@/lib/shared/i18n";
 import { COLORS } from "./constants";
-import type { CompareResult } from "@/lib/compare-types";
+import type { CompareResult } from "@/lib/compare/types";
 
 interface QuickDecisionSummaryProps {
   result: CompareResult;

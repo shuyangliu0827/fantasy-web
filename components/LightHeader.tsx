@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
-import { getSessionUser } from "@/lib/store";
-import { LANGUAGE_LABELS } from "@/lib/language-labels";
+import { getSessionUser } from "@/lib/shared/store";
+import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 
 const NAV = [
   { href: "/",         zh: "首页",         en: "Home" },

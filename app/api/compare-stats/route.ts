@@ -21,20 +21,20 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCurrentSeasonYear } from "@/lib/season";
-import { getPlayerStats, parseMinutes } from "@/lib/balldontlie";
-import type { BDLGameStats } from "@/lib/balldontlie";
-import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/scoring-config";
-import { addUtcDays, formatDateStr } from "@/lib/week-utils";
-import { getScheduleMock } from "@/lib/schedule-mock";
-import { computeStabilityFromLogs, estimateStabilityHeuristic } from "@/lib/compare-engine";
-import { generateCompareResult } from "@/lib/compare-engine";
-import type { CompareStats, CompareApiResponse, GameLog, Timeframe } from "@/lib/compare-types";
-import { getCanonicalPlayerPosition } from "@/lib/player-metadata";
-import { normalizeTeamCode } from "@/lib/i18n";
+import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { getPlayerStats, parseMinutes } from "@/lib/nba/balldontlie";
+import type { BDLGameStats } from "@/lib/nba/balldontlie";
+import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/fantasy/shared/scoring-config";
+import { addUtcDays, formatDateStr } from "@/lib/fantasy/shared/week-utils";
+import { getScheduleMock } from "@/lib/nba/schedule-mock";
+import { computeStabilityFromLogs, estimateStabilityHeuristic } from "@/lib/compare/engine";
+import { generateCompareResult } from "@/lib/compare/engine";
+import type { CompareStats, CompareApiResponse, GameLog, Timeframe } from "@/lib/compare/types";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
 
 // Import ALL_PLAYERS for lastSeason fallback
-import { ALL_PLAYERS } from "@/lib/players-data";
+import { ALL_PLAYERS } from "@/lib/players/data";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",

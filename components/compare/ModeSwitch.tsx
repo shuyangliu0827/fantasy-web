@@ -4,7 +4,7 @@
 
 import { useLang } from "@/lib/lang";
 import { FONT, COLORS } from "./constants";
-import type { CompareMode } from "@/lib/compare-types";
+import type { CompareMode } from "@/lib/compare/types";
 
 interface ModeSwitchProps {
   mode: CompareMode;

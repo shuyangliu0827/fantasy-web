@@ -12,14 +12,14 @@ import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
 import { useLang } from "@/lib/lang";
-import { getSessionUser } from "@/lib/store";
-import { contestFetch } from "@/lib/contest-fetch";
+import { getSessionUser } from "@/lib/shared/store";
+import { contestFetch } from "@/lib/fantasy/daily/fetch";
 import {
   getSeasonWeekNumber,
   formatChineseDateShort,
   getCurrentWeekStartStr,
   parseDateStrUtc,
-} from "@/lib/contest-weeks";
+} from "@/lib/fantasy/daily/weeks";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 

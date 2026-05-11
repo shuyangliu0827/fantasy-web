@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { HERO_PLAYERS, type HeroPlayer } from "@/lib/heroPlayers";
+import { HERO_PLAYERS, type HeroPlayer } from "@/lib/players/hero-players";
 import PlayerRevealVisual from "./PlayerRevealVisual";
 
 const FONT =

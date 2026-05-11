@@ -10,8 +10,8 @@
 //   - Idempotent: UPSERT on points_transactions(lineup_id, reason) prevents double-awarding.
 
 import { createClient } from "@supabase/supabase-js";
-import { calcPointsAwarded, assignRanks } from "@/lib/contest-points";
-import { fetchStatsForDate } from "@/lib/player-game-stats";
+import { calcPointsAwarded, assignRanks } from "@/lib/fantasy/daily/points";
+import { fetchStatsForDate } from "@/lib/players/game-stats";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
