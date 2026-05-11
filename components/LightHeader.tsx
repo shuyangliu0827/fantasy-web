@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
 import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
+import { basketballFetch } from "@/lib/basketball/client";
 
 const NAV = [
   { href: "/",         zh: "首页",         en: "Home" },
@@ -12,6 +13,12 @@ const NAV = [
   { href: "/league",   zh: "公开联赛",      en: "Leagues" },
   { href: "/contest",  zh: "每日竞赛", en: "Daily Fantasy" },
 ];
+
+const ADMIN_LINK = {
+  href: "/admin/platform/basketball-leagues",
+  zh: "平台管理",
+  en: "Admin",
+};
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
   const { t, lang, setLang } = useLang();
@@ -21,6 +28,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
   });
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -31,6 +39,29 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setIsPlatformAdmin(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await basketballFetch("/api/me/basketball-access");
+        if (!res.ok) return;
+        const body = (await res.json()) as { is_platform_admin?: boolean };
+        if (!cancelled) setIsPlatformAdmin(!!body.is_platform_admin);
+      } catch {
+        // ignore — non-fatal
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const navItems = isPlatformAdmin ? [...NAV, ADMIN_LINK] : NAV;
 
   const handleLogout = () => {
     localStorage.removeItem("bp_session");
@@ -82,7 +113,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
         {/* Desktop nav */}
         {!isMobile && (
           <nav style={{ display: "flex", gap: 2, flex: 1, minWidth: 0, overflowX: "auto", overflowY: "hidden" }}>
-            {NAV.map(item => {
+            {navItems.map(item => {
               const isActive = item.href === activeHref;
               return (
                 <Link
@@ -219,7 +250,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
           maxHeight: "calc(100vh - 60px)",
           overflowY: "auto",
         }}>
-          {NAV.map(item => {
+          {navItems.map(item => {
             const isActive = item.href === activeHref;
             return (
               <Link

@@ -112,6 +112,8 @@ export default function PlatformBasketballLeaguesPage() {
           )}
         </p>
 
+        <CreateLeagueForm onCreated={load} />
+
         {err && (
           <div
             style={{
@@ -240,5 +242,184 @@ function smallBtn(bg: string): React.CSSProperties {
     fontSize: 12,
     fontWeight: 700,
     cursor: "pointer",
+  };
+}
+
+function CreateLeagueForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useLang();
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const slugify = (v: string) =>
+    v
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const submit = async () => {
+    const nm = name.trim();
+    const sl = slug.trim() || slugify(nm);
+    if (!nm || !sl) {
+      setMsg({ kind: "err", text: t("名称和 slug 必填", "Name and slug required") });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    const res = await basketballFetch(`/api/basketball-leagues`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: nm,
+        slug: sl,
+        description: description || undefined,
+      }),
+    });
+    setBusy(false);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg({
+        kind: "err",
+        text:
+          body.error === "duplicate key value violates unique constraint \"basketball_leagues_slug_key\""
+            ? t("slug 已被占用", "slug already taken")
+            : body.error ?? `HTTP ${res.status}`,
+      });
+      return;
+    }
+    setMsg({ kind: "ok", text: t("已创建", "Created") });
+    setName("");
+    setSlug("");
+    setDescription("");
+    setOpen(false);
+    onCreated();
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          minHeight: 40,
+          padding: "0 18px",
+          background: "#1e3a8a",
+          color: "#fff",
+          border: "none",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          marginBottom: 20,
+        }}
+      >
+        + {t("创建新联赛", "New basketball league")}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid #cbd5e1",
+        borderRadius: 14,
+        padding: 18,
+        marginBottom: 20,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{ fontWeight: 900, color: "#0f172a", fontSize: 16 }}>
+        {t("创建新联赛", "New basketball league")}
+      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={t("联赛名称 (例: 北区夏季联赛)", "League name (e.g. North Summer League)")}
+        style={fieldStyle()}
+      />
+      <input
+        value={slug}
+        onChange={(e) => setSlug(e.target.value)}
+        placeholder={t("slug (URL 用，留空自动生成)", "slug (URL path, auto-generated if empty)")}
+        style={{ ...fieldStyle(), fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+      />
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder={t("简介（可选）", "Description (optional)")}
+        style={{ ...fieldStyle(), minHeight: 70, padding: 10, resize: "vertical" }}
+      />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={submit}
+          disabled={busy}
+          style={{
+            minHeight: 40,
+            padding: "0 18px",
+            background: busy ? "#94a3b8" : "#1e3a8a",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 800,
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          {busy ? t("创建中…", "Creating…") : t("创建", "Create")}
+        </button>
+        <button
+          onClick={() => {
+            setOpen(false);
+            setMsg(null);
+          }}
+          style={{
+            minHeight: 40,
+            padding: "0 14px",
+            background: "transparent",
+            color: "#475569",
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {t("取消", "Cancel")}
+        </button>
+      </div>
+      <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+        {t(
+          "联赛会以 pending / invite_only 状态创建，你将自动成为 league_owner。可在下面把它切到 approved + public。",
+          "League is created as pending / invite_only. You become league_owner automatically. Flip it to approved + public below.",
+        )}
+      </div>
+      {msg && (
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            color: msg.kind === "err" ? "#991b1b" : "#166534",
+          }}
+        >
+          {msg.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fieldStyle(): React.CSSProperties {
+  return {
+    minHeight: 40,
+    padding: "0 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    fontSize: 14,
+    background: "#fff",
   };
 }
