@@ -13,6 +13,7 @@ import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
+import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
 import { contestFetch } from "@/lib/fantasy/daily/fetch";
 import {
   getSeasonWeekNumber,
@@ -597,7 +598,7 @@ function MyLineupContent() {
                                           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                                           maxWidth: 110,
                                         }}>
-                                          {p.name || p.player_id}
+                                          {getPlayerDisplayName({ name: p.name || p.player_id }, lang) || p.player_id}
                                         </div>
                                         <div style={{ fontSize: 10, color: "#9ca3af" }}>
                                           {p.position}{p.team ? ` · ${p.team}` : ""}

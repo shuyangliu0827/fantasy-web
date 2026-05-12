@@ -20,6 +20,7 @@ import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
+import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 function fmtFpts(n: number | null) { return n != null ? n.toFixed(1) : "—"; }
@@ -43,7 +44,7 @@ type LeaderboardData = {
 };
 
 function LeaderboardContent() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const searchParams = useSearchParams();
   const contestId = searchParams.get("id");
 
@@ -400,7 +401,7 @@ function LeaderboardContent() {
                 <PlayerAvatar name={p.name} size={26} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {p.name}
+                    {getPlayerDisplayName(p, lang)}
                   </div>
                   <div style={{ fontSize: 11, color: "#6b7280" }}>
                     {p.position} · ${p.salary.toLocaleString()}
