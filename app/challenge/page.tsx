@@ -24,10 +24,10 @@ function ChallengePageContent() {
     return {
       qs: queryString,
       utm: utmObj,
-      contestHref: queryString ? `/contest?${queryString}` : "/contest",
+      contestHref: queryString ? `/contest/nba/build?${queryString}` : "/contest/nba/build",
       dailyBoardHref: queryString
-        ? `/contest/leaderboard?${queryString}`
-        : "/contest/leaderboard",
+        ? `/contest/nba/leaderboard?${queryString}`
+        : "/contest/nba/leaderboard",
     };
   }, [params]);
 

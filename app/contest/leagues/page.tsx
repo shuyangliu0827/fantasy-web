@@ -48,7 +48,7 @@ export default function OtherLeaguesPage() {
   return (
     <>
       <LightHeader activeHref="/contest" />
-      <ContestNav contestId={null} />
+      <ContestNav scope={{ kind: "nba" }} contestId={null} />
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 20px 80px" }}>
         <h1
           style={{
@@ -107,7 +107,7 @@ export default function OtherLeaguesPage() {
             {leagues.map((l) => (
               <Link
                 key={l.id}
-                href={`/contest/${l.slug}`}
+                href={`/contest/${l.slug}/build`}
                 style={{
                   background: "#fff",
                   border: "1px solid #e2e8f0",

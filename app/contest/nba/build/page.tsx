@@ -800,7 +800,7 @@ export default function ContestPage() {
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
-      <ContestNav contestId={contest?.id ?? null} />
+      <ContestNav scope={{ kind: "nba" }} contestId={contest?.id ?? null} />
 
       {/* ── Flash toast ─────────────────────────────────────── */}
       {flash && (
@@ -1214,7 +1214,7 @@ export default function ContestPage() {
                   ✓ {t("阵容已提交，锁定前可继续更新。", "Lineup submitted — you can still update it until lock time.")}
                 </div>
                 <button
-                  onClick={() => contest && window.open(`/contest/my-lineup?id=${contest.id}`, "_self")}
+                  onClick={() => contest && window.open(`/contest/nba/my-lineup?id=${contest.id}`, "_self")}
                   style={{
                     width: "100%", marginTop: 8, padding: "9px 0", borderRadius: 8,
                     background: "#fff", border: "1px solid #e5e7eb",
@@ -1230,7 +1230,7 @@ export default function ContestPage() {
             {isSubmitted && isReadOnly && contest && (
               <div style={{ margin: "10px 16px 0" }}>
                 <button
-                  onClick={() => window.open(`/contest/my-lineup?id=${contest.id}`, "_self")}
+                  onClick={() => window.open(`/contest/nba/my-lineup?id=${contest.id}`, "_self")}
                   style={{
                     width: "100%", padding: "10px 0", borderRadius: 8,
                     background: "#1e3a8a", border: "none",

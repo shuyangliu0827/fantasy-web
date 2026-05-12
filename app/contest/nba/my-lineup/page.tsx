@@ -410,7 +410,7 @@ function MyLineupContent() {
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
-      <ContestNav contestId={null} />
+      <ContestNav scope={{ kind: "nba" }} contestId={null} />
 
       <main style={{ maxWidth: 700, margin: "0 auto", padding: "20px 16px" }}>
         {/* Header row: title + week dropdown */}
@@ -455,7 +455,7 @@ function MyLineupContent() {
               {t("这一周还没有 Daily Fantasy 成绩。", "No Daily Fantasy results for this week.")}
             </div>
             <button
-              onClick={() => router.push("/contest")}
+              onClick={() => router.push("/contest/nba/build")}
               style={{
                 padding: "10px 24px", borderRadius: 8, border: "none",
                 background: "#1e3a8a", color: "#fff", cursor: "pointer",
@@ -714,7 +714,7 @@ function MyLineupContent() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/contest/leaderboard?id=${entry.contest_id}`);
+                              router.push(`/contest/nba/leaderboard?id=${entry.contest_id}`);
                             }}
                             style={{
                               padding: "5px 12px", borderRadius: 6, border: "1px solid #e5e7eb",
