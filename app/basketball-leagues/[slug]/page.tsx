@@ -17,6 +17,7 @@ type League = {
   description: string | null;
   status: string;
   visibility: "public" | "invite_only" | "private";
+  is_contest_enabled: boolean;
 };
 
 type Access = {
@@ -163,24 +164,42 @@ export default function BasketballLeaguePage({
           </p>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
-        {access.canManageLeague && (
-          <Link
-            href={`/admin/basketball-leagues/${league.id}`}
-            style={{
-              display: "inline-block",
-              padding: "8px 14px",
-              background: "#1e3a8a",
-              color: "#fff",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 800,
-              textDecoration: "none",
-              marginBottom: 20,
-            }}
-          >
-            {t("进入管理后台 →", "Manage league →")}
-          </Link>
-        )}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+          {league.is_contest_enabled && (
+            <Link
+              href={`/contest/${league.slug}`}
+              style={{
+                display: "inline-block",
+                padding: "8px 14px",
+                background: "var(--gradient-gold, linear-gradient(135deg,#f59e0b,#d97706))",
+                color: "#0a0e1a",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 800,
+                textDecoration: "none",
+              }}
+            >
+              {t("进入每日竞赛 →", "Play daily contest →")}
+            </Link>
+          )}
+          {access.canManageLeague && (
+            <Link
+              href={`/admin/basketball-leagues/${league.id}`}
+              style={{
+                display: "inline-block",
+                padding: "8px 14px",
+                background: "#1e3a8a",
+                color: "#fff",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 800,
+                textDecoration: "none",
+              }}
+            >
+              {t("进入管理后台 →", "Manage league →")}
+            </Link>
+          )}
+        </div>
 
         <Section title={t("球队", "Teams")} count={teams.length}>
           {teams.length === 0 ? (

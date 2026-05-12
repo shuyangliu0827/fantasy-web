@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   // /api/platform/basketball-leagues or their own admin/member memberships.
   const { data: publicLeagues, error: pubErr } = await supabase
     .from("basketball_leagues")
-    .select("id, name, slug, description, source_type, status, visibility, created_at")
+    .select("id, name, slug, description, source_type, status, visibility, is_contest_enabled, created_at")
     .eq("visibility", "public")
     .eq("status", "approved")
     .order("created_at", { ascending: false });
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
   if (extraIds.size > 0) {
     const { data } = await supabase
       .from("basketball_leagues")
-      .select("id, name, slug, description, source_type, status, visibility, created_at")
+      .select("id, name, slug, description, source_type, status, visibility, is_contest_enabled, created_at")
       .in("id", Array.from(extraIds));
     extra = data ?? [];
   }

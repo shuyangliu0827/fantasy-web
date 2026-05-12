@@ -15,6 +15,7 @@ type League = {
   description: string | null;
   status: "pending" | "approved" | "rejected" | "archived";
   visibility: "public" | "invite_only" | "private";
+  is_contest_enabled: boolean;
   created_at: string;
 };
 
@@ -28,12 +29,15 @@ export default function OtherLeaguesPage() {
     (async () => {
       const res = await basketballJson<{ leagues: League[] }>(`/api/basketball-leagues`);
       if (cancelled) return;
-      // Only show approved leagues here. The API already hides pending
-      // public leagues from anonymous callers; this defense-in-depth
-      // double-filter covers users who admin pending leagues but don't
-      // want them surfaced as "discoverable" entries.
-      const approved = (res.data?.leagues ?? []).filter((l) => l.status === "approved");
-      setLeagues(approved);
+      // Only surface approved + contest-enabled leagues here. Leagues
+      // that exist but haven't opted into fantasy gameplay are still
+      // reachable via /basketball-leagues/[slug] (e.g. linked from
+      // anywhere else on the site); they just don't belong on a
+      // "fantasy contest" discovery surface.
+      const playable = (res.data?.leagues ?? []).filter(
+        (l) => l.status === "approved" && l.is_contest_enabled,
+      );
+      setLeagues(playable);
       setLoading(false);
     })();
     return () => {
@@ -103,7 +107,7 @@ export default function OtherLeaguesPage() {
             {leagues.map((l) => (
               <Link
                 key={l.id}
-                href={`/basketball-leagues/${l.slug}`}
+                href={`/contest/${l.slug}`}
                 style={{
                   background: "#fff",
                   border: "1px solid #e2e8f0",

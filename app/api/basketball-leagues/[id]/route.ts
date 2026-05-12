@@ -51,11 +51,13 @@ export async function PATCH(
       name?: string;
       description?: string | null;
       slug?: string;
+      is_contest_enabled?: boolean;
     };
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.name === "string") patch.name = body.name.trim();
     if (typeof body.description !== "undefined") patch.description = body.description;
     if (typeof body.slug === "string") patch.slug = body.slug.trim();
+    if (typeof body.is_contest_enabled === "boolean") patch.is_contest_enabled = body.is_contest_enabled;
 
     const { data, error } = await supabase
       .from("basketball_leagues")

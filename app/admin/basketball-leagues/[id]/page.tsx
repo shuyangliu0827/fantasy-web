@@ -18,6 +18,7 @@ type League = {
   description: string | null;
   visibility: "public" | "invite_only" | "private";
   status: string;
+  is_contest_enabled: boolean;
 };
 
 type Access = {
@@ -317,8 +318,101 @@ function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void 
           ))}
         </div>
       </Field>
+      <ContestEnabledToggle league={league} onSaved={onSaved} />
       {msg && <div style={{ fontSize: 13, color: "#475569", fontWeight: 700 }}>{msg}</div>}
     </div>
+  );
+}
+
+function ContestEnabledToggle({
+  league,
+  onSaved,
+}: {
+  league: League;
+  onSaved: () => void;
+}) {
+  const { t } = useLang();
+  const [enabled, setEnabled] = useState(league.is_contest_enabled);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const toggle = async () => {
+    const next = !enabled;
+    setBusy(true);
+    setErr(null);
+    const res = await basketballFetch(`/api/basketball-leagues/${league.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ is_contest_enabled: next }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setErr(body.error ?? `HTTP ${res.status}`);
+      return;
+    }
+    setEnabled(next);
+    onSaved();
+  };
+
+  return (
+    <Field label={t("每日竞赛 (/contest/<slug>)", "Daily contest (/contest/<slug>)")}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: 10,
+          padding: 12,
+        }}
+      >
+        <button
+          onClick={toggle}
+          disabled={busy}
+          style={{
+            position: "relative",
+            width: 48,
+            height: 28,
+            borderRadius: 14,
+            background: enabled ? "#1e3a8a" : "#cbd5e1",
+            border: "none",
+            cursor: busy ? "default" : "pointer",
+            flexShrink: 0,
+          }}
+          aria-pressed={enabled}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: 3,
+              left: enabled ? 23 : 3,
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background: "#fff",
+              transition: "left 0.15s",
+            }}
+          />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 14 }}>
+            {enabled
+              ? t("已开放每日竞赛", "Fantasy contest enabled")
+              : t("未开放每日竞赛", "Fantasy contest disabled")}
+          </div>
+          <div style={{ color: "#64748b", fontSize: 12, marginTop: 2, lineHeight: 1.5 }}>
+            {t(
+              "开启后该联赛会出现在「每日竞赛 / 其他联赛」列表，并可通过 /contest/<slug> 进入。",
+              "Once enabled this league appears under Daily Contest / Other Leagues and becomes reachable at /contest/<slug>.",
+            )}
+          </div>
+        </div>
+      </div>
+      {err && (
+        <div style={{ color: "#991b1b", fontSize: 12, marginTop: 6, fontWeight: 700 }}>{err}</div>
+      )}
+    </Field>
   );
 }
 
