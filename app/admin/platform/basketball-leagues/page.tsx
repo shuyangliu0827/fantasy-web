@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
+import AuthGate from "@/components/basketball/AuthGate";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import PlatformGrantLeagueAdminForm from "@/components/basketball/PlatformGrantLeagueAdminForm";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
@@ -31,6 +32,14 @@ const STATUS_NEXT: Record<League["status"], League["status"]> = {
 };
 
 export default function PlatformBasketballLeaguesPage() {
+  return (
+    <AuthGate>
+      <PlatformBasketballLeaguesPageInner />
+    </AuthGate>
+  );
+}
+
+function PlatformBasketballLeaguesPageInner() {
   const { t } = useLang();
   const [me, setMe] = useState<MeAccess | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);

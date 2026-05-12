@@ -17,10 +17,14 @@ export async function GET(req: Request) {
   const supabase = serviceDb();
   const userId = await getCurrentUserIdFromRequest(req);
 
+  // Public discovery only surfaces approved + public leagues. Pending
+  // leagues stay invisible to anonymous users; admins/owners see them via
+  // /api/platform/basketball-leagues or their own admin/member memberships.
   const { data: publicLeagues, error: pubErr } = await supabase
     .from("basketball_leagues")
     .select("id, name, slug, description, source_type, status, visibility, created_at")
     .eq("visibility", "public")
+    .eq("status", "approved")
     .order("created_at", { ascending: false });
   if (pubErr) return NextResponse.json({ error: pubErr.message }, { status: 500 });
 

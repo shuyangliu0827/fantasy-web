@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
 import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
+import { supabase } from "@/lib/shared/supabase";
 import { basketballFetch } from "@/lib/basketball/client";
 
 const NAV = [
@@ -39,6 +40,25 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // If bp_session is missing but Supabase has an active auth session,
+  // surface a minimal logged-in indicator (so admins coming in via the
+  // Supabase auth path don't see "Login/Signup" while their requests
+  // succeed). bp_session, when present, wins.
+  useEffect(() => {
+    if (user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled || !data.session?.user) return;
+      const email = data.session.user.email ?? "";
+      const handle = email.split("@")[0] || "account";
+      setUser({ name: handle, username: handle });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) {

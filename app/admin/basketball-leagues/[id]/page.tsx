@@ -2,10 +2,12 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import LightHeader from "@/components/LightHeader";
+import AuthGate from "@/components/basketball/AuthGate";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import LeagueMemberApprovalList from "@/components/basketball/LeagueMemberApprovalList";
 import PlayerClaimApprovalList from "@/components/basketball/PlayerClaimApprovalList";
-import BoxScoreInputTable from "@/components/basketball/BoxScoreInputTable";
+import StatEventInput from "@/components/basketball/StatEventInput";
+import AdminBoxScoreOverride from "@/components/basketball/AdminBoxScoreOverride";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
 
@@ -22,6 +24,8 @@ type Access = {
   canManageLeague: boolean;
   canManageTeamsPlayersGames: boolean;
   canInputStats: boolean;
+  leagueAdminRole: "league_owner" | "league_admin" | null;
+  isPlatformAdmin: boolean;
 };
 
 type Team = { id: string; name: string; abbreviation: string | null; city: string | null };
@@ -50,6 +54,14 @@ type Tab = "settings" | "teams" | "players" | "games" | "members" | "claims" | "
 
 export default function LeagueAdminPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  return (
+    <AuthGate>
+      <LeagueAdminPageInner id={id} />
+    </AuthGate>
+  );
+}
+
+function LeagueAdminPageInner({ id }: { id: string }) {
   const { t } = useLang();
   const [league, setLeague] = useState<League | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
@@ -205,7 +217,14 @@ export default function LeagueAdminPage({ params }: { params: Promise<{ id: stri
           <GamesTab leagueId={id} teams={teams} games={games} onChanged={refresh} />
         )}
         {tab === "boxscore" && (
-          <BoxScoreTab games={games} teams={teams} players={players} />
+          <BoxScoreTab
+            games={games}
+            teams={teams}
+            players={players}
+            canOverride={
+              access.isPlatformAdmin || access.leagueAdminRole !== null
+            }
+          />
         )}
         {tab === "members" && (
           <MembersTab
@@ -603,10 +622,12 @@ function BoxScoreTab({
   games,
   teams,
   players,
+  canOverride,
 }: {
   games: Game[];
   teams: Team[];
   players: Player[];
+  canOverride: boolean;
 }) {
   const { t } = useLang();
   const [gameId, setGameId] = useState<string>(games[0]?.id ?? "");
@@ -647,15 +668,28 @@ function BoxScoreTab({
           )}
         />
       ) : (
-        <BoxScoreInputTable
-          key={game.id}
-          gameId={game.id}
-          players={gamePlayers.map((p) => ({
-            id: p.id,
-            display_name: p.display_name,
-            team_id: p.team_id,
-          }))}
-        />
+        <>
+          <StatEventInput
+            key={`events-${game.id}`}
+            gameId={game.id}
+            players={gamePlayers.map((p) => ({
+              id: p.id,
+              display_name: p.display_name,
+              team_id: p.team_id,
+            }))}
+          />
+          {canOverride && (
+            <AdminBoxScoreOverride
+              key={`override-${game.id}`}
+              gameId={game.id}
+              players={gamePlayers.map((p) => ({
+                id: p.id,
+                display_name: p.display_name,
+                team_id: p.team_id,
+              }))}
+            />
+          )}
+        </>
       )}
     </div>
   );

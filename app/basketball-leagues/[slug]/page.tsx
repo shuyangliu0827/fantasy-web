@@ -188,12 +188,16 @@ export default function BasketballLeaguePage({
           ) : (
             <div className="bb-grid">
               {teams.map((tm) => (
-                <Card key={tm.id}>
+                <Link
+                  key={tm.id}
+                  href={`/basketball-leagues/${slug}/teams/${tm.id}`}
+                  style={cardLinkStyle()}
+                >
                   <div style={{ fontWeight: 800, color: "#0f172a" }}>{tm.name}</div>
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
                     {[tm.city, tm.abbreviation].filter(Boolean).join(" · ") || "—"}
                   </div>
-                </Card>
+                </Link>
               ))}
             </div>
           )}
@@ -205,12 +209,16 @@ export default function BasketballLeaguePage({
           ) : (
             <div className="bb-grid">
               {players.map((p) => (
-                <Card key={p.id}>
+                <Link
+                  key={p.id}
+                  href={`/basketball-leagues/${slug}/players/${p.id}`}
+                  style={cardLinkStyle()}
+                >
                   <div style={{ fontWeight: 800, color: "#0f172a" }}>{p.display_name}</div>
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
                     {[p.position, teamName(p.team_id)].filter(Boolean).join(" · ") || "—"}
                   </div>
-                </Card>
+                </Link>
               ))}
             </div>
           )}
@@ -222,28 +230,33 @@ export default function BasketballLeaguePage({
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {games.map((g) => (
-                <Card key={g.id}>
-                  <div
-                    style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 800, color: "#0f172a" }}>
-                        {teamName(g.away_team_id)} @ {teamName(g.home_team_id)}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                        {g.scheduled_at
-                          ? new Date(g.scheduled_at).toLocaleString()
-                          : t("时间待定", "TBD")}{" "}
-                        · {g.status}
-                      </div>
+                <Link
+                  key={g.id}
+                  href={`/basketball-leagues/${slug}/games/${g.id}`}
+                  style={cardLinkStyle({
+                    display: "flex",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  })}
+                >
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#0f172a" }}>
+                      {teamName(g.away_team_id)} @ {teamName(g.home_team_id)}
                     </div>
-                    {g.status === "final" && (
-                      <div style={{ fontWeight: 900, color: "#1e3a8a", fontSize: 18 }}>
-                        {g.away_score} – {g.home_score}
-                      </div>
-                    )}
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                      {g.scheduled_at
+                        ? new Date(g.scheduled_at).toLocaleString()
+                        : t("时间待定", "TBD")}{" "}
+                      · {g.status}
+                    </div>
                   </div>
-                </Card>
+                  {g.status === "final" && (
+                    <div style={{ fontWeight: 900, color: "#1e3a8a", fontSize: 18 }}>
+                      {g.away_score} – {g.home_score}
+                    </div>
+                  )}
+                </Link>
               ))}
             </div>
           )}
@@ -301,6 +314,20 @@ function Card({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
+}
+
+function cardLinkStyle(extra?: React.CSSProperties): React.CSSProperties {
+  return {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    textDecoration: "none",
+    color: "inherit",
+    display: "block",
+    transition: "border-color 0.15s",
+    ...extra,
+  };
 }
 
 function Empty({ text }: { text: string }) {

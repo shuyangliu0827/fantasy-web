@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 //
 // Body:
 //   { stats: Array<{ player_id, team_id?, min?, pts, reb, ast, stl, blk, tov,
-//                    fgm, fga, fg3m, ftm, fta }> }
+//                    fgm, fga, fg3m, fg3a, ftm, fta }> }
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -37,6 +37,7 @@ type StatInput = {
   fgm?: number;
   fga?: number;
   fg3m?: number;
+  fg3a?: number;
   ftm?: number;
   fta?: number;
 };
@@ -105,6 +106,7 @@ async function upsertBoxScore(req: Request, gameId: string) {
       fgm: n(s.fgm),
       fga: n(s.fga),
       fg3m: n(s.fg3m),
+      fg3a: n(s.fg3a),
       ftm: n(s.ftm),
       fta: n(s.fta),
     };
@@ -125,7 +127,10 @@ async function upsertBoxScore(req: Request, gameId: string) {
     .upsert(rows, { onConflict: "game_id,player_id" })
     .select();
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message, code: error.code, hint: error.hint, details: error.details },
+      { status: 500 },
+    );
   }
   return NextResponse.json({ stats: data ?? [] });
 }

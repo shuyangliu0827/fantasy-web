@@ -31,6 +31,14 @@ export async function GET(
   const userId = await getCurrentUserIdFromRequest(req);
   try {
     const access = await getBasketballLeagueAccess(supabase, league.id, userId);
+
+    // Pending leagues are invisible to the public — only admins/owners
+    // can land on the slug while it's pending approval.
+    const isAdminLike = access.isPlatformAdmin || access.leagueAdminRole !== null;
+    if (league.status !== "approved" && !isAdminLike) {
+      return NextResponse.json({ error: "league_not_found" }, { status: 404 });
+    }
+
     if (!access.canView) {
       // Strip full league payload — return only what walls need to render.
       return NextResponse.json({

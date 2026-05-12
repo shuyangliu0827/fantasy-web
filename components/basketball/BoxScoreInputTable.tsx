@@ -18,6 +18,7 @@ type StatRow = {
   fgm: number;
   fga: number;
   fg3m: number;
+  fg3a: number;
   ftm: number;
   fta: number;
   fantasy_points?: number | null;
@@ -41,6 +42,7 @@ const COLS: Array<{ key: keyof StatRow; label: string }> = [
   { key: "fgm", label: "FGM" },
   { key: "fga", label: "FGA" },
   { key: "fg3m", label: "3PM" },
+  { key: "fg3a", label: "3PA" },
   { key: "ftm", label: "FTM" },
   { key: "fta", label: "FTA" },
 ];
@@ -59,6 +61,7 @@ function blankRow(p: Player): StatRow {
     fgm: 0,
     fga: 0,
     fg3m: 0,
+    fg3a: 0,
     ftm: 0,
     fta: 0,
   };
@@ -100,9 +103,19 @@ export default function BoxScoreInputTable({
       { method: "POST", body: JSON.stringify({ stats: rows }) },
     );
     setBusy(false);
-    const body = await res.json().catch(() => ({}));
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      hint?: string;
+      details?: string;
+      code?: string;
+      stats?: StatRow[];
+    };
     if (!res.ok) {
-      setMsg({ kind: "err", text: body.error ?? `HTTP ${res.status}` });
+      const parts = [body.error ?? `HTTP ${res.status}`];
+      if (body.code) parts.push(`(${body.code})`);
+      if (body.hint) parts.push(`hint: ${body.hint}`);
+      if (body.details) parts.push(`details: ${body.details}`);
+      setMsg({ kind: "err", text: parts.join(" — ") });
       return;
     }
     setMsg({ kind: "ok", text: t("已保存", "Saved") });
