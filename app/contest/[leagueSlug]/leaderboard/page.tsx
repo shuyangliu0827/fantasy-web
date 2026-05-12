@@ -7,6 +7,7 @@ import ContestNav from "@/components/ContestNav";
 import LeagueContestPageShell from "@/components/contest/league/PageShell";
 import LeaderboardView from "@/components/contest/league/LeaderboardView";
 import { ContestStatusHeader } from "@/components/contest/league/Builder";
+import UnavailableNotice from "@/components/contest/league/UnavailableNotice";
 import { useLeagueContest } from "@/components/contest/league/useLeagueContest";
 import type { LeaderEntry } from "@/components/contest/league/types";
 import { basketballJson } from "@/lib/basketball/client";
@@ -26,7 +27,7 @@ export default function LeagueContestLeaderboardPage({
 
 function Inner({ leagueSlug }: { leagueSlug: string }) {
   const { t } = useLang();
-  const { loading, league, contest, unavailable } = useLeagueContest(leagueSlug);
+  const { loading, league, contest, unavailable, date, timezone } = useLeagueContest(leagueSlug);
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(true);
 
@@ -93,24 +94,11 @@ function Inner({ leagueSlug }: { leagueSlug: string }) {
       contestId={contest?.id ?? null}
     >
       {!contest ? (
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #e2e8f0",
-            borderRadius: 16,
-            padding: "40px 24px",
-            textAlign: "center",
-            color: "#64748b",
-          }}
-        >
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🏀</div>
-          <p style={{ margin: 0 }}>
-            {t(
-              "今日没有比赛。请等待联赛安排下一场比赛后再来。",
-              "No games scheduled today. Check back once the league schedules its next game.",
-            )}
-          </p>
-        </div>
+        <UnavailableNotice
+          kind={unavailable ?? "no_contest_today"}
+          date={date}
+          timezone={timezone}
+        />
       ) : (
         <>
           <ContestStatusHeader contest={contest} />

@@ -6,21 +6,30 @@
 // (pool/lineup for build, leaderboard entries for leaderboard).
 
 import { useCallback, useEffect, useState } from "react";
-import { basketballJson } from "@/lib/basketball/client";
+import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import type { Contest, League } from "./types";
+
+export type UnavailableKind =
+  | "league_not_found"
+  | "league_not_enabled"
+  | "no_contest_today"
+  | "no_teams_in_games"
+  | "no_players_in_pool";
 
 export type LeagueContestState = {
   loading: boolean;
   league: League | null;
   contest: Contest | null;
-  /**
-   * Reason the contest is unavailable, when known:
-   *   - "league_not_found"    : league slug doesn't exist
-   *   - "league_not_enabled"  : league exists but isn't approved + public + contest-enabled
-   *   - "no_contest_today"    : league is enabled but has no contest today
-   */
-  unavailable: "league_not_found" | "league_not_enabled" | "no_contest_today" | null;
+  unavailable: UnavailableKind | null;
+  /** Local date the resolver looked at — only set for no_contest_today / no_teams_in_games / no_players_in_pool. */
+  date: string | null;
+  /** League timezone for that same date. */
+  timezone: string | null;
 };
+
+type TodayBody =
+  | { contest: Contest }
+  | { error: string; date?: string; timezone?: string };
 
 export function useLeagueContest(leagueSlug: string): LeagueContestState {
   const [state, setState] = useState<LeagueContestState>({
@@ -28,6 +37,8 @@ export function useLeagueContest(leagueSlug: string): LeagueContestState {
     league: null,
     contest: null,
     unavailable: null,
+    date: null,
+    timezone: null,
   });
 
   const load = useCallback(async () => {
@@ -35,7 +46,10 @@ export function useLeagueContest(leagueSlug: string): LeagueContestState {
       `/api/basketball-leagues/by-slug/${leagueSlug}`,
     );
     if (lRes.status === 404 || !lRes.data) {
-      setState({ loading: false, league: null, contest: null, unavailable: "league_not_found" });
+      setState({
+        loading: false, league: null, contest: null,
+        unavailable: "league_not_found", date: null, timezone: null,
+      });
       return;
     }
     const league = lRes.data.league;
@@ -45,19 +59,34 @@ export function useLeagueContest(leagueSlug: string): LeagueContestState {
       league.visibility !== "public" ||
       !league.is_contest_enabled
     ) {
-      setState({ loading: false, league, contest: null, unavailable: "league_not_enabled" });
+      setState({
+        loading: false, league, contest: null,
+        unavailable: "league_not_enabled", date: null, timezone: null,
+      });
       return;
     }
 
-    const cRes = await basketballJson<{ contest: Contest }>(
+    const res = await basketballFetch(
       `/api/basketball-contests/today?leagueSlug=${encodeURIComponent(leagueSlug)}`,
     );
-    if (cRes.status === 404 || !cRes.data) {
-      setState({ loading: false, league, contest: null, unavailable: "no_contest_today" });
+    const body = (await res.json().catch(() => null)) as TodayBody | null;
+
+    if (res.ok && body && "contest" in body) {
+      setState({
+        loading: false, league, contest: body.contest,
+        unavailable: null, date: null, timezone: null,
+      });
       return;
     }
 
-    setState({ loading: false, league, contest: cRes.data.contest, unavailable: null });
+    const err = body && "error" in body ? body.error : `http_${res.status}`;
+    const date = body && "date" in body ? body.date ?? null : null;
+    const timezone = body && "timezone" in body ? body.timezone ?? null : null;
+    const kind = mapUnavailable(err);
+    setState({
+      loading: false, league, contest: null,
+      unavailable: kind, date, timezone,
+    });
   }, [leagueSlug]);
 
   useEffect(() => {
@@ -65,4 +94,15 @@ export function useLeagueContest(leagueSlug: string): LeagueContestState {
   }, [load]);
 
   return state;
+}
+
+function mapUnavailable(err: string | undefined): UnavailableKind {
+  switch (err) {
+    case "no_contest_today":    return "no_contest_today";
+    case "no_teams_in_games":   return "no_teams_in_games";
+    case "no_players_in_pool":  return "no_players_in_pool";
+    case "league_not_enabled":  return "league_not_enabled";
+    case "league_not_found":    return "league_not_found";
+    default:                    return "no_contest_today";
+  }
 }

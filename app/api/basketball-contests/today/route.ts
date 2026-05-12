@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 // GET /api/basketball-contests/today?leagueSlug=...
 //
-// Returns today's contest for the league (UTC). Auto-seeds the contest +
-// player pool on first access when at least one game is scheduled today.
+// Returns today's contest for the league (in the league's timezone).
+// Auto-seeds the contest + game-aware player pool on first access when
+// at least one game is scheduled today.
 //
 // Public — anyone can read. Lineup mutation routes do their own auth.
 
@@ -30,7 +31,20 @@ export async function GET(req: Request) {
     case "ok":
       return NextResponse.json({ contest: res.contest });
     case "no_games":
-      return NextResponse.json({ error: "no_contest_today", date: res.date }, { status: 404 });
+      return NextResponse.json(
+        { error: "no_contest_today", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
+    case "no_teams_in_games":
+      return NextResponse.json(
+        { error: "no_teams_in_games", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
+    case "no_players":
+      return NextResponse.json(
+        { error: "no_players_in_pool", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
     case "league_not_enabled":
       return NextResponse.json({ error: "league_not_enabled" }, { status: 404 });
     case "error":

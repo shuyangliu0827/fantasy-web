@@ -622,25 +622,50 @@ function GamesTab({
   const [when, setWhen] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
+  const sameTeam = !!home && !!away && home === away;
+  const canSubmit = !!home && !!away && !!when && !sameTeam;
+
   const add = async () => {
     setErr(null);
+    if (!home) { setErr(t("请选择主队", "Pick a home team")); return; }
+    if (!away) { setErr(t("请选择客队", "Pick an away team")); return; }
+    if (!when) { setErr(t("请选择比赛时间", "Pick a scheduled time")); return; }
+    if (home === away) { setErr(t("主客队不能相同", "Home and away cannot be the same team")); return; }
+
     const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/games`, {
       method: "POST",
       body: JSON.stringify({
-        home_team_id: home || null,
-        away_team_id: away || null,
-        scheduled_at: when ? new Date(when).toISOString() : null,
+        home_team_id: home,
+        away_team_id: away,
+        scheduled_at: new Date(when).toISOString(),
       }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setErr(body.error ?? `HTTP ${res.status}`);
+      setErr(body.reason ?? body.error ?? `HTTP ${res.status}`);
       return;
     }
     setHome("");
     setAway("");
     setWhen("");
     onChanged();
+  };
+
+  const remove = async (gameId: string) => {
+    setErr(null);
+    if (!confirm(t("确认删除该比赛？此操作无法撤销。", "Delete this game? This cannot be undone."))) {
+      return;
+    }
+    const res = await basketballFetch(
+      `/api/basketball-leagues/${leagueId}/games/${gameId}`,
+      { method: "DELETE" },
+    );
+    if (res.status === 204) {
+      onChanged();
+      return;
+    }
+    const body = await res.json().catch(() => ({}));
+    setErr(body.error ?? `HTTP ${res.status}`);
   };
 
   const teamName = (id: string | null) =>
@@ -680,10 +705,15 @@ function GamesTab({
           onChange={(e) => setWhen(e.target.value)}
           style={{ ...inputStyle(), flex: "1 1 200px" }}
         />
-        <button onClick={add} style={primaryBtn(false)}>
+        <button onClick={add} disabled={!canSubmit} style={primaryBtn(!canSubmit)}>
           {t("添加比赛", "Add game")}
         </button>
       </div>
+      {sameTeam && (
+        <div style={{ color: "#991b1b", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+          {t("主客队不能相同", "Home and away cannot be the same team")}
+        </div>
+      )}
       {err && (
         <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
           {err}
@@ -702,9 +732,82 @@ function GamesTab({
                 {g.scheduled_at ? new Date(g.scheduled_at).toLocaleString() : t("时间待定", "TBD")}
               </span>
               <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{g.status}</span>
+              <button
+                onClick={() => remove(g.id)}
+                style={{
+                  marginLeft: "auto",
+                  background: "transparent",
+                  border: "1px solid #fecaca",
+                  color: "#991b1b",
+                  borderRadius: 6,
+                  padding: "4px 10px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {t("删除", "Delete")}
+              </button>
             </li>
           ))}
         </ul>
+      )}
+
+      <ContestDiagnosticsPanel leagueId={leagueId} />
+    </div>
+  );
+}
+
+function ContestDiagnosticsPanel({ leagueId }: { leagueId: string }) {
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setErr(null);
+    const res = await basketballJson<Record<string, unknown>>(
+      `/api/basketball-leagues/${leagueId}/contest-diagnostics`,
+    );
+    setLoading(false);
+    if (res.error) { setErr(res.error); return; }
+    setData(res.data ?? null);
+  };
+
+  return (
+    <div style={{ marginTop: 24, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "#fafafa" }}>
+      <button
+        onClick={() => { setOpen((v) => !v); if (!open && !data) load(); }}
+        style={{
+          background: "transparent", border: "none", cursor: "pointer",
+          fontSize: 13, fontWeight: 700, color: "#0f172a",
+        }}
+      >
+        {open ? "▾" : "▸"} {t("竞赛诊断", "Contest diagnostics")}
+      </button>
+      {open && (
+        <div style={{ marginTop: 10, fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+          {loading && <div style={{ color: "#64748b" }}>{t("加载中…", "Loading…")}</div>}
+          {err && <div style={{ color: "#991b1b" }}>{err}</div>}
+          {data && (
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          )}
+          <button
+            onClick={load}
+            style={{
+              marginTop: 8,
+              background: "#1e3a8a", color: "#fff",
+              border: "none", borderRadius: 6,
+              padding: "4px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            {t("刷新", "Refresh")}
+          </button>
+        </div>
       )}
     </div>
   );

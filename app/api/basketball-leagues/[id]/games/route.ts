@@ -3,6 +3,8 @@ export const dynamic = "force-dynamic";
 //
 // GET  — visibility-gated list of games (newest scheduled_at first).
 // POST — league admin / platform admin / approved stat keeper creates a game.
+//        Strict validation: home, away, and scheduled_at are required;
+//        home != away; both teams must belong to this league.
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -39,6 +41,19 @@ export async function GET(
   }
 }
 
+type InvalidReason =
+  | "missing_home_team"
+  | "missing_away_team"
+  | "missing_scheduled_at"
+  | "same_team"
+  | "invalid_scheduled_at"
+  | "team_not_in_league"
+  | "invalid_status";
+
+function invalid(reason: InvalidReason) {
+  return NextResponse.json({ error: "invalid_game", reason }, { status: 400 });
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -58,16 +73,37 @@ export async function POST(
       home_score?: number | null;
       away_score?: number | null;
     };
+
+    const home = (body.home_team_id ?? "").trim();
+    const away = (body.away_team_id ?? "").trim();
+    const sched = (body.scheduled_at ?? "").trim();
+    if (!home) return invalid("missing_home_team");
+    if (!away) return invalid("missing_away_team");
+    if (!sched) return invalid("missing_scheduled_at");
+    if (home === away) return invalid("same_team");
+
+    const schedDate = new Date(sched);
+    if (Number.isNaN(schedDate.getTime())) return invalid("invalid_scheduled_at");
+
     const status = body.status ?? "scheduled";
-    if (!GAME_STATUS.has(status)) throw new AccessError("invalid_status", 400);
+    if (!GAME_STATUS.has(status)) return invalid("invalid_status");
+
+    // Both teams must belong to this league.
+    const { data: teams, error: teamsErr } = await supabase
+      .from("basketball_teams")
+      .select("id")
+      .eq("basketball_league_id", id)
+      .in("id", [home, away]);
+    if (teamsErr) return NextResponse.json({ error: teamsErr.message }, { status: 500 });
+    if (!teams || teams.length !== 2) return invalid("team_not_in_league");
 
     const { data, error } = await supabase
       .from("basketball_games")
       .insert({
         basketball_league_id: id,
-        home_team_id: body.home_team_id ?? null,
-        away_team_id: body.away_team_id ?? null,
-        scheduled_at: body.scheduled_at ?? null,
+        home_team_id: home,
+        away_team_id: away,
+        scheduled_at: schedDate.toISOString(),
         status,
         home_score: body.home_score ?? null,
         away_score: body.away_score ?? null,
