@@ -522,15 +522,25 @@ function PlayersTab({
   const [teamId, setTeamId] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
 
+  // Keep in sync with lib/basketball/contest-positions.ts CANONICAL_POSITIONS.
+  const POSITION_OPTIONS = [
+    "PG", "SG", "SF", "PF", "C",
+    "PG/SG", "SG/SF", "SF/PF", "PF/C",
+  ] as const;
+
+  const canSubmit = !!name.trim() && !!position && !!teamId;
+
   const add = async () => {
-    if (!name.trim()) return;
     setErr(null);
+    if (!name.trim()) { setErr(t("请填写球员名", "Display name is required")); return; }
+    if (!teamId) { setErr(t("请选择球队", "Pick a team")); return; }
+    if (!position) { setErr(t("请选择位置", "Pick a position")); return; }
     const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/players`, {
       method: "POST",
       body: JSON.stringify({
         display_name: name.trim(),
-        position: position || undefined,
-        team_id: teamId || null,
+        position,
+        team_id: teamId,
       }),
     });
     if (!res.ok) {
@@ -553,25 +563,29 @@ function PlayersTab({
           placeholder={t("球员名", "Display name")}
           style={{ ...inputStyle(), flex: "2 1 200px" }}
         />
-        <input
+        <select
           value={position}
           onChange={(e) => setPosition(e.target.value)}
-          placeholder="POS"
-          style={{ ...inputStyle(), flex: "1 1 80px" }}
-        />
+          style={{ ...inputStyle(), flex: "1 1 110px" }}
+        >
+          <option value="">{t("位置", "Position")}</option>
+          {POSITION_OPTIONS.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
         <select
           value={teamId}
           onChange={(e) => setTeamId(e.target.value)}
           style={{ ...inputStyle(), flex: "1 1 160px" }}
         >
-          <option value="">{t("无球队", "No team")}</option>
+          <option value="">{t("选择球队", "Pick team")}</option>
           {teams.map((tm) => (
             <option key={tm.id} value={tm.id}>
               {tm.name}
             </option>
           ))}
         </select>
-        <button onClick={add} style={primaryBtn(false)}>
+        <button onClick={add} disabled={!canSubmit} style={primaryBtn(!canSubmit)}>
           {t("添加", "Add")}
         </button>
       </div>

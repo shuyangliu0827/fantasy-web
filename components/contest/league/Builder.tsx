@@ -7,6 +7,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
+import {
+  getEligibleSlots,
+  SLOT_LABELS as POSITION_SLOT_LABELS,
+} from "@/lib/basketball/contest-positions";
 import type {
   Contest,
   LineupResponse,
@@ -14,6 +18,7 @@ import type {
   PoolPlayer,
 } from "./types";
 import { SLOT_LABELS } from "./types";
+import SlotPickerModal from "./SlotPickerModal";
 
 export default function ContestBuilder({ contest }: { contest: Contest }) {
   const { t } = useLang();
@@ -24,6 +29,10 @@ export default function ContestBuilder({ contest }: { contest: Contest }) {
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: "err" | "ok"; text: string } | null>(null);
+  const [slotPicker, setSlotPicker] = useState<{
+    player: PoolPlayer;
+    eligibleSlots: number[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     const [poolRes, lineupRes] = await Promise.all([
@@ -75,26 +84,73 @@ export default function ContestBuilder({ contest }: { contest: Contest }) {
   const isSubmitted = lineup?.status === "submitted" || lineup?.status === "scored";
   const editable = !isLocked && !isSubmitted;
 
-  const togglePick = (player: PoolPlayer) => {
-    if (!editable) return;
+  const assignToSlot = (player: PoolPlayer, slot: number) => {
     setMsg(null);
     setPicks((prev) => {
       const next = [...prev];
-      const idx = next.indexOf(player.player_id);
-      if (idx >= 0) {
-        next[idx] = null;
-        return next;
-      }
-      const empty = next.indexOf(null);
-      if (empty < 0) return prev;
-      const wouldBe = salaryUsed + player.salary;
+      const existing = next.indexOf(player.player_id);
+      if (existing >= 0) next[existing] = null;
+      const wouldBe = salaryUsed + player.salary - (existing >= 0 ? player.salary : 0);
       if (wouldBe > cap) {
         setMsg({ kind: "err", text: t("超出工资帽", "Over salary cap") });
         return prev;
       }
-      next[empty] = player.player_id;
+      next[slot] = player.player_id;
       return next;
     });
+  };
+
+  const togglePick = (player: PoolPlayer) => {
+    if (!editable) return;
+    setMsg(null);
+
+    // Toggle off if already picked.
+    const existing = picks.indexOf(player.player_id);
+    if (existing >= 0) {
+      setPicks((prev) => {
+        const next = [...prev];
+        next[existing] = null;
+        return next;
+      });
+      return;
+    }
+
+    // Find empty slots this player is eligible for. PG/SG → can fill PG or SG.
+    const openSlots: number[] = [];
+    for (let i = 0; i < picks.length; i++) {
+      if (picks[i] == null) openSlots.push(i);
+    }
+    if (openSlots.length === 0) {
+      setMsg({ kind: "err", text: t("阵容已满", "Lineup is full") });
+      return;
+    }
+    const eligible = getEligibleSlots(player.position, openSlots);
+    if (eligible.length === 0) {
+      const allEligible = getEligibleSlots(player.position);
+      if (allEligible.length === 0) {
+        setMsg({
+          kind: "err",
+          text: t(
+            "该球员位置不适合任何位置",
+            "This player has no eligible slot",
+          ),
+        });
+      } else {
+        setMsg({
+          kind: "err",
+          text: t(
+            "该球员的可用位置已被占用",
+            "All eligible slots are already filled",
+          ),
+        });
+      }
+      return;
+    }
+    if (eligible.length === 1) {
+      assignToSlot(player, eligible[0]);
+      return;
+    }
+    setSlotPicker({ player, eligibleSlots: eligible });
   };
 
   const removeFromSlot = (slotIdx: number) => {
@@ -219,10 +275,22 @@ export default function ContestBuilder({ contest }: { contest: Contest }) {
 
       <PlayerPool
         pool={pool}
-        picked={picks.filter((x): x is string => !!x)}
+        picks={picks}
         onToggle={togglePick}
         editable={editable}
       />
+
+      {slotPicker && (
+        <SlotPickerModal
+          playerName={slotPicker.player.name}
+          eligibleSlots={slotPicker.eligibleSlots}
+          onPick={(slot) => {
+            assignToSlot(slotPicker.player, slot);
+            setSlotPicker(null);
+          }}
+          onCancel={() => setSlotPicker(null)}
+        />
+      )}
     </>
   );
 }
@@ -499,21 +567,28 @@ function Stat({
 
 function PlayerPool({
   pool,
-  picked,
+  picks,
   onToggle,
   editable,
 }: {
   pool: PoolPlayer[];
-  picked: string[];
+  picks: (string | null)[];
   onToggle: (p: PoolPlayer) => void;
   editable: boolean;
 }) {
   const { t } = useLang();
-  const pickedSet = new Set(picked);
+  const pickedSet = new Set(picks.filter((x): x is string => !!x));
+  const openSlots: number[] = [];
+  for (let i = 0; i < picks.length; i++) {
+    if (picks[i] == null) openSlots.push(i);
+  }
   if (pool.length === 0) {
     return (
       <div style={{ color: "#94a3b8", marginTop: 24, fontSize: 14, textAlign: "center" }}>
-        {t("球员池为空。请联赛管理员先添加球员。", "Player pool is empty. League admin must add players first.")}
+        {t(
+          "球员池为空。请联赛管理员将参赛球队的球员加入。",
+          "Player pool is empty. League admin must roster players to the teams playing today.",
+        )}
       </div>
     );
   }
@@ -547,6 +622,7 @@ function PlayerPool({
               <th style={th()}></th>
               <th style={th()}>{t("球员", "Player")}</th>
               <th style={{ ...th(), textAlign: "center" }}>POS</th>
+              <th style={{ ...th(), textAlign: "center" }}>{t("可用位置", "Eligible")}</th>
               <th style={{ ...th(), textAlign: "center" }}>TEAM</th>
               <th style={{ ...th(), textAlign: "center" }}>{t("均值", "FP/G")}</th>
               <th style={{ ...th(), textAlign: "center" }}>GP</th>
@@ -556,14 +632,19 @@ function PlayerPool({
           <tbody>
             {pool.map((p) => {
               const isPicked = pickedSet.has(p.player_id);
+              const openEligible = getEligibleSlots(p.position, openSlots);
+              const allEligible = getEligibleSlots(p.position);
+              const hasOpenSlot = openEligible.length > 0;
+              const clickable = editable && (isPicked || hasOpenSlot);
               return (
                 <tr
                   key={p.player_id}
                   onClick={() => onToggle(p)}
                   style={{
                     borderTop: "1px solid #f1f5f9",
-                    cursor: editable ? "pointer" : "default",
+                    cursor: clickable ? "pointer" : "not-allowed",
                     background: isPicked ? "#eef2ff" : "transparent",
+                    opacity: clickable || isPicked ? 1 : 0.5,
                   }}
                 >
                   <td style={{ ...td(), textAlign: "center", width: 28 }}>
@@ -574,6 +655,11 @@ function PlayerPool({
                   </td>
                   <td style={{ ...td(), textAlign: "center", color: "#475569" }}>
                     {p.position ?? "—"}
+                  </td>
+                  <td style={{ ...td(), textAlign: "center", color: "#475569", fontSize: 12 }}>
+                    {allEligible.length === 0
+                      ? "—"
+                      : allEligible.map((s) => POSITION_SLOT_LABELS[s]).join("/")}
                   </td>
                   <td style={{ ...td(), textAlign: "center", color: "#475569" }}>
                     {p.team_abbr ?? p.team_name ?? "—"}

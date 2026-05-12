@@ -20,6 +20,7 @@ import {
   isPlatformAdmin,
   getBasketballLeagueAdminRole,
 } from "@/lib/basketball/access";
+import { isCanonicalPosition } from "@/lib/basketball/contest-positions";
 
 const SAFE_FIELDS = [
   "display_name",
@@ -71,6 +72,15 @@ export async function PATCH(
         throw new AccessError(`field_not_editable:${key}`, 403);
       }
       patch[key as SafeField] = body[key];
+    }
+
+    // Position, if changed, must be one of the canonical fantasy values.
+    // Null/empty is permitted only for non-DFS-eligible legacy rows; new
+    // values must be canonical so the lineup builder can apply slot rules.
+    if ("position" in patch && patch.position != null && patch.position !== "") {
+      if (typeof patch.position !== "string" || !isCanonicalPosition(patch.position)) {
+        throw new AccessError("invalid_position", 400);
+      }
     }
 
     const { data, error } = await supabase
