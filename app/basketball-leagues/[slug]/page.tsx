@@ -167,7 +167,7 @@ export default function BasketballLeaguePage({
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
           {league.is_contest_enabled && (
             <Link
-              href={`/contest/${league.slug}`}
+              href={`/contest/${league.slug}/build`}
               style={{
                 display: "inline-block",
                 padding: "8px 14px",

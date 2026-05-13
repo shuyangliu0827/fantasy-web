@@ -70,7 +70,7 @@ export default function WeeklyPage() {
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
-      <ContestNav />
+      <ContestNav scope={{ kind: "nba" }} />
 
       <main style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>

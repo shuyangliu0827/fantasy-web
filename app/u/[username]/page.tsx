@@ -341,7 +341,7 @@ export default function UserProfilePage() {
                 {t("Daily Fantasy 积分", "Daily Fantasy")}
               </div>
               {dfStats.has_played && (
-                <a href="/contest/all-time" style={{ fontSize: 12, color: "#1e3a8a", textDecoration: "none", fontWeight: 500 }}>
+                <a href="/contest/nba/all-time" style={{ fontSize: 12, color: "#1e3a8a", textDecoration: "none", fontWeight: 500 }}>
                   {t("总积分榜", "All-Time Board")} →
                 </a>
               )}

@@ -10,6 +10,11 @@ import {
   AccessError,
   getCurrentUserIdFromRequest,
 } from "@/lib/basketball/access";
+import {
+  LINEUP_SIZE,
+  isEligibleForContestSlot,
+  SLOT_LABELS,
+} from "@/lib/basketball/contest-positions";
 
 type Slot = { slot: number; player_id: string };
 
@@ -124,6 +129,18 @@ export async function POST(
       throw new AccessError("duplicate_player", 400);
     }
 
+    // Slot range must be within the contest's lineup size (PG..C = 0..4 for
+    // basketball; allow flex contests that one day grow past 5 by also
+    // checking against contest.lineup_size).
+    for (const s of slots) {
+      if (!Number.isInteger(s.slot) || s.slot < 0 || s.slot >= contest.lineup_size) {
+        throw new AccessError(`invalid_slot:${s.slot}`, 400);
+      }
+    }
+    if (new Set(slots.map((s) => s.slot)).size !== slots.length) {
+      throw new AccessError("duplicate_slot", 400);
+    }
+
     // Validate every player belongs to this contest pool.
     const { data: pool } = await supabase
       .from("basketball_contest_players")
@@ -140,6 +157,26 @@ export async function POST(
     }
     if (salaryUsed > contest.salary_cap) {
       throw new AccessError(`over_cap:${salaryUsed}>${contest.salary_cap}`, 400);
+    }
+
+    // Slot-position eligibility (only meaningful for the 5-slot PG..C model).
+    if (contest.lineup_size === LINEUP_SIZE) {
+      const { data: playerRows } = await supabase
+        .from("basketball_players")
+        .select("id, position")
+        .in("id", playerIds);
+      const positionById = new Map<string, string | null>(
+        (playerRows ?? []).map((p: { id: string; position: string | null }) => [p.id, p.position]),
+      );
+      for (const s of slots) {
+        const pos = positionById.get(s.player_id);
+        if (!isEligibleForContestSlot(pos, s.slot)) {
+          throw new AccessError(
+            `player_not_eligible_for_slot:${SLOT_LABELS[s.slot] ?? s.slot}`,
+            400,
+          );
+        }
+      }
     }
 
     const now = new Date().toISOString();

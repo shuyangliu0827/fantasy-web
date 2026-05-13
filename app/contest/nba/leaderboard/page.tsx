@@ -168,7 +168,7 @@ function LeaderboardContent() {
   return (
     <div style={{ fontFamily: FONT, background: "#f9fafb", minHeight: "100vh" }}>
       <LightHeader activeHref="/contest" />
-      <ContestNav contestId={resolvedId} />
+      <ContestNav scope={{ kind: "nba" }} contestId={resolvedId} />
 
       <main style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>

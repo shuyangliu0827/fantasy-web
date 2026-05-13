@@ -1,6 +1,10 @@
 "use client";
 // components/ContestNav.tsx
-// Tab navigation shared by all Daily Fantasy sub-pages.
+// Tab navigation shared by all fantasy-contest sub-pages.
+//
+// Two scopes:
+//   - NBA daily fantasy: /contest/nba/{build,leaderboard,weekly,all-time,my-lineup}
+//   - Authorized basketball league: /contest/{slug}/{build,leaderboard}
 //
 // Layout contract: the inner container uses the same maxWidth / margin / padding
 // values as LightHeader so the tab row left-edge aligns with the logo/nav at
@@ -14,16 +18,38 @@ import { useLang } from "@/lib/lang";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
-const TABS = [
-  { href: "/contest",                labelZh: "选阵容",   labelEn: "Build" },
-  { href: "/contest/leaderboard",    labelZh: "每日榜",   labelEn: "Daily Board" },
-  { href: "/contest/weekly",         labelZh: "周积分榜", labelEn: "Weekly" },
-  { href: "/contest/all-time",       labelZh: "总积分榜", labelEn: "All-Time" },
-  { href: "/contest/my-lineup",      labelZh: "我的成绩", labelEn: "My Results" },
-  { href: "/contest/other-leagues",  labelZh: "其他联赛", labelEn: "Other Leagues" },
-] as const;
+type Tab = { href: string; labelZh: string; labelEn: string };
 
-export default function ContestNav({ contestId }: { contestId?: string | null }) {
+export type ContestNavScope =
+  | { kind: "nba" }
+  | { kind: "league"; slug: string; name?: string };
+
+function tabsForScope(scope: ContestNavScope): Tab[] {
+  if (scope.kind === "nba") {
+    return [
+      { href: "/contest/nba/build",       labelZh: "选阵容",   labelEn: "Build" },
+      { href: "/contest/nba/leaderboard", labelZh: "每日榜",   labelEn: "Daily Board" },
+      { href: "/contest/nba/weekly",      labelZh: "周积分榜", labelEn: "Weekly" },
+      { href: "/contest/nba/all-time",    labelZh: "总积分榜", labelEn: "All-Time" },
+      { href: "/contest/nba/my-lineup",   labelZh: "我的成绩", labelEn: "My Results" },
+      { href: "/contest/leagues",         labelZh: "其他联赛", labelEn: "Other Leagues" },
+    ];
+  }
+  const base = `/contest/${scope.slug}`;
+  return [
+    { href: `${base}/build`,       labelZh: "选阵容", labelEn: "Build" },
+    { href: `${base}/leaderboard`, labelZh: "排行榜", labelEn: "Leaderboard" },
+    { href: "/contest/leagues",    labelZh: "全部联赛", labelEn: "All Leagues" },
+  ];
+}
+
+export default function ContestNav({
+  scope,
+  contestId,
+}: {
+  scope: ContestNavScope;
+  contestId?: string | null;
+}) {
   const pathname = usePathname();
   const router   = useRouter();
   const { t }    = useLang();
@@ -37,8 +63,17 @@ export default function ContestNav({ contestId }: { contestId?: string | null })
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const tabs = tabsForScope(scope);
+
   // Horizontal padding that matches LightHeader's inner container exactly.
   const hPad = isMobile ? 10 : 24;
+
+  // Pick the longest-prefix-matching tab as active so that nested routes
+  // (e.g. /contest/nba/leaderboard) win over shorter prefixes.
+  const activeHref = tabs
+    .map((tab) => tab.href)
+    .filter((href) => pathname === href || pathname.startsWith(href + "/"))
+    .sort((a, b) => b.length - a.length)[0];
 
   return (
     // Outer strip — full viewport width, carries the bottom border.
@@ -48,12 +83,12 @@ export default function ContestNav({ contestId }: { contestId?: string | null })
         {/* Scrollable tab row — overflowX so tabs never wrap on narrow screens */}
         <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "8px 0",
                       scrollbarWidth: "none", msOverflowStyle: "none" }}>
-          {TABS.map((tab) => {
-            const active = tab.href === "/contest"
-              ? pathname === "/contest"
-              : pathname.startsWith(tab.href);
+          {tabs.map((tab) => {
+            const active = tab.href === activeHref;
 
-            const href = contestId && tab.href !== "/contest"
+            // Only forward contestId to leaderboard tabs; other tabs ignore it.
+            const wantsContestId = tab.href.endsWith("/leaderboard");
+            const href = wantsContestId && contestId
               ? `${tab.href}?id=${contestId}`
               : tab.href;
 
@@ -79,4 +114,3 @@ export default function ContestNav({ contestId }: { contestId?: string | null })
     </div>
   );
 }
-

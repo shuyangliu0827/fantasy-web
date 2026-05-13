@@ -1,6 +1,9 @@
 export const dynamic = "force-dynamic";
 // GET /api/basketball-contests/by-date?leagueSlug=...&date=YYYY-MM-DD
 // Resolves a specific date. Same auto-seed semantics as /today.
+//
+// `date` is interpreted in the league's IANA timezone
+// (basketball_leagues.timezone, default 'UTC').
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -20,17 +23,41 @@ export async function GET(req: Request) {
 
   const { data: league } = await supabase
     .from("basketball_leagues")
-    .select("id")
+    .select("id, timezone, status, visibility, is_contest_enabled")
     .eq("slug", slug)
-    .maybeSingle();
+    .maybeSingle<{
+      id: string; timezone: string; status: string;
+      visibility: string; is_contest_enabled: boolean;
+    }>();
   if (!league) return NextResponse.json({ error: "league_not_found" }, { status: 404 });
+  if (
+    league.status !== "approved" ||
+    league.visibility !== "public" ||
+    !league.is_contest_enabled
+  ) {
+    return NextResponse.json({ error: "league_not_enabled" }, { status: 404 });
+  }
 
-  const res = await resolveContestForDate(supabase, league.id, date);
+  const tz = league.timezone || "UTC";
+  const res = await resolveContestForDate(supabase, league.id, date, tz);
   switch (res.kind) {
     case "ok":
       return NextResponse.json({ contest: res.contest });
     case "no_games":
-      return NextResponse.json({ error: "no_games_on_date", date: res.date }, { status: 404 });
+      return NextResponse.json(
+        { error: "no_games_on_date", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
+    case "no_teams_in_games":
+      return NextResponse.json(
+        { error: "no_teams_in_games", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
+    case "no_players":
+      return NextResponse.json(
+        { error: "no_players_in_pool", date: res.date, timezone: res.timezone },
+        { status: 404 },
+      );
     case "league_not_enabled":
       return NextResponse.json({ error: "league_not_enabled" }, { status: 404 });
     case "error":

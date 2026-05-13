@@ -25,7 +25,7 @@ const ROUTES: Route[] = [
     titleEn: "Daily Fantasy",
     bodyZh: "选择今晚阵容。",
     bodyEn: "Build tonight's lineup.",
-    path: "/contest",
+    path: "/contest/nba/build",
     event: "challenge_start_picking_click",
   },
   {
@@ -34,7 +34,7 @@ const ROUTES: Route[] = [
     titleEn: "Daily Board",
     bodyZh: "查看今日排名。",
     bodyEn: "See today's leaderboard.",
-    path: "/contest/leaderboard",
+    path: "/contest/nba/leaderboard",
     event: "challenge_daily_board_click",
   },
   {

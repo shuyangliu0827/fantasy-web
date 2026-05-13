@@ -12,6 +12,7 @@ import {
   requireLeagueAdmin,
   requireViewPermission,
 } from "@/lib/basketball/access";
+import { isCanonicalPosition } from "@/lib/basketball/contest-positions";
 
 export async function GET(
   req: Request,
@@ -59,15 +60,40 @@ export async function POST(
       external_provider?: string;
       external_player_id?: string;
     };
-    if (!body.display_name?.trim()) throw new AccessError("missing_display_name", 400);
+    const displayName = body.display_name?.trim();
+    if (!displayName) throw new AccessError("missing_display_name", 400);
+
+    // Strict linkage: a DFS-eligible player must have a team (so the
+    // contest resolver can determine whether they have a game on a
+    // given slate) and a canonical position (so slot eligibility works).
+    const teamId = (body.team_id ?? "").trim();
+    if (!teamId) throw new AccessError("missing_team_id", 400);
+
+    const positionRaw = (body.position ?? "").trim();
+    if (!positionRaw) throw new AccessError("missing_position", 400);
+    if (!isCanonicalPosition(positionRaw)) {
+      throw new AccessError("invalid_position", 400);
+    }
+
+    // Verify the team belongs to this league.
+    const { data: team, error: teamErr } = await supabase
+      .from("basketball_teams")
+      .select("id, basketball_league_id")
+      .eq("id", teamId)
+      .maybeSingle();
+    if (teamErr) return NextResponse.json({ error: teamErr.message }, { status: 500 });
+    if (!team) throw new AccessError("invalid_team_id", 400);
+    if (team.basketball_league_id !== id) {
+      throw new AccessError("team_not_in_league", 400);
+    }
 
     const { data, error } = await supabase
       .from("basketball_players")
       .insert({
         basketball_league_id: id,
-        team_id: body.team_id ?? null,
-        display_name: body.display_name.trim(),
-        position: body.position ?? null,
+        team_id: teamId,
+        display_name: displayName,
+        position: positionRaw,
         jersey_number: body.jersey_number ?? null,
         height: body.height ?? null,
         weight: body.weight ?? null,
