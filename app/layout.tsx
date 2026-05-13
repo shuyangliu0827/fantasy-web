@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LangProvider } from "@/lib/lang";
+import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,7 +16,9 @@ export default function RootLayout({
   return (
     <html lang="zh">
       <body>
-        <LangProvider>{children}</LangProvider>
+        <AnalyticsProvider>
+          <LangProvider>{children}</LangProvider>
+        </AnalyticsProvider>
       </body>
     </html>
   );
