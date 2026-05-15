@@ -30,9 +30,11 @@ type League = {
 type Access = {
   canManageLeague: boolean;
   canManageTeamsPlayersGames: boolean;
+  canManageOwnTeam: boolean;
   canInputStats: boolean;
   leagueAdminRole: "league_owner" | "league_admin" | null;
   isPlatformAdmin: boolean;
+  memberTeamId: string | null;
 };
 
 type Team = {
@@ -55,6 +57,7 @@ type Player = {
   height_cm: number | null;
   weight_kg: number | null;
   birth_year: number | null;
+  bio: string | null;
   is_active: boolean;
 };
 type Game = {
@@ -119,19 +122,26 @@ function LeagueAdminPageInner({ id }: { id: string }) {
     }
     setLeague(data.league);
     setAccess(data.access);
+    if (!data.access.canManageLeague && data.access.canManageOwnTeam) {
+      setTab("players");
+    }
     setLoading(false);
 
-    if (data.access.canManageTeamsPlayersGames) {
-      const [tRes, pRes, gRes, mRes] = await Promise.all([
+    if (data.access.canManageTeamsPlayersGames || data.access.canManageOwnTeam) {
+      const [tRes, pRes, gRes] = await Promise.all([
         basketballJson<{ teams: Team[] }>(`/api/basketball-leagues/${id}/teams`),
         basketballJson<{ players: Player[] }>(`/api/basketball-leagues/${id}/players`),
         basketballJson<{ games: Game[] }>(`/api/basketball-leagues/${id}/games`),
-        basketballJson<typeof members>(`/api/basketball-leagues/${id}/members`),
       ]);
       setTeams(tRes.data?.teams ?? []);
       setPlayers(pRes.data?.players ?? []);
       setGames(gRes.data?.games ?? []);
-      if (mRes.data) setMembers(mRes.data);
+      if (data.access.canManageLeague) {
+        const mRes = await basketballJson<typeof members>(
+          `/api/basketball-leagues/${id}/members`,
+        );
+        if (mRes.data) setMembers(mRes.data);
+      }
     }
   }, [id]);
 
@@ -161,7 +171,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
     );
   }
 
-  if (!access.canManageLeague) {
+  if (!access.canManageLeague && !access.canManageOwnTeam) {
     return (
       <>
         <LightHeader activeHref="" />
@@ -171,6 +181,15 @@ function LeagueAdminPageInner({ id }: { id: string }) {
       </>
     );
   }
+
+  // Team managers (who are not league/platform admins) get a restricted shell:
+  // only the Players tab is interactive; other tabs render a per-tab notice.
+  const isAdminLike = access.canManageLeague;
+  const restrictedNotice = (
+    <div style={{ padding: 40, textAlign: "center", color: "#991b1b", fontWeight: 700 }}>
+      {t("仅联赛管理员可访问。", "League admins only.")}
+    </div>
+  );
 
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "settings", label: t("设置", "Settings") },
@@ -252,34 +271,62 @@ function LeagueAdminPageInner({ id }: { id: string }) {
           ))}
         </nav>
 
-        {tab === "settings" && <SettingsTab league={league} onSaved={refresh} />}
-        {tab === "teams" && <TeamsTab leagueId={id} leagueSlug={league.slug} teams={teams} onChanged={refresh} />}
+        {tab === "settings" &&
+          (isAdminLike ? <SettingsTab league={league} onSaved={refresh} /> : restrictedNotice)}
+        {tab === "teams" &&
+          (isAdminLike ? (
+            <TeamsTab leagueId={id} leagueSlug={league.slug} teams={teams} onChanged={refresh} />
+          ) : (
+            restrictedNotice
+          ))}
         {tab === "players" && (
-          <PlayersTab leagueId={id} leagueSlug={league.slug} teams={teams} players={players} onChanged={refresh} />
-        )}
-        {tab === "games" && (
-          <GamesTab leagueId={id} leagueSlug={league.slug} teams={teams} games={games} onChanged={refresh} />
-        )}
-        {tab === "boxscore" && (
-          <BoxScoreTab
+          <PlayersTab
+            leagueId={id}
             leagueSlug={league.slug}
-            games={games}
             teams={teams}
             players={players}
-            canOverride={
-              access.isPlatformAdmin || access.leagueAdminRole !== null
-            }
-          />
-        )}
-        {tab === "members" && (
-          <MembersTab
-            leagueId={id}
-            teams={teams}
-            members={[...members.pending, ...members.members]}
             onChanged={refresh}
+            isAdminLike={isAdminLike}
+            managerTeamId={access.memberTeamId ?? null}
           />
         )}
-        {tab === "claims" && <PlayerClaimApprovalList players={players} onChanged={refresh} />}
+        {tab === "games" &&
+          (isAdminLike ? (
+            <GamesTab leagueId={id} leagueSlug={league.slug} teams={teams} games={games} onChanged={refresh} />
+          ) : (
+            restrictedNotice
+          ))}
+        {tab === "boxscore" &&
+          (isAdminLike ? (
+            <BoxScoreTab
+              leagueSlug={league.slug}
+              games={games}
+              teams={teams}
+              players={players}
+              canOverride={
+                access.isPlatformAdmin || access.leagueAdminRole !== null
+              }
+            />
+          ) : (
+            restrictedNotice
+          ))}
+        {tab === "members" &&
+          (isAdminLike ? (
+            <MembersTab
+              leagueId={id}
+              teams={teams}
+              members={[...members.pending, ...members.members]}
+              onChanged={refresh}
+            />
+          ) : (
+            restrictedNotice
+          ))}
+        {tab === "claims" &&
+          (isAdminLike ? (
+            <PlayerClaimApprovalList players={players} onChanged={refresh} />
+          ) : (
+            restrictedNotice
+          ))}
       </main>
     </>
   );
@@ -634,23 +681,46 @@ function TeamsTab({
 
 // ─────────── Players tab ───────────
 
+// Keep in sync with lib/basketball/contest-positions.ts CANONICAL_POSITIONS.
+const POSITION_OPTIONS = [
+  "PG", "SG", "SF", "PF", "C",
+  "PG/SG", "SG/SF", "SF/PF", "PF/C",
+] as const;
+
+function avatarUploadErrorMessage(
+  status: number | null,
+  t: (zh: string, en: string) => string,
+): string {
+  if (status === 403) {
+    return t(
+      "你没有权限为该球员上传头像。",
+      "You do not have permission to upload this player avatar.",
+    );
+  }
+  return t("头像上传失败，请重试。", "Avatar upload failed. Please try again.");
+}
+
 function PlayersTab({
   leagueId,
   leagueSlug,
   teams,
   players,
   onChanged,
+  isAdminLike,
+  managerTeamId,
 }: {
   leagueId: string;
   leagueSlug: string;
   teams: Team[];
   players: Player[];
   onChanged: () => void;
+  isAdminLike: boolean;
+  managerTeamId: string | null;
 }) {
   const { t } = useLang();
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
-  const [teamId, setTeamId] = useState<string>("");
+  const [teamId, setTeamId] = useState<string>(isAdminLike ? "" : managerTeamId ?? "");
   const [jersey, setJersey] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -658,17 +728,15 @@ function PlayersTab({
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [errDetails, setErrDetails] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Keep in sync with lib/basketball/contest-positions.ts CANONICAL_POSITIONS.
-  const POSITION_OPTIONS = [
-    "PG", "SG", "SF", "PF", "C",
-    "PG/SG", "SG/SF", "SF/PF", "PF/C",
-  ] as const;
-
-  const canSubmit = !!name.trim() && !!position && !!teamId && !busy;
+  const canEdit = (p: Player) =>
+    isAdminLike || (managerTeamId != null && p.team_id === managerTeamId);
 
   const add = async () => {
     setErr(null);
+    setErrDetails(null);
     if (!name.trim()) { setErr(t("请填写球员名", "Display name is required")); return; }
     if (!teamId) { setErr(t("请选择球队", "Pick a team")); return; }
     if (!position) { setErr(t("请选择位置", "Pick a position")); return; }
@@ -704,17 +772,22 @@ function PlayersTab({
           });
           if (!patchRes.ok) {
             const pb = await patchRes.json().catch(() => ({}));
-            setErr(`avatar_save_failed: ${pb.error ?? patchRes.status}`);
+            setErr(avatarUploadErrorMessage(patchRes.status, t));
+            setErrDetails(String(pb.error ?? patchRes.status));
           }
         } catch (uploadErr) {
-          setErr(
-            `avatar_upload_failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
-          );
+          const raw =
+            uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          // The supabase-js SDK throws a StorageApiError with `statusCode` when RLS denies.
+          // Detect RLS denial heuristically — the message contains "row-level security".
+          const rls = /row[- ]level security/i.test(raw);
+          setErr(avatarUploadErrorMessage(rls ? 403 : null, t));
+          setErrDetails(raw);
         }
       }
       setName("");
       setPosition("");
-      setTeamId("");
+      if (isAdminLike) setTeamId("");
       setJersey("");
       setHeightCm("");
       setWeightKg("");
@@ -725,6 +798,11 @@ function PlayersTab({
       setBusy(false);
     }
   };
+
+  const canSubmit = !!name.trim() && !!position && !!teamId && !busy;
+  const teamOptions = isAdminLike
+    ? teams
+    : teams.filter((tm) => tm.id === managerTeamId);
 
   return (
     <div>
@@ -748,10 +826,11 @@ function PlayersTab({
         <select
           value={teamId}
           onChange={(e) => setTeamId(e.target.value)}
+          disabled={!isAdminLike}
           style={{ ...inputStyle(), flex: "1 1 160px" }}
         >
           <option value="">{t("选择球队", "Pick team")}</option>
-          {teams.map((tm) => (
+          {teamOptions.map((tm) => (
             <option key={tm.id} value={tm.id}>
               {tm.name}
             </option>
@@ -805,8 +884,11 @@ function PlayersTab({
         </button>
       </div>
       {err && (
-        <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
-          {err}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>{err}</div>
+          {errDetails && (
+            <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>{errDetails}</div>
+          )}
         </div>
       )}
       {players.length === 0 ? (
@@ -814,43 +896,393 @@ function PlayersTab({
       ) : (
         <ul style={listStyle()}>
           {players.map((p) => (
-            <li key={p.id} style={rowStyle()}>
-              {p.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={p.avatar_url}
-                  alt=""
-                  style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", background: "#f1f5f9" }}
-                />
-              ) : (
-                <span
-                  style={{
-                    width: 28, height: 28, borderRadius: "50%", background: "#f1f5f9",
-                    display: "inline-block", flexShrink: 0,
+            <li key={p.id} style={{ ...rowStyle(), flexDirection: "column", alignItems: "stretch" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                {p.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.avatar_url}
+                    alt=""
+                    style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", background: "#f1f5f9" }}
+                  />
+                ) : (
+                  <span
+                    style={{
+                      width: 28, height: 28, borderRadius: "50%", background: "#f1f5f9",
+                      display: "inline-block", flexShrink: 0,
+                    }}
+                  />
+                )}
+                <Link
+                  href={`/basketball-leagues/${leagueSlug}/players/${p.id}`}
+                  style={{ fontWeight: 800, color: "#0f172a", textDecoration: "none" }}
+                >
+                  {p.display_name}
+                </Link>
+                {p.jersey_number && (
+                  <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
+                )}
+                <span style={{ color: "#64748b", fontSize: 12 }}>
+                  {[p.position, teams.find((tm) => tm.id === p.team_id)?.name]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+                <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>
+                  {p.claim_status}
+                </span>
+                {!p.is_active && (
+                  <span style={{ color: "#b45309", fontSize: 11, fontWeight: 700 }}>
+                    {t("已停用", "inactive")}
+                  </span>
+                )}
+                {canEdit(p) && (
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                    <button
+                      onClick={() =>
+                        setEditingId((cur) => (cur === p.id ? null : p.id))
+                      }
+                      style={smallBtn("#1e3a8a")}
+                    >
+                      {editingId === p.id ? t("收起", "Close") : t("编辑", "Edit")}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {editingId === p.id && canEdit(p) && (
+                <PlayerEditForm
+                  leagueId={leagueId}
+                  player={p}
+                  teams={teams}
+                  isAdminLike={isAdminLike}
+                  onCancel={() => setEditingId(null)}
+                  onSaved={() => {
+                    setEditingId(null);
+                    onChanged();
+                  }}
+                  onDeleted={() => {
+                    setEditingId(null);
+                    onChanged();
                   }}
                 />
               )}
-              <Link
-                href={`/basketball-leagues/${leagueSlug}/players/${p.id}`}
-                style={{ fontWeight: 800, color: "#0f172a", textDecoration: "none" }}
-              >
-                {p.display_name}
-              </Link>
-              {p.jersey_number && (
-                <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
-              )}
-              <span style={{ color: "#64748b", fontSize: 12 }}>
-                {[p.position, teams.find((tm) => tm.id === p.team_id)?.name]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </span>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>
-                {p.claim_status}
-              </span>
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function PlayerEditForm({
+  leagueId,
+  player,
+  teams,
+  isAdminLike,
+  onCancel,
+  onSaved,
+  onDeleted,
+}: {
+  leagueId: string;
+  player: Player;
+  teams: Team[];
+  isAdminLike: boolean;
+  onCancel: () => void;
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
+  const { t } = useLang();
+  const [name, setName] = useState(player.display_name);
+  const [position, setPosition] = useState(player.position ?? "");
+  const [teamId, setTeamId] = useState<string>(player.team_id ?? "");
+  const [jersey, setJersey] = useState(player.jersey_number ?? "");
+  const [heightCm, setHeightCm] = useState(
+    player.height_cm != null ? String(player.height_cm) : "",
+  );
+  const [weightKg, setWeightKg] = useState(
+    player.weight_kg != null ? String(player.weight_kg) : "",
+  );
+  const [birthYear, setBirthYear] = useState(
+    player.birth_year != null ? String(player.birth_year) : "",
+  );
+  const [bio, setBio] = useState(player.bio ?? "");
+  const [isActive, setIsActive] = useState(player.is_active);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [errDetails, setErrDetails] = useState<string | null>(null);
+
+  const save = async () => {
+    setErr(null);
+    setErrDetails(null);
+    if (!name.trim()) {
+      setErr(t("请填写球员名", "Display name is required"));
+      return;
+    }
+    setBusy(true);
+    try {
+      let avatarUrl: string | null = null;
+      if (avatarFile) {
+        try {
+          avatarUrl = await uploadBasketballPlayerAvatar(leagueId, player.id, avatarFile);
+        } catch (uploadErr) {
+          const raw =
+            uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          const rls = /row[- ]level security/i.test(raw);
+          setErr(avatarUploadErrorMessage(rls ? 403 : null, t));
+          setErrDetails(raw);
+          return;
+        }
+      }
+
+      const heightCmNum = heightCm ? Number(heightCm) : null;
+      const weightKgNum = weightKg ? Number(weightKg) : null;
+      const birthYearNum = birthYear ? Number(birthYear) : null;
+      const patch: Record<string, unknown> = {
+        display_name: name.trim(),
+        position: position || null,
+        jersey_number: jersey || null,
+        height_cm: heightCmNum != null && Number.isFinite(heightCmNum) ? heightCmNum : null,
+        weight_kg: weightKgNum != null && Number.isFinite(weightKgNum) ? weightKgNum : null,
+        birth_year: birthYearNum != null && Number.isFinite(birthYearNum) ? birthYearNum : null,
+        bio: bio || null,
+      };
+      if (avatarUrl) patch.avatar_url = avatarUrl;
+      if (isAdminLike) {
+        if (teamId) patch.team_id = teamId;
+        patch.is_active = isActive;
+      }
+
+      const res = await basketballFetch(
+        `/api/basketball-players/${player.id}/profile`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (force: boolean) => {
+    setErr(null);
+    setErrDetails(null);
+    const confirmMsg = force
+      ? t(
+          "该球员有历史数据，强制删除将一并清除其全部数据，是否继续？",
+          "This player has stat history. Forcing delete will also remove ALL their box-score data. Continue?",
+        )
+      : t("确认删除该球员？此操作无法撤销。", "Delete this player? This cannot be undone.");
+    if (!window.confirm(confirmMsg)) return;
+    setBusy(true);
+    try {
+      const res = await basketballFetch(
+        `/api/basketball-players/${player.id}${force ? "?force=true" : ""}`,
+        { method: "DELETE" },
+      );
+      if (res.status === 204) {
+        onDeleted();
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      const code = (body as { error?: string }).error;
+      if (code === "has_stats") {
+        setErr(
+          t(
+            "该球员有历史数据，无法直接删除，可改为停用。",
+            "This player has stat history and cannot be deleted directly. You can deactivate them instead.",
+          ),
+        );
+      } else if (code === "has_binding") {
+        setErr(
+          t(
+            "该球员已绑定平台用户，请先解绑。",
+            "This player is linked to a platform user. Please unbind first.",
+          ),
+        );
+      } else {
+        setErr(code ?? `HTTP ${res.status}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        padding: 12,
+        background: "#f8fafc",
+        border: "1px solid #e2e8f0",
+        borderRadius: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("球员名", "Display name")}
+          style={{ ...inputStyle(), flex: "2 1 180px" }}
+        />
+        <select
+          value={position}
+          onChange={(e) => setPosition(e.target.value)}
+          style={{ ...inputStyle(), flex: "1 1 110px" }}
+        >
+          <option value="">{t("位置", "Position")}</option>
+          {POSITION_OPTIONS.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        {isAdminLike && (
+          <select
+            value={teamId}
+            onChange={(e) => setTeamId(e.target.value)}
+            style={{ ...inputStyle(), flex: "1 1 160px" }}
+          >
+            <option value="">{t("选择球队", "Pick team")}</option>
+            {teams.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.name}</option>
+            ))}
+          </select>
+        )}
+        <input
+          value={jersey}
+          onChange={(e) => setJersey(e.target.value)}
+          placeholder={t("球衣号", "Jersey #")}
+          style={{ ...inputStyle(), flex: "0 1 100px" }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={heightCm}
+          onChange={(e) => setHeightCm(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("身高 cm", "Height cm")}
+          style={{ ...inputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={weightKg}
+          onChange={(e) => setWeightKg(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("体重 kg", "Weight kg")}
+          style={{ ...inputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={birthYear}
+          onChange={(e) => setBirthYear(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("出生年", "Birth year")}
+          style={{ ...inputStyle(), flex: "1 1 130px" }}
+        />
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            color: "#475569",
+            flex: "1 1 200px",
+          }}
+        >
+          {t("替换头像", "Replace avatar")}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 12 }}
+          />
+        </label>
+      </div>
+      <textarea
+        value={bio}
+        onChange={(e) => setBio(e.target.value)}
+        placeholder={t("简介 (可选)", "Bio (optional)")}
+        rows={2}
+        style={{
+          ...inputStyle(),
+          width: "100%",
+          minHeight: 60,
+          padding: "8px 12px",
+          resize: "vertical",
+          fontFamily: "inherit",
+        }}
+      />
+      {isAdminLike && (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 13,
+            color: "#0f172a",
+            fontWeight: 700,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+          />
+          {t("启用球员（取消勾选即停用）", "Active (uncheck to deactivate)")}
+        </label>
+      )}
+      {err && (
+        <div>
+          <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>{err}</div>
+          {errDetails && (
+            <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>{errDetails}</div>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={save} disabled={busy} style={primaryBtn(busy)}>
+          {busy ? t("保存中…", "Saving…") : t("保存", "Save")}
+        </button>
+        <button onClick={onCancel} disabled={busy} style={smallBtn("#475569")}>
+          {t("取消", "Cancel")}
+        </button>
+        <button
+          onClick={() => remove(false)}
+          disabled={busy}
+          style={{
+            ...smallBtn("#991b1b"),
+            background: "transparent",
+            color: "#991b1b",
+            border: "1px solid #fecaca",
+          }}
+        >
+          {t("删除", "Delete")}
+        </button>
+        {isAdminLike && (
+          <button
+            onClick={() => remove(true)}
+            disabled={busy}
+            style={{
+              ...smallBtn("#991b1b"),
+              background: "transparent",
+              color: "#991b1b",
+              border: "1px dashed #fecaca",
+            }}
+            title={t(
+              "强制删除：包括历史数据。",
+              "Force delete: also removes box-score history.",
+            )}
+          >
+            {t("强制删除", "Force delete")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1392,6 +1824,20 @@ function inputStyle(): React.CSSProperties {
     borderRadius: 8,
     fontSize: 14,
     background: "#fff",
+  };
+}
+
+function smallBtn(bg: string): React.CSSProperties {
+  return {
+    minHeight: 28,
+    padding: "0 10px",
+    background: bg,
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
   };
 }
 

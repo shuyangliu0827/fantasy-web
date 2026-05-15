@@ -7,6 +7,7 @@ import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import PendingAccessNotice from "@/components/basketball/PendingAccessNotice";
+import PlayerClaimModal from "@/components/basketball/PlayerClaimModal";
 import { basketballJson } from "@/lib/basketball/client";
 import { memberRoleLabel } from "@/lib/basketball/role-labels";
 import type { MemberRole } from "@/lib/basketball/access";
@@ -57,6 +58,14 @@ type Game = {
   away_score: number | null;
 };
 
+type MemberPlayer = {
+  id: string;
+  display_name: string;
+  jersey_number: string | null;
+  team_id: string | null;
+  claim_status: string;
+} | null;
+
 export default function BasketballLeaguePage({
   params,
 }: {
@@ -69,15 +78,34 @@ export default function BasketballLeaguePage({
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  const [memberPlayer, setMemberPlayer] = useState<MemberPlayer>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [claimModalOpen, setClaimModalOpen] = useState(false);
+
+  const reload = async () => {
+    const { data, error } = await basketballJson<{
+      league: League;
+      access: Access;
+      member_player: MemberPlayer;
+    }>(`/api/basketball-leagues/by-slug/${slug}`);
+    if (error || !data) {
+      setErr(error ?? "not_found");
+      return;
+    }
+    setLeague(data.league);
+    setAccess(data.access);
+    setMemberPlayer(data.member_player ?? null);
+  };
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error } = await basketballJson<{ league: League; access: Access }>(
-        `/api/basketball-leagues/by-slug/${slug}`,
-      );
+      const { data, error } = await basketballJson<{
+        league: League;
+        access: Access;
+        member_player: MemberPlayer;
+      }>(`/api/basketball-leagues/by-slug/${slug}`);
       if (cancelled) return;
       if (error || !data) {
         setErr(error ?? "not_found");
@@ -86,6 +114,7 @@ export default function BasketballLeaguePage({
       }
       setLeague(data.league);
       setAccess(data.access);
+      setMemberPlayer(data.member_player ?? null);
       if (data.access.canView) {
         const [teamsRes, playersRes, gamesRes] = await Promise.all([
           basketballJson<{ teams: Team[] }>(`/api/basketball-leagues/${data.league.id}/teams`),
@@ -184,28 +213,88 @@ export default function BasketballLeaguePage({
         {access.memberStatus === "approved" && access.memberRole && (
           <div
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: 8,
-              background: "#eff6ff",
-              border: "1px solid #bfdbfe",
-              borderRadius: 999,
-              padding: "6px 14px",
-              fontSize: 13,
-              fontWeight: 700,
-              color: "#1e3a8a",
+              gap: 10,
+              flexWrap: "wrap",
               marginBottom: 14,
             }}
           >
-            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
-              {t("你在本联赛中的身份", "Your role in this league")}
-            </span>
-            <span>· {memberRoleLabel(access.memberRole, lang)}</span>
-            {access.memberRole === "player" && !access.canEditOwnPlayerProfile && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 999,
+                padding: "6px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                color: "#1e3a8a",
+              }}
+            >
               <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
-                · {t("球员档案待绑定", "player profile pending link")}
+                {t("你在本联赛中的身份", "Your role in this league")}
               </span>
-            )}
+              <span>· {memberRoleLabel(access.memberRole, lang)}</span>
+              {access.memberRole === "player" &&
+                access.canEditOwnPlayerProfile &&
+                memberPlayer && (
+                  <span>
+                    · {t("已绑定球员档案", "Linked")} · {memberPlayer.display_name}
+                    {memberPlayer.jersey_number ? ` #${memberPlayer.jersey_number}` : ""}
+                  </span>
+                )}
+              {access.memberRole === "player" &&
+                !access.canEditOwnPlayerProfile &&
+                memberPlayer?.claim_status === "pending" && (
+                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                    · {t("申请已提交，等待审核", "Claim submitted — pending review")}
+                  </span>
+                )}
+              {access.memberRole === "player" &&
+                !access.canEditOwnPlayerProfile &&
+                !memberPlayer && (
+                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                    · {t("球员档案待绑定", "player profile pending link")}
+                  </span>
+                )}
+            </div>
+            {access.memberRole === "player" &&
+              access.canEditOwnPlayerProfile &&
+              memberPlayer && (
+                <Link
+                  href={`/basketball-leagues/${slug}/players/${memberPlayer.id}`}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#1e3a8a",
+                    textDecoration: "none",
+                  }}
+                >
+                  {t("查看我的球员档案 →", "View my player profile →")}
+                </Link>
+              )}
+            {access.memberRole === "player" &&
+              !access.canEditOwnPlayerProfile &&
+              !memberPlayer && (
+                <button
+                  onClick={() => setClaimModalOpen(true)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "#1e3a8a",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t("认领球员档案", "Claim Player Profile")}
+                </button>
+              )}
           </div>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
@@ -380,6 +469,16 @@ export default function BasketballLeaguePage({
           gap: 10px;
         }
       `}</style>
+      {claimModalOpen && (
+        <PlayerClaimModal
+          leagueId={league.id}
+          onClose={() => setClaimModalOpen(false)}
+          onSubmitted={async () => {
+            setClaimModalOpen(false);
+            await reload();
+          }}
+        />
+      )}
     </>
   );
 }

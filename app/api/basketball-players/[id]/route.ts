@@ -1,14 +1,21 @@
 export const dynamic = "force-dynamic";
 // app/api/basketball-players/[id]/route.ts
 //
-// GET — visibility-gated. Player detail with season totals/averages and
-// per-game log. Aggregations computed from basketball_player_game_stats.
+// GET    — visibility-gated. Player detail with season totals/averages and
+//          per-game log. Aggregations computed from basketball_player_game_stats.
+// DELETE — platform admin / league admin / team-manager-of-this-player only.
+//          Refuses (409) when the player has stat history (unless ?force=true)
+//          or an approved binding. Cascades on basketball_stat_events and
+//          basketball_player_game_stats (declared in migration 029/030).
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
 import {
   AccessError,
+  getBasketballLeagueAdminRole,
+  getBasketballLeagueMemberRole,
   getCurrentUserIdFromRequest,
+  isPlatformAdmin,
   requireViewPermission,
 } from "@/lib/basketball/access";
 
@@ -103,6 +110,95 @@ export async function GET(
         : null,
       access,
     });
+  } catch (e) {
+    if (e instanceof AccessError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    return NextResponse.json({ error: "server_error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const url = new URL(req.url);
+  const force = url.searchParams.get("force") === "true";
+  const supabase = serviceDb();
+  try {
+    const userId = await getCurrentUserIdFromRequest(req);
+    if (!userId) throw new AccessError("unauthorized", 401);
+
+    const { data: player, error: pErr } = await supabase
+      .from("basketball_players")
+      .select("id, basketball_league_id, team_id, claim_status, claimed_by_user_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (pErr) throw new AccessError(pErr.message, 500);
+    if (!player) throw new AccessError("player_not_found", 404);
+
+    const isAdmin =
+      (await isPlatformAdmin(supabase, userId)) ||
+      (await getBasketballLeagueAdminRole(
+        supabase,
+        player.basketball_league_id,
+        userId,
+      )) !== null;
+    let isTeamManagerOfPlayer = false;
+    if (!isAdmin) {
+      const member = await getBasketballLeagueMemberRole(
+        supabase,
+        player.basketball_league_id,
+        userId,
+      );
+      isTeamManagerOfPlayer =
+        member.role === "team_manager" &&
+        member.status === "approved" &&
+        member.team_id != null &&
+        member.team_id === player.team_id;
+    }
+    if (!isAdmin && !isTeamManagerOfPlayer) {
+      throw new AccessError("forbidden", 403);
+    }
+
+    if (player.claim_status === "approved") {
+      // Force does NOT bypass binding — admin must explicitly unbind first
+      // via DELETE /api/basketball-players/{id}/claim. This prevents
+      // silently disconnecting the bound platform user.
+      throw new AccessError("has_binding", 409);
+    }
+
+    if (!force) {
+      const [eventsRes, statsRes] = await Promise.all([
+        supabase
+          .from("basketball_stat_events")
+          .select("id", { count: "exact", head: true })
+          .eq("player_id", id),
+        supabase
+          .from("basketball_player_game_stats")
+          .select("id", { count: "exact", head: true })
+          .eq("player_id", id),
+      ]);
+      const eventCount = eventsRes.count ?? 0;
+      const statCount = statsRes.count ?? 0;
+      if (eventCount > 0 || statCount > 0) {
+        return NextResponse.json(
+          { error: "has_stats", hint: "use_force_or_deactivate" },
+          { status: 409 },
+        );
+      }
+    } else if (!isAdmin) {
+      // Only platform/league admins may force-delete with cascade.
+      throw new AccessError("forbidden", 403);
+    }
+
+    const { error } = await supabase
+      .from("basketball_players")
+      .delete()
+      .eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return new NextResponse(null, { status: 204 });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
