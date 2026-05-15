@@ -23,6 +23,7 @@ import {
   calcFantasyPoints,
   ESPN_DEFAULT_WEIGHTS,
 } from "@/lib/fantasy/shared/scoring-config";
+import { recomputeTeamScores } from "@/lib/basketball/aggregate";
 
 type StatInput = {
   player_id: string;
@@ -132,7 +133,8 @@ async function upsertBoxScore(req: Request, gameId: string) {
       { status: 500 },
     );
   }
-  return NextResponse.json({ stats: data ?? [] });
+  const team_scores = await recomputeTeamScores(supabase, gameId);
+  return NextResponse.json({ stats: data ?? [], team_scores });
 }
 
 export async function POST(

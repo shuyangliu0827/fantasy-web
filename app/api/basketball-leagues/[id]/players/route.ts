@@ -55,6 +55,10 @@ export async function POST(
       jersey_number?: string;
       height?: string;
       weight?: string;
+      height_cm?: number | null;
+      weight_kg?: number | null;
+      birth_year?: number | null;
+      is_active?: boolean;
       bio?: string;
       avatar_url?: string;
       external_provider?: string;
@@ -97,6 +101,10 @@ export async function POST(
         jersey_number: body.jersey_number ?? null,
         height: body.height ?? null,
         weight: body.weight ?? null,
+        height_cm: body.height_cm ?? null,
+        weight_kg: body.weight_kg ?? null,
+        birth_year: body.birth_year ?? null,
+        is_active: body.is_active ?? true,
         bio: body.bio ?? null,
         avatar_url: body.avatar_url ?? null,
         external_provider: body.external_provider ?? null,

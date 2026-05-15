@@ -2,12 +2,16 @@ export const dynamic = "force-dynamic";
 // app/api/basketball-leagues/[id]/members/route.ts
 //
 // GET   — list admins + members + pending requests (league admin only).
-// POST  — upsert a member (role ∈ stat_keeper/player/viewer).
-// PATCH — update a member's role/status.
+// POST  — upsert a member with one of the league-scoped roles
+//          (league_admin / team_manager / player / referee /
+//          scorekeeper / viewer). Optional team_id for team_manager &
+//          player.
+// PATCH — update a member's role/status/team_id.
 //
-// League admins can grant ONLY stat_keeper/player/viewer.
-// Platform-admin (league_owner/league_admin) grants live at
-// /api/platform/basketball-leagues/[id]/grant-admin.
+// Platform-admin (league_owner / league_admin) grants live at
+// /api/platform/basketball-leagues/[id]/grant-admin. The `league_admin`
+// role value here is supported but the source of truth for league-admin
+// access remains the basketball_league_admins table.
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -17,8 +21,46 @@ import {
   requireLeagueAdmin,
 } from "@/lib/basketball/access";
 
-const MEMBER_ROLES = new Set(["stat_keeper", "player", "viewer"]);
+const MEMBER_ROLES = new Set([
+  "league_admin",
+  "team_manager",
+  "player",
+  "referee",
+  "scorekeeper",
+  "viewer",
+]);
+const TEAM_SCOPED_ROLES = new Set(["team_manager", "player"]);
 const MEMBER_STATUSES = new Set(["pending", "approved", "rejected", "removed"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireUuid(value: string | undefined): string {
+  if (!value || !UUID_RE.test(value)) {
+    throw new AccessError("invalid_user_id_format", 400);
+  }
+  return value;
+}
+
+async function resolveTeamId(
+  supabase: ReturnType<typeof serviceDb>,
+  leagueId: string,
+  role: string,
+  teamIdRaw: unknown,
+): Promise<string | null> {
+  if (!TEAM_SCOPED_ROLES.has(role)) return null;
+  if (typeof teamIdRaw !== "string" || !teamIdRaw.trim()) return null;
+  const teamId = teamIdRaw.trim();
+  const { data, error } = await supabase
+    .from("basketball_teams")
+    .select("id, basketball_league_id")
+    .eq("id", teamId)
+    .maybeSingle();
+  if (error) throw new AccessError(error.message, 500);
+  if (!data) throw new AccessError("invalid_team_id", 400);
+  if (data.basketball_league_id !== leagueId) {
+    throw new AccessError("team_not_in_league", 400);
+  }
+  return teamId;
+}
 
 export async function GET(
   req: Request,
@@ -37,7 +79,9 @@ export async function GET(
         .eq("basketball_league_id", id),
       supabase
         .from("basketball_league_members")
-        .select("user_id, role, status, invited_by, approved_by, joined_at, approved_at")
+        .select(
+          "user_id, role, status, team_id, invited_by, approved_by, joined_at, approved_at",
+        )
         .eq("basketball_league_id", id),
     ]);
 
@@ -68,13 +112,26 @@ export async function POST(
       user_id?: string;
       role?: string;
       status?: string;
+      team_id?: string | null;
     };
-    if (!body.user_id) throw new AccessError("missing_user_id", 400);
+    const targetUserId = requireUuid(body.user_id);
     if (!body.role || !MEMBER_ROLES.has(body.role)) {
       throw new AccessError("invalid_role", 400);
     }
     const status = body.status ?? "pending";
     if (!MEMBER_STATUSES.has(status)) throw new AccessError("invalid_status", 400);
+
+    const teamId = await resolveTeamId(supabase, id, body.role, body.team_id);
+
+    // Best-effort: confirm the target user exists in public.users so we
+    // can warn the admin if they pasted a stale or unknown UUID. We still
+    // perform the upsert so legacy users without a public.users row work.
+    const { data: targetProfile } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", targetUserId)
+      .maybeSingle();
+    const warning = targetProfile ? null : "user_not_found_in_public_users";
 
     const now = new Date().toISOString();
     const { data, error } = await supabase
@@ -82,9 +139,10 @@ export async function POST(
       .upsert(
         {
           basketball_league_id: id,
-          user_id: body.user_id,
+          user_id: targetUserId,
           role: body.role,
           status,
+          team_id: teamId,
           invited_by: userId,
           approved_by: status === "approved" ? userId : null,
           approved_at: status === "approved" ? now : null,
@@ -95,7 +153,7 @@ export async function POST(
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ member: data });
+    return NextResponse.json({ member: data, warning });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
@@ -118,13 +176,28 @@ export async function PATCH(
       user_id?: string;
       role?: string;
       status?: string;
+      team_id?: string | null;
     };
-    if (!body.user_id) throw new AccessError("missing_user_id", 400);
+    const targetUserId = requireUuid(body.user_id);
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.role === "string") {
       if (!MEMBER_ROLES.has(body.role)) throw new AccessError("invalid_role", 400);
       patch.role = body.role;
+      // Whenever role changes, re-evaluate team_id scope.
+      if (!TEAM_SCOPED_ROLES.has(body.role)) {
+        patch.team_id = null;
+      } else if ("team_id" in body) {
+        patch.team_id = await resolveTeamId(supabase, id, body.role, body.team_id);
+      }
+    } else if ("team_id" in body) {
+      // role unchanged; allow updating team_id only if the body provides
+      // it and current role is team-scoped. We don't know the current
+      // role without a read, so trust the caller (admin-only endpoint).
+      patch.team_id =
+        body.team_id == null
+          ? null
+          : await resolveTeamId(supabase, id, "team_manager", body.team_id);
     }
     if (typeof body.status === "string") {
       if (!MEMBER_STATUSES.has(body.status)) throw new AccessError("invalid_status", 400);
@@ -139,7 +212,7 @@ export async function PATCH(
       .from("basketball_league_members")
       .update(patch)
       .eq("basketball_league_id", id)
-      .eq("user_id", body.user_id)
+      .eq("user_id", targetUserId)
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

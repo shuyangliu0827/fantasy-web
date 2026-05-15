@@ -123,6 +123,16 @@ export default function GameDetailPage({
     load();
   }, [load]);
 
+  // While the game is live, refresh the box score + score every 10s so
+  // viewers see scorekeeper updates without manual reload.
+  useEffect(() => {
+    if (game?.status !== "live") return;
+    const id = setInterval(() => {
+      void load();
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [game?.status, load]);
+
   if (loading) {
     return (
       <>
@@ -209,9 +219,19 @@ export default function GameDetailPage({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-            <TeamPanel name={teamName(game.away_team_id)} score={game.away_score} />
+            <TeamPanel
+              slug={slug}
+              teamId={game.away_team_id}
+              name={teamName(game.away_team_id)}
+              score={game.away_score}
+            />
             <div style={{ fontSize: 18, color: "#94a3b8", fontWeight: 900 }}>@</div>
-            <TeamPanel name={teamName(game.home_team_id)} score={game.home_score} />
+            <TeamPanel
+              slug={slug}
+              teamId={game.home_team_id}
+              name={teamName(game.home_team_id)}
+              score={game.home_score}
+            />
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
@@ -269,12 +289,34 @@ export default function GameDetailPage({
   );
 }
 
-function TeamPanel({ name, score }: { name: string; score: number | null }) {
+function TeamPanel({
+  slug,
+  teamId,
+  name,
+  score,
+}: {
+  slug: string;
+  teamId: string | null;
+  name: string;
+  score: number | null;
+}) {
+  const heading = (
+    <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
+      {name}
+    </div>
+  );
   return (
     <div>
-      <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", letterSpacing: "-0.02em" }}>
-        {name}
-      </div>
+      {teamId ? (
+        <Link
+          href={`/basketball-leagues/${slug}/teams/${teamId}`}
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
+          {heading}
+        </Link>
+      ) : (
+        heading
+      )}
       <div style={{ fontSize: 36, fontWeight: 900, color: "#1e3a8a", lineHeight: 1 }}>
         {score ?? "—"}
       </div>

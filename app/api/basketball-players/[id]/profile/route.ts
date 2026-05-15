@@ -8,9 +8,12 @@ export const dynamic = "force-dynamic";
 //   • a league admin / platform admin
 //
 // Editable fields (whitelist — anything else is rejected as 400):
-//   display_name, position, jersey_number, height, weight, bio, avatar_url
+//   display_name, position, jersey_number, height, weight, height_cm,
+//   weight_kg, birth_year, bio, avatar_url
 //
-// Players cannot edit team_id, stats, fantasy_points, or game records.
+// Players cannot edit team_id, is_active, stats, fantasy_points, or
+// game records. Phase-1: stats remain off-limits to players regardless
+// of whether they are claimed.
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -28,6 +31,9 @@ const SAFE_FIELDS = [
   "jersey_number",
   "height",
   "weight",
+  "height_cm",
+  "weight_kg",
+  "birth_year",
   "bio",
   "avatar_url",
 ] as const;

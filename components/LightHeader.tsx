@@ -9,16 +9,17 @@ import { supabase } from "@/lib/shared/supabase";
 import { basketballFetch } from "@/lib/basketball/client";
 
 const NAV = [
-  { href: "/",         zh: "首页",         en: "Home" },
-  { href: "/discover", zh: "发现",         en: "Discover" },
-  { href: "/league",   zh: "公开联赛",      en: "Leagues" },
-  { href: "/contest",  zh: "每日竞赛", en: "Daily Fantasy" },
+  { href: "/",                  zh: "首页",     en: "Home" },
+  { href: "/discover",          zh: "发现",     en: "Discover" },
+  { href: "/league",            zh: "公开联赛", en: "Public Leagues" },
+  { href: "/contest",           zh: "每日竞赛", en: "Daily Contest" },
+  { href: "/community-leagues", zh: "社区联赛", en: "Community Leagues" },
 ];
 
 const ADMIN_LINK = {
   href: "/admin/platform/basketball-leagues",
   zh: "平台管理",
-  en: "Admin",
+  en: "Platform Admin",
 };
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {

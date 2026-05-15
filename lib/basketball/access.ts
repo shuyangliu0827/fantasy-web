@@ -3,7 +3,9 @@
 // Access-control helpers for the basketball_* tables. Two permission layers:
 //   1. Platform admins   — Blueprint staff (platform_admins table).
 //   2. League admins     — Per-league owners/admins (basketball_league_admins).
-//   3. League members    — stat_keeper / player / viewer (basketball_league_members).
+//   3. League members    — league-scoped roles in basketball_league_members:
+//                          league_admin / team_manager / player /
+//                          referee / scorekeeper / viewer.
 //
 // API handlers gate writes/reads via the `requireXxx` helpers and `AccessError`.
 // RLS on the underlying tables is permissive; real enforcement lives here.
@@ -13,7 +15,13 @@ import { getAuthUserId } from "@/lib/fantasy/daily/auth";
 
 export type LeagueVisibility = "public" | "invite_only" | "private";
 export type LeagueAdminRole = "league_owner" | "league_admin";
-export type MemberRole = "stat_keeper" | "player" | "viewer";
+export type MemberRole =
+  | "league_admin"
+  | "team_manager"
+  | "player"
+  | "referee"
+  | "scorekeeper"
+  | "viewer";
 export type MemberStatus = "pending" | "approved" | "rejected" | "removed";
 
 export class AccessError extends Error {
@@ -67,19 +75,75 @@ export async function getBasketballLeagueMemberRole(
   supabase: SupabaseClient,
   leagueId: string,
   userId: string | null,
-): Promise<{ role: MemberRole | null; status: MemberStatus | null }> {
-  if (!userId) return { role: null, status: null };
+): Promise<{
+  role: MemberRole | null;
+  status: MemberStatus | null;
+  team_id: string | null;
+}> {
+  if (!userId) return { role: null, status: null, team_id: null };
   const { data, error } = await supabase
     .from("basketball_league_members")
-    .select("role, status")
+    .select("role, status, team_id")
     .eq("basketball_league_id", leagueId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (error || !data) return { role: null, status: null };
+  if (error || !data) return { role: null, status: null, team_id: null };
   return {
     role: (data.role as MemberRole) ?? null,
     status: (data.status as MemberStatus) ?? null,
+    team_id: (data.team_id as string | null) ?? null,
   };
+}
+
+/**
+ * Role-aware permission helpers requested by the Phase-1 spec. These all
+ * resolve `true` when the user satisfies the named role for the given
+ * league. `isLeagueAdmin` also returns true for platform admins.
+ */
+export async function isLeagueAdmin(
+  supabase: SupabaseClient,
+  userId: string | null,
+  leagueId: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  if (await isPlatformAdmin(supabase, userId)) return true;
+  const adminRole = await getBasketballLeagueAdminRole(supabase, leagueId, userId);
+  if (adminRole) return true;
+  const member = await getBasketballLeagueMemberRole(supabase, leagueId, userId);
+  return member.role === "league_admin" && member.status === "approved";
+}
+
+export async function isTeamManager(
+  supabase: SupabaseClient,
+  userId: string | null,
+  leagueId: string,
+  teamId?: string | null,
+): Promise<boolean> {
+  if (!userId) return false;
+  const member = await getBasketballLeagueMemberRole(supabase, leagueId, userId);
+  if (member.role !== "team_manager" || member.status !== "approved") return false;
+  if (teamId == null) return true;
+  return member.team_id === teamId;
+}
+
+export async function isScorekeeper(
+  supabase: SupabaseClient,
+  userId: string | null,
+  leagueId: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const member = await getBasketballLeagueMemberRole(supabase, leagueId, userId);
+  return member.role === "scorekeeper" && member.status === "approved";
+}
+
+export async function isReferee(
+  supabase: SupabaseClient,
+  userId: string | null,
+  leagueId: string,
+): Promise<boolean> {
+  if (!userId) return false;
+  const member = await getBasketballLeagueMemberRole(supabase, leagueId, userId);
+  return member.role === "referee" && member.status === "approved";
 }
 
 export type BasketballLeagueAccess = {
@@ -87,11 +151,13 @@ export type BasketballLeagueAccess = {
   leagueAdminRole: LeagueAdminRole | null;
   memberRole: MemberRole | null;
   memberStatus: MemberStatus | null;
+  memberTeamId: string | null;
   visibility: LeagueVisibility;
   canView: boolean;
   canManageLeague: boolean;
   canManageMembers: boolean;
   canManageTeamsPlayersGames: boolean;
+  canManageOwnTeam: boolean;
   canInputStats: boolean;
   canEditOwnPlayerProfile: boolean;
 };
@@ -132,7 +198,8 @@ export async function getBasketballLeagueAccess(
   ]);
 
   const memberApproved = member.status === "approved";
-  const isAdminLike = isAdmin || adminRole !== null;
+  const isAdminLike =
+    isAdmin || adminRole !== null || (member.role === "league_admin" && memberApproved);
 
   const canView =
     isAdminLike ||
@@ -142,8 +209,10 @@ export async function getBasketballLeagueAccess(
   const canManageLeague = isAdminLike;
   const canManageMembers = isAdminLike;
   const canManageTeamsPlayersGames = isAdminLike;
+  const canManageOwnTeam =
+    isAdminLike || (member.role === "team_manager" && memberApproved);
   const canInputStats =
-    isAdminLike || (member.role === "stat_keeper" && memberApproved);
+    isAdminLike || (member.role === "scorekeeper" && memberApproved);
   const canEditOwnPlayerProfile = !!(claim && (claim as { data?: unknown }).data);
 
   return {
@@ -151,11 +220,13 @@ export async function getBasketballLeagueAccess(
     leagueAdminRole: adminRole,
     memberRole: member.role,
     memberStatus: member.status,
+    memberTeamId: member.team_id,
     visibility,
     canView,
     canManageLeague,
     canManageMembers,
     canManageTeamsPlayersGames,
+    canManageOwnTeam,
     canInputStats,
     canEditOwnPlayerProfile,
   };
@@ -184,7 +255,7 @@ export async function requireLeagueAdmin(
   throw new AccessError("forbidden", 403);
 }
 
-/** Platform admin / league admin / approved stat_keeper. */
+/** Platform admin / league admin / approved scorekeeper. */
 export async function requireStatsPermission(
   supabase: SupabaseClient,
   leagueId: string,
@@ -195,7 +266,7 @@ export async function requireStatsPermission(
   const role = await getBasketballLeagueAdminRole(supabase, leagueId, userId);
   if (role === "league_owner" || role === "league_admin") return;
   const member = await getBasketballLeagueMemberRole(supabase, leagueId, userId);
-  if (member.role === "stat_keeper" && member.status === "approved") return;
+  if (member.role === "scorekeeper" && member.status === "approved") return;
   throw new AccessError("forbidden", 403);
 }
 

@@ -10,7 +10,8 @@ const nextConfig: NextConfig = {
       { source: "/contest/weekly",      destination: "/contest/nba/weekly",      permanent: false },
       { source: "/contest/all-time",    destination: "/contest/nba/all-time",    permanent: false },
       { source: "/contest/my-lineup",   destination: "/contest/nba/my-lineup",   permanent: false },
-      { source: "/contest/other-leagues", destination: "/contest/leagues",       permanent: false },
+      { source: "/contest/other-leagues", destination: "/community-leagues",    permanent: false },
+      { source: "/contest/leagues",       destination: "/community-leagues",    permanent: false },
     ];
   },
 };

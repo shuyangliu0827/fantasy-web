@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 //
 // Platform-admin only. This is the ONLY way to create/remove
 // basketball_league_admins rows (league admins themselves cannot grant
-// admin roles — they can only grant stat_keeper/player/viewer).
+// admin roles — they can only grant league_admin / team_manager /
+// player / referee / scorekeeper / viewer via the members route).
 //
 // POST   — upsert { user_id, role } into basketball_league_admins.
 // DELETE — remove the league admin row for { user_id }.

@@ -5,15 +5,22 @@ import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/shared/store";
+import { usePlatformAdmin } from "@/lib/basketball/use-platform-admin";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
-  { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
+  { href: "/league", labelZh: "公开联赛", labelEn: "Public Leagues" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Contest" },
+  { href: "/community-leagues", labelZh: "社区联赛", labelEn: "Community Leagues" },
 ];
+const ADMIN_NAV_ITEM = {
+  href: "/admin/platform/basketball-leagues",
+  labelZh: "平台管理",
+  labelEn: "Platform Admin",
+};
 
 const ALL_TAGS = ["选秀策略", "球员分析", "交易建议", "新手指南", "Punt策略"];
 
@@ -51,6 +58,9 @@ export default function DiscoverPage() {
     setSearchResultUsers(users);
     setSearching(false);
   }, []);
+
+  const { isPlatformAdmin } = usePlatformAdmin();
+  const NAV_ITEMS = isPlatformAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS;
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
