@@ -14,7 +14,7 @@ import {
   requireStatsPermission,
   requireViewPermission,
 } from "@/lib/basketball/access";
-import { recomputeBoxScore } from "@/lib/basketball/aggregate";
+import { recomputeBoxScore, recomputeTeamScores } from "@/lib/basketball/aggregate";
 import type { StatEventType } from "@/lib/basketball/events";
 
 const ALLOWED: ReadonlySet<StatEventType> = new Set<StatEventType>([
@@ -134,7 +134,8 @@ export async function POST(
     if (aggErr) {
       return NextResponse.json({ error: aggErr }, { status: 500 });
     }
-    return NextResponse.json({ event, stats });
+    const team_scores = await recomputeTeamScores(supabase, id);
+    return NextResponse.json({ event, stats, team_scores });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

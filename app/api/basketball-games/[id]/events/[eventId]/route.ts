@@ -12,7 +12,7 @@ import {
   getCurrentUserIdFromRequest,
   requireStatsPermission,
 } from "@/lib/basketball/access";
-import { recomputeBoxScore } from "@/lib/basketball/aggregate";
+import { recomputeBoxScore, recomputeTeamScores } from "@/lib/basketball/aggregate";
 
 export async function DELETE(
   req: Request,
@@ -47,7 +47,8 @@ export async function DELETE(
       event.player_id,
     );
     if (aggErr) return NextResponse.json({ error: aggErr }, { status: 500 });
-    return NextResponse.json({ stats, deleted_event_id: eventId });
+    const team_scores = await recomputeTeamScores(supabase, event.game_id);
+    return NextResponse.json({ stats, deleted_event_id: eventId, team_scores });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

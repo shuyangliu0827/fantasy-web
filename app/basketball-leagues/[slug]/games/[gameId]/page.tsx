@@ -123,6 +123,16 @@ export default function GameDetailPage({
     load();
   }, [load]);
 
+  // While the game is live, refresh the box score + score every 10s so
+  // viewers see scorekeeper updates without manual reload.
+  useEffect(() => {
+    if (game?.status !== "live") return;
+    const id = setInterval(() => {
+      void load();
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [game?.status, load]);
+
   if (loading) {
     return (
       <>

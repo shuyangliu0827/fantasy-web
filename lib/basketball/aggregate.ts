@@ -80,3 +80,50 @@ export async function recomputeBoxScore(
   if (error) return { stats: null, error: error.message };
   return { stats: data, error: null };
 }
+
+/**
+ * Recomputes home_score / away_score on a basketball_games row by summing
+ * `pts` from basketball_player_game_stats grouped by team_id. Called after
+ * every event POST and DELETE so the game row remains the canonical
+ * source of truth for team scores (and stays in sync with the box-score).
+ *
+ * Skips the update when the game cannot be loaded; otherwise sets both
+ * scores even if they're zero (the empty state).
+ */
+export async function recomputeTeamScores(
+  supabase: SupabaseClient,
+  gameId: string,
+): Promise<{ home_score: number; away_score: number } | null> {
+  const { data: game, error: gameErr } = await supabase
+    .from("basketball_games")
+    .select("id, home_team_id, away_team_id")
+    .eq("id", gameId)
+    .maybeSingle();
+  if (gameErr || !game) return null;
+
+  const { data: rows, error: rowsErr } = await supabase
+    .from("basketball_player_game_stats")
+    .select("team_id, pts")
+    .eq("game_id", gameId);
+  if (rowsErr) return null;
+
+  let home = 0;
+  let away = 0;
+  for (const r of rows ?? []) {
+    const pts = Number((r as { pts: number | null }).pts ?? 0);
+    const tid = (r as { team_id: string | null }).team_id;
+    if (tid && tid === game.home_team_id) home += pts;
+    else if (tid && tid === game.away_team_id) away += pts;
+  }
+
+  await supabase
+    .from("basketball_games")
+    .update({
+      home_score: home,
+      away_score: away,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", gameId);
+
+  return { home_score: home, away_score: away };
+}

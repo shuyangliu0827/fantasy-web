@@ -7,7 +7,7 @@ import AuthGate from "@/components/basketball/AuthGate";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import LeagueMemberApprovalList from "@/components/basketball/LeagueMemberApprovalList";
 import PlayerClaimApprovalList from "@/components/basketball/PlayerClaimApprovalList";
-import StatEventInput from "@/components/basketball/StatEventInput";
+import ScorekeepingPanel from "@/components/basketball/ScorekeepingPanel";
 import AdminBoxScoreOverride from "@/components/basketball/AdminBoxScoreOverride";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import {
@@ -59,10 +59,14 @@ type Player = {
 };
 type Game = {
   id: string;
+  basketball_league_id: string;
   scheduled_at: string | null;
-  status: string;
+  status: "scheduled" | "live" | "final" | "cancelled";
   home_team_id: string | null;
   away_team_id: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  on_court_player_ids: string[] | null;
 };
 type MemberRole =
   | "league_admin"
@@ -258,6 +262,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
         )}
         {tab === "boxscore" && (
           <BoxScoreTab
+            leagueSlug={league.slug}
             games={games}
             teams={teams}
             players={players}
@@ -984,22 +989,43 @@ function GamesTab({
                 {g.scheduled_at ? new Date(g.scheduled_at).toLocaleString() : t("时间待定", "TBD")}
               </span>
               <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{g.status}</span>
-              <button
-                onClick={() => remove(g.id)}
-                style={{
-                  marginLeft: "auto",
-                  background: "transparent",
-                  border: "1px solid #fecaca",
-                  color: "#991b1b",
-                  borderRadius: 6,
-                  padding: "4px 10px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {t("删除", "Delete")}
-              </button>
+              {(g.home_score != null || g.away_score != null) && (
+                <span style={{ color: "#1e3a8a", fontWeight: 800, fontSize: 12 }}>
+                  {g.away_score ?? 0} – {g.home_score ?? 0}
+                </span>
+              )}
+              <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Link
+                  href={`/basketball-leagues/${leagueSlug}/games/${g.id}`}
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #cbd5e1",
+                    color: "#1e3a8a",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                  }}
+                >
+                  {t("预览", "Preview")}
+                </Link>
+                <button
+                  onClick={() => remove(g.id)}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #fecaca",
+                    color: "#991b1b",
+                    borderRadius: 6,
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t("删除", "Delete")}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -1068,11 +1094,13 @@ function ContestDiagnosticsPanel({ leagueId }: { leagueId: string }) {
 // ─────────── Box-score tab ───────────
 
 function BoxScoreTab({
+  leagueSlug,
   games,
   teams,
   players,
   canOverride,
 }: {
+  leagueSlug: string;
   games: Game[];
   teams: Team[];
   players: Player[];
@@ -1090,9 +1118,20 @@ function BoxScoreTab({
   const teamName = (id: string | null) =>
     id ? teams.find((tm) => tm.id === id)?.name ?? "—" : "—";
 
+  if (games.length === 0) {
+    return (
+      <Empty
+        text={t(
+          "暂无可录入比赛。请先在「比赛」标签新建比赛。",
+          "No games available for scorekeeping. Create one in the Games tab first.",
+        )}
+      />
+    );
+  }
+
   return (
-    <div>
-      <div style={{ marginBottom: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <select
           value={gameId}
           onChange={(e) => setGameId(e.target.value)}
@@ -1102,7 +1141,7 @@ function BoxScoreTab({
           {games.map((g) => (
             <option key={g.id} value={g.id}>
               {teamName(g.away_team_id)} @ {teamName(g.home_team_id)} ·{" "}
-              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : "TBD"}
+              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : "TBD"} · {g.status}
             </option>
           ))}
         </select>
@@ -1118,14 +1157,35 @@ function BoxScoreTab({
         />
       ) : (
         <>
-          <StatEventInput
-            key={`events-${game.id}`}
-            gameId={game.id}
+          <ScorekeepingPanel
+            key={`panel-${game.id}`}
+            leagueSlug={leagueSlug}
+            game={{
+              id: game.id,
+              basketball_league_id: game.basketball_league_id,
+              status: game.status,
+              scheduled_at: game.scheduled_at,
+              home_team_id: game.home_team_id,
+              away_team_id: game.away_team_id,
+              home_score: game.home_score,
+              away_score: game.away_score,
+              on_court_player_ids: game.on_court_player_ids ?? [],
+            }}
+            teams={teams.map((tm) => ({
+              id: tm.id,
+              name: tm.name,
+              abbreviation: tm.abbreviation,
+              logo_url: tm.logo_url,
+            }))}
             players={gamePlayers.map((p) => ({
               id: p.id,
               display_name: p.display_name,
               team_id: p.team_id,
+              position: p.position,
+              jersey_number: p.jersey_number,
+              avatar_url: p.avatar_url,
             }))}
+            canStart
           />
           {canOverride && (
             <AdminBoxScoreOverride
