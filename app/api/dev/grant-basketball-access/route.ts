@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 // Test/seed utility. Lets a developer grant any of:
 //   • platform_admin
 //   • league_admin (league_owner / league_admin)
-//   • league_member (stat_keeper / player / viewer)
+//   • league_member (league_admin / team_manager / player / referee /
+//                     scorekeeper / viewer)
 //   • player_claim approval
 //
 // Authentication
@@ -35,7 +36,14 @@ type Body =
       type: "league_member";
       basketball_league_id: string;
       user_id: string;
-      role: "stat_keeper" | "player" | "viewer";
+      role:
+        | "league_admin"
+        | "team_manager"
+        | "player"
+        | "referee"
+        | "scorekeeper"
+        | "viewer";
+      team_id?: string | null;
       status?: "pending" | "approved" | "rejected" | "removed";
     }
   | {
@@ -118,6 +126,7 @@ export async function POST(req: Request) {
             user_id: body.user_id,
             role: body.role,
             status,
+            team_id: body.team_id ?? null,
             approved_at: status === "approved" ? now : null,
             updated_at: now,
           },

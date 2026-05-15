@@ -52,6 +52,7 @@ export async function POST(
       abbreviation?: string;
       city?: string;
       logo_url?: string;
+      bio?: string;
     };
     if (!body.name?.trim()) throw new AccessError("missing_name", 400);
 
@@ -63,6 +64,7 @@ export async function POST(
         abbreviation: body.abbreviation ?? null,
         city: body.city ?? null,
         logo_url: body.logo_url ?? null,
+        bio: body.bio ?? null,
       })
       .select()
       .single();

@@ -15,11 +15,15 @@ export default function Header() {
     return u ? { name: u.name, username: u.username } : null;
   });
 
+  // Platform Admin link is shown via LightHeader (which is used on
+  // every basketball-league and admin page). This legacy Header is only
+  // mounted on /league/join, where the admin entry point is not needed.
   const navItems = [
     { href: "/", label: t("首页", "Home") },
     { href: "/discover", label: t("发现", "Discover") },
-    { href: "/league", label: t("公开联赛", "Leagues") },
-    { href: "/contest", label: t("每日竞赛", "Daily Fantasy") },
+    { href: "/league", label: t("公开联赛", "Public Leagues") },
+    { href: "/contest", label: t("每日竞赛", "Daily Contest") },
+    { href: "/community-leagues", label: t("社区联赛", "Community Leagues") },
   ];
 
   const handleLogout = () => {

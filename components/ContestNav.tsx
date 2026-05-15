@@ -32,14 +32,12 @@ function tabsForScope(scope: ContestNavScope): Tab[] {
       { href: "/contest/nba/weekly",      labelZh: "周积分榜", labelEn: "Weekly" },
       { href: "/contest/nba/all-time",    labelZh: "总积分榜", labelEn: "All-Time" },
       { href: "/contest/nba/my-lineup",   labelZh: "我的成绩", labelEn: "My Results" },
-      { href: "/contest/leagues",         labelZh: "其他联赛", labelEn: "Other Leagues" },
     ];
   }
   const base = `/contest/${scope.slug}`;
   return [
     { href: `${base}/build`,       labelZh: "选阵容", labelEn: "Build" },
     { href: `${base}/leaderboard`, labelZh: "排行榜", labelEn: "Leaderboard" },
-    { href: "/contest/leagues",    labelZh: "全部联赛", labelEn: "All Leagues" },
   ];
 }
 

@@ -9,6 +9,10 @@ import PlayerClaimApprovalList from "@/components/basketball/PlayerClaimApproval
 import StatEventInput from "@/components/basketball/StatEventInput";
 import AdminBoxScoreOverride from "@/components/basketball/AdminBoxScoreOverride";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
+import {
+  uploadBasketballTeamLogo,
+  uploadBasketballPlayerAvatar,
+} from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
 
 type League = {
@@ -29,7 +33,14 @@ type Access = {
   isPlatformAdmin: boolean;
 };
 
-type Team = { id: string; name: string; abbreviation: string | null; city: string | null };
+type Team = {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  city: string | null;
+  logo_url: string | null;
+  bio: string | null;
+};
 type Player = {
   id: string;
   display_name: string;
@@ -37,6 +48,12 @@ type Player = {
   team_id: string | null;
   claimed_by_user_id: string | null;
   claim_status: "unclaimed" | "pending" | "approved" | "rejected";
+  jersey_number: string | null;
+  avatar_url: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  birth_year: number | null;
+  is_active: boolean;
 };
 type Game = {
   id: string;
@@ -45,10 +62,18 @@ type Game = {
   home_team_id: string | null;
   away_team_id: string | null;
 };
+type MemberRole =
+  | "league_admin"
+  | "team_manager"
+  | "player"
+  | "referee"
+  | "scorekeeper"
+  | "viewer";
 type Member = {
   user_id: string;
-  role: "stat_keeper" | "player" | "viewer";
+  role: MemberRole;
   status: "pending" | "approved" | "rejected" | "removed";
+  team_id: string | null;
 };
 
 type Tab = "settings" | "teams" | "players" | "games" | "members" | "claims" | "boxscore";
@@ -230,6 +255,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
         {tab === "members" && (
           <MembersTab
             leagueId={id}
+            teams={teams}
             members={[...members.pending, ...members.members]}
             onChanged={refresh}
           />
@@ -431,33 +457,64 @@ function TeamsTab({
   const [name, setName] = useState("");
   const [abbr, setAbbr] = useState("");
   const [city, setCity] = useState("");
+  const [bio, setBio] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const add = async () => {
     if (!name.trim()) return;
     setErr(null);
-    const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/teams`, {
-      method: "POST",
-      body: JSON.stringify({
-        name: name.trim(),
-        abbreviation: abbr || undefined,
-        city: city || undefined,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErr(body.error ?? `HTTP ${res.status}`);
-      return;
+    setBusy(true);
+    try {
+      const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/teams`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          abbreviation: abbr || undefined,
+          city: city || undefined,
+          bio: bio || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      // If a logo was provided, upload to storage now that we have the team id,
+      // then PATCH the row with the public URL.
+      if (logoFile) {
+        const body = (await res.json()) as { team: { id: string } };
+        try {
+          const url = await uploadBasketballTeamLogo(leagueId, body.team.id, logoFile);
+          const patchRes = await basketballFetch(`/api/basketball-teams/${body.team.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ logo_url: url }),
+          });
+          if (!patchRes.ok) {
+            const pb = await patchRes.json().catch(() => ({}));
+            setErr(`logo_save_failed: ${pb.error ?? patchRes.status}`);
+          }
+        } catch (uploadErr) {
+          setErr(
+            `logo_upload_failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
+          );
+        }
+      }
+      setName("");
+      setAbbr("");
+      setCity("");
+      setBio("");
+      setLogoFile(null);
+      onChanged();
+    } finally {
+      setBusy(false);
     }
-    setName("");
-    setAbbr("");
-    setCity("");
-    onChanged();
   };
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -476,8 +533,34 @@ function TeamsTab({
           placeholder={t("城市", "City")}
           style={{ ...inputStyle(), flex: "1 1 140px" }}
         />
-        <button onClick={add} style={primaryBtn(false)}>
-          {t("添加", "Add")}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", flex: "1 1 200px" }}>
+          {t("队徽", "Logo")}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 12 }}
+          />
+        </label>
+      </div>
+      <textarea
+        value={bio}
+        onChange={(e) => setBio(e.target.value)}
+        placeholder={t("球队简介 (可选)", "Team bio (optional)")}
+        rows={2}
+        style={{
+          ...inputStyle(),
+          width: "100%",
+          minHeight: 60,
+          padding: "8px 12px",
+          marginBottom: 10,
+          resize: "vertical",
+          fontFamily: "inherit",
+        }}
+      />
+      <div style={{ marginBottom: 14 }}>
+        <button onClick={add} disabled={busy} style={primaryBtn(busy)}>
+          {busy ? t("添加中…", "Adding…") : t("添加", "Add")}
         </button>
       </div>
       {err && (
@@ -491,10 +574,30 @@ function TeamsTab({
         <ul style={listStyle()}>
           {teams.map((tm) => (
             <li key={tm.id} style={rowStyle()}>
+              {tm.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={tm.logo_url}
+                  alt=""
+                  style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover", background: "#f1f5f9" }}
+                />
+              ) : (
+                <span
+                  style={{
+                    width: 28, height: 28, borderRadius: 6, background: "#f1f5f9",
+                    display: "inline-block", flexShrink: 0,
+                  }}
+                />
+              )}
               <span style={{ fontWeight: 800 }}>{tm.name}</span>
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {[tm.city, tm.abbreviation].filter(Boolean).join(" · ")}
               </span>
+              {tm.bio && (
+                <span style={{ color: "#94a3b8", fontSize: 11, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {tm.bio}
+                </span>
+              )}
             </li>
           ))}
         </ul>
@@ -520,6 +623,12 @@ function PlayersTab({
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
   const [teamId, setTeamId] = useState<string>("");
+  const [jersey, setJersey] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   // Keep in sync with lib/basketball/contest-positions.ts CANONICAL_POSITIONS.
@@ -528,40 +637,75 @@ function PlayersTab({
     "PG/SG", "SG/SF", "SF/PF", "PF/C",
   ] as const;
 
-  const canSubmit = !!name.trim() && !!position && !!teamId;
+  const canSubmit = !!name.trim() && !!position && !!teamId && !busy;
 
   const add = async () => {
     setErr(null);
     if (!name.trim()) { setErr(t("请填写球员名", "Display name is required")); return; }
     if (!teamId) { setErr(t("请选择球队", "Pick a team")); return; }
     if (!position) { setErr(t("请选择位置", "Pick a position")); return; }
-    const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/players`, {
-      method: "POST",
-      body: JSON.stringify({
-        display_name: name.trim(),
-        position,
-        team_id: teamId,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setErr(body.error ?? `HTTP ${res.status}`);
-      return;
+    setBusy(true);
+    try {
+      const heightCmNum = heightCm ? Number(heightCm) : undefined;
+      const weightKgNum = weightKg ? Number(weightKg) : undefined;
+      const birthYearNum = birthYear ? Number(birthYear) : undefined;
+      const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/players`, {
+        method: "POST",
+        body: JSON.stringify({
+          display_name: name.trim(),
+          position,
+          team_id: teamId,
+          jersey_number: jersey || undefined,
+          height_cm: Number.isFinite(heightCmNum) ? heightCmNum : undefined,
+          weight_kg: Number.isFinite(weightKgNum) ? weightKgNum : undefined,
+          birth_year: Number.isFinite(birthYearNum) ? birthYearNum : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(body.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      if (avatarFile) {
+        const body = (await res.json()) as { player: { id: string } };
+        try {
+          const url = await uploadBasketballPlayerAvatar(leagueId, body.player.id, avatarFile);
+          const patchRes = await basketballFetch(`/api/basketball-players/${body.player.id}/profile`, {
+            method: "PATCH",
+            body: JSON.stringify({ avatar_url: url }),
+          });
+          if (!patchRes.ok) {
+            const pb = await patchRes.json().catch(() => ({}));
+            setErr(`avatar_save_failed: ${pb.error ?? patchRes.status}`);
+          }
+        } catch (uploadErr) {
+          setErr(
+            `avatar_upload_failed: ${uploadErr instanceof Error ? uploadErr.message : String(uploadErr)}`,
+          );
+        }
+      }
+      setName("");
+      setPosition("");
+      setTeamId("");
+      setJersey("");
+      setHeightCm("");
+      setWeightKg("");
+      setBirthYear("");
+      setAvatarFile(null);
+      onChanged();
+    } finally {
+      setBusy(false);
     }
-    setName("");
-    setPosition("");
-    setTeamId("");
-    onChanged();
   };
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t("球员名", "Display name")}
-          style={{ ...inputStyle(), flex: "2 1 200px" }}
+          style={{ ...inputStyle(), flex: "2 1 180px" }}
         />
         <select
           value={position}
@@ -585,8 +729,51 @@ function PlayersTab({
             </option>
           ))}
         </select>
+        <input
+          value={jersey}
+          onChange={(e) => setJersey(e.target.value)}
+          placeholder={t("球衣号", "Jersey #")}
+          style={{ ...inputStyle(), flex: "0 1 100px" }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <input
+          value={heightCm}
+          onChange={(e) => setHeightCm(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("身高 cm", "Height cm")}
+          style={{ ...inputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={weightKg}
+          onChange={(e) => setWeightKg(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("体重 kg", "Weight kg")}
+          style={{ ...inputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={birthYear}
+          onChange={(e) => setBirthYear(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("出生年", "Birth year")}
+          style={{ ...inputStyle(), flex: "1 1 130px" }}
+        />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", flex: "1 1 200px" }}>
+          {t("头像", "Avatar")}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 12 }}
+          />
+        </label>
+      </div>
+      <div style={{ marginBottom: 14 }}>
         <button onClick={add} disabled={!canSubmit} style={primaryBtn(!canSubmit)}>
-          {t("添加", "Add")}
+          {busy ? t("添加中…", "Adding…") : t("添加", "Add")}
         </button>
       </div>
       {err && (
@@ -600,7 +787,25 @@ function PlayersTab({
         <ul style={listStyle()}>
           {players.map((p) => (
             <li key={p.id} style={rowStyle()}>
+              {p.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.avatar_url}
+                  alt=""
+                  style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", background: "#f1f5f9" }}
+                />
+              ) : (
+                <span
+                  style={{
+                    width: 28, height: 28, borderRadius: "50%", background: "#f1f5f9",
+                    display: "inline-block", flexShrink: 0,
+                  }}
+                />
+              )}
               <span style={{ fontWeight: 800 }}>{p.display_name}</span>
+              {p.jersey_number && (
+                <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
+              )}
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {[p.position, teams.find((tm) => tm.id === p.team_id)?.name]
                   .filter(Boolean)
@@ -908,19 +1113,34 @@ function BoxScoreTab({
 
 // ─────────── Members tab ───────────
 
+const MEMBER_ROLE_OPTIONS: MemberRole[] = [
+  "league_admin",
+  "team_manager",
+  "player",
+  "referee",
+  "scorekeeper",
+  "viewer",
+];
+const TEAM_SCOPED_MEMBER_ROLES = new Set<MemberRole>(["team_manager", "player"]);
+
 function MembersTab({
   leagueId,
+  teams,
   members,
   onChanged,
 }: {
   leagueId: string;
+  teams: Team[];
   members: Member[];
   onChanged: () => void;
 }) {
   const { t } = useLang();
   const [userId, setUserId] = useState("");
-  const [role, setRole] = useState<Member["role"]>("viewer");
+  const [role, setRole] = useState<MemberRole>("scorekeeper");
+  const [memberTeamId, setMemberTeamId] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
+
+  const needsTeam = TEAM_SCOPED_MEMBER_ROLES.has(role);
 
   const invite = async () => {
     if (!userId.trim()) return;
@@ -931,6 +1151,7 @@ function MembersTab({
         user_id: userId.trim(),
         role,
         status: "approved",
+        team_id: needsTeam ? memberTeamId || null : null,
       }),
     });
     if (!res.ok) {
@@ -939,6 +1160,7 @@ function MembersTab({
       return;
     }
     setUserId("");
+    setMemberTeamId("");
     onChanged();
   };
 
@@ -957,13 +1179,25 @@ function MembersTab({
         />
         <select
           value={role}
-          onChange={(e) => setRole(e.target.value as Member["role"])}
-          style={{ ...inputStyle(), flex: "0 0 140px" }}
+          onChange={(e) => setRole(e.target.value as MemberRole)}
+          style={{ ...inputStyle(), flex: "0 0 160px" }}
         >
-          <option value="viewer">viewer</option>
-          <option value="stat_keeper">stat_keeper</option>
-          <option value="player">player</option>
+          {MEMBER_ROLE_OPTIONS.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
         </select>
+        {needsTeam && (
+          <select
+            value={memberTeamId}
+            onChange={(e) => setMemberTeamId(e.target.value)}
+            style={{ ...inputStyle(), flex: "1 1 180px" }}
+          >
+            <option value="">{t("选择球队 (可选)", "Pick team (optional)")}</option>
+            {teams.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.name}</option>
+            ))}
+          </select>
+        )}
         <button onClick={invite} style={primaryBtn(false)}>
           {t("邀请并通过", "Invite + approve")}
         </button>
@@ -973,7 +1207,12 @@ function MembersTab({
           {err}
         </div>
       )}
-      <LeagueMemberApprovalList leagueId={leagueId} members={members} onChanged={onChanged} />
+      <LeagueMemberApprovalList
+        leagueId={leagueId}
+        teams={teams}
+        members={members}
+        onChanged={onChanged}
+      />
     </div>
   );
 }

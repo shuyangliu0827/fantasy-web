@@ -4,21 +4,41 @@ import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { basketballFetch } from "@/lib/basketball/client";
 
+type MemberRole =
+  | "league_admin"
+  | "team_manager"
+  | "player"
+  | "referee"
+  | "scorekeeper"
+  | "viewer";
+
 type Member = {
   user_id: string;
-  role: "stat_keeper" | "player" | "viewer";
+  role: MemberRole;
   status: "pending" | "approved" | "rejected" | "removed";
+  team_id?: string | null;
 };
+
+type TeamRef = { id: string; name: string };
 
 type Props = {
   leagueId: string;
   members: Member[];
+  teams?: TeamRef[];
   onChanged?: () => void;
 };
 
-const ROLE_OPTIONS: Array<Member["role"]> = ["viewer", "stat_keeper", "player"];
+const ROLE_OPTIONS: MemberRole[] = [
+  "league_admin",
+  "team_manager",
+  "player",
+  "referee",
+  "scorekeeper",
+  "viewer",
+];
+const TEAM_SCOPED_ROLES = new Set<MemberRole>(["team_manager", "player"]);
 
-export default function LeagueMemberApprovalList({ leagueId, members, onChanged }: Props) {
+export default function LeagueMemberApprovalList({ leagueId, members, teams, onChanged }: Props) {
   const { t } = useLang();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -33,7 +53,7 @@ export default function LeagueMemberApprovalList({ leagueId, members, onChanged 
 
   const patch = async (
     userId: string,
-    next: { role?: Member["role"]; status?: Member["status"] },
+    next: { role?: MemberRole; status?: Member["status"]; team_id?: string | null },
   ) => {
     setBusyId(userId);
     setErr(null);
@@ -89,7 +109,7 @@ export default function LeagueMemberApprovalList({ leagueId, members, onChanged 
           <select
             value={m.role}
             disabled={busyId === m.user_id}
-            onChange={(e) => patch(m.user_id, { role: e.target.value as Member["role"] })}
+            onChange={(e) => patch(m.user_id, { role: e.target.value as MemberRole })}
             style={{
               minHeight: 32,
               padding: "0 10px",
@@ -105,6 +125,28 @@ export default function LeagueMemberApprovalList({ leagueId, members, onChanged 
               </option>
             ))}
           </select>
+          {TEAM_SCOPED_ROLES.has(m.role) && teams && teams.length > 0 && (
+            <select
+              value={m.team_id ?? ""}
+              disabled={busyId === m.user_id}
+              onChange={(e) => patch(m.user_id, { team_id: e.target.value || null })}
+              style={{
+                minHeight: 32,
+                padding: "0 10px",
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+                fontSize: 12,
+                background: "#fff",
+                maxWidth: 160,
+              }}
+              title={t("球队", "Team")}
+            >
+              <option value="">{t("(无队)", "(no team)")}</option>
+              {teams.map((tm) => (
+                <option key={tm.id} value={tm.id}>{tm.name}</option>
+              ))}
+            </select>
+          )}
           <span
             style={{
               padding: "4px 10px",
