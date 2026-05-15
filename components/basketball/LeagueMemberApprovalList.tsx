@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { basketballFetch } from "@/lib/basketball/client";
+import { memberRoleLabel } from "@/lib/basketball/role-labels";
 
 type MemberRole =
   | "league_admin"
@@ -39,7 +40,7 @@ const ROLE_OPTIONS: MemberRole[] = [
 const TEAM_SCOPED_ROLES = new Set<MemberRole>(["team_manager", "player"]);
 
 export default function LeagueMemberApprovalList({ leagueId, members, teams, onChanged }: Props) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -121,7 +122,7 @@ export default function LeagueMemberApprovalList({ leagueId, members, teams, onC
           >
             {ROLE_OPTIONS.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {memberRoleLabel(r, lang)}
               </option>
             ))}
           </select>

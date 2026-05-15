@@ -58,10 +58,40 @@ export async function GET(
         .order("scheduled_at", { ascending: false, nullsFirst: false }),
     ]);
 
+    // Build a team_map covering every team referenced by the games list
+    // (both home_team_id and away_team_id). Lets clients render the
+    // opposing team's name/logo without a second fetch.
+    const opposingTeamIds = Array.from(
+      new Set(
+        (games ?? [])
+          .flatMap((g) => [g.home_team_id, g.away_team_id])
+          .filter((tid): tid is string => !!tid),
+      ),
+    );
+    const team_map: Record<
+      string,
+      { id: string; name: string; abbreviation: string | null; logo_url: string | null }
+    > = {};
+    if (opposingTeamIds.length > 0) {
+      const { data: opposingTeams } = await supabase
+        .from("basketball_teams")
+        .select("id, name, abbreviation, logo_url")
+        .in("id", opposingTeamIds);
+      for (const tm of opposingTeams ?? []) {
+        team_map[tm.id] = {
+          id: tm.id,
+          name: tm.name,
+          abbreviation: tm.abbreviation ?? null,
+          logo_url: tm.logo_url ?? null,
+        };
+      }
+    }
+
     return NextResponse.json({
       team,
       roster: roster ?? [],
       games: games ?? [],
+      team_map,
       access,
     });
   } catch (e) {

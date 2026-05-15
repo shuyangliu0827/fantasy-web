@@ -8,6 +8,8 @@ import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import PendingAccessNotice from "@/components/basketball/PendingAccessNotice";
 import { basketballJson } from "@/lib/basketball/client";
+import { memberRoleLabel } from "@/lib/basketball/role-labels";
+import type { MemberRole } from "@/lib/basketball/access";
 import { useLang } from "@/lib/lang";
 
 type League = {
@@ -23,12 +25,28 @@ type League = {
 type Access = {
   canView: boolean;
   canManageLeague: boolean;
+  canEditOwnPlayerProfile: boolean;
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
+  memberRole: MemberRole | null;
+  memberTeamId: string | null;
   visibility: "public" | "invite_only" | "private";
 };
 
-type Team = { id: string; name: string; abbreviation: string | null; city: string | null };
-type Player = { id: string; display_name: string; position: string | null; team_id: string | null };
+type Team = {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  city: string | null;
+  logo_url: string | null;
+};
+type Player = {
+  id: string;
+  display_name: string;
+  position: string | null;
+  team_id: string | null;
+  jersey_number: string | null;
+  avatar_url: string | null;
+};
 type Game = {
   id: string;
   scheduled_at: string | null;
@@ -45,7 +63,7 @@ export default function BasketballLeaguePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<League | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -159,9 +177,36 @@ export default function BasketballLeaguePage({
           </span>
         </div>
         {league.description && (
-          <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
+          <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.6, marginBottom: 14 }}>
             {league.description}
           </p>
+        )}
+        {access.memberStatus === "approved" && access.memberRole && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              background: "#eff6ff",
+              border: "1px solid #bfdbfe",
+              borderRadius: 999,
+              padding: "6px 14px",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#1e3a8a",
+              marginBottom: 14,
+            }}
+          >
+            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+              {t("你在本联赛中的身份", "Your role in this league")}
+            </span>
+            <span>· {memberRoleLabel(access.memberRole, lang)}</span>
+            {access.memberRole === "player" && !access.canEditOwnPlayerProfile && (
+              <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                · {t("球员档案待绑定", "player profile pending link")}
+              </span>
+            )}
+          </div>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
@@ -210,11 +255,23 @@ export default function BasketballLeaguePage({
                 <Link
                   key={tm.id}
                   href={`/basketball-leagues/${slug}/teams/${tm.id}`}
-                  style={cardLinkStyle()}
+                  style={cardLinkStyle({ display: "flex", alignItems: "center", gap: 12 })}
                 >
-                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{tm.name}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                    {[tm.city, tm.abbreviation].filter(Boolean).join(" · ") || "—"}
+                  {tm.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={tm.logo_url}
+                      alt=""
+                      style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", background: "#f1f5f9", flexShrink: 0 }}
+                    />
+                  ) : (
+                    <span style={{ width: 36, height: 36, borderRadius: 8, background: "#f1f5f9", flexShrink: 0 }} />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tm.name}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                      {[tm.city, tm.abbreviation].filter(Boolean).join(" · ") || "—"}
+                    </div>
                   </div>
                 </Link>
               ))}
@@ -231,17 +288,52 @@ export default function BasketballLeaguePage({
                 <Link
                   key={p.id}
                   href={`/basketball-leagues/${slug}/players/${p.id}`}
-                  style={cardLinkStyle()}
+                  style={cardLinkStyle({ display: "flex", alignItems: "center", gap: 12 })}
                 >
-                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{p.display_name}</div>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                    {[p.position, teamName(p.team_id)].filter(Boolean).join(" · ") || "—"}
+                  {p.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.avatar_url}
+                      alt=""
+                      style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", background: "#f1f5f9", flexShrink: 0 }}
+                    />
+                  ) : (
+                    <span style={{ width: 36, height: 36, borderRadius: "50%", background: "#f1f5f9", flexShrink: 0 }} />
+                  )}
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 800, color: "#0f172a", display: "flex", alignItems: "center", gap: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {p.display_name}
+                      {p.jersey_number && (
+                        <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                      {[p.position, teamName(p.team_id)].filter(Boolean).join(" · ") || "—"}
+                    </div>
                   </div>
                 </Link>
               ))}
             </div>
           )}
         </Section>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 12,
+            marginTop: 28,
+          }}
+        >
+          <ComingSoonCard
+            title={t("联赛新闻", "League News")}
+            body={t("联赛官方动态即将上线。", "League announcements coming soon.")}
+          />
+          <ComingSoonCard
+            title={t("比赛集锦", "Highlights")}
+            body={t("精彩比赛集锦即将上线。", "Game highlights coming soon.")}
+          />
+        </div>
 
         <Section title={t("赛程", "Schedule")} count={games.length}>
           {games.length === 0 ? (
@@ -351,4 +443,25 @@ function cardLinkStyle(extra?: React.CSSProperties): React.CSSProperties {
 
 function Empty({ text }: { text: string }) {
   return <div style={{ color: "#94a3b8", fontSize: 14, padding: "8px 0" }}>{text}</div>;
+}
+
+function ComingSoonCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px dashed #cbd5e1",
+        borderRadius: 12,
+        padding: 16,
+      }}
+    >
+      <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: 6, fontSize: 14 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>{body}</div>
+      <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.05em" }}>
+        COMING SOON
+      </div>
+    </div>
+  );
 }

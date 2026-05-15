@@ -31,6 +31,14 @@ const MEMBER_ROLES = new Set([
 ]);
 const TEAM_SCOPED_ROLES = new Set(["team_manager", "player"]);
 const MEMBER_STATUSES = new Set(["pending", "approved", "rejected", "removed"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireUuid(value: string | undefined): string {
+  if (!value || !UUID_RE.test(value)) {
+    throw new AccessError("invalid_user_id_format", 400);
+  }
+  return value;
+}
 
 async function resolveTeamId(
   supabase: ReturnType<typeof serviceDb>,
@@ -106,7 +114,7 @@ export async function POST(
       status?: string;
       team_id?: string | null;
     };
-    if (!body.user_id) throw new AccessError("missing_user_id", 400);
+    const targetUserId = requireUuid(body.user_id);
     if (!body.role || !MEMBER_ROLES.has(body.role)) {
       throw new AccessError("invalid_role", 400);
     }
@@ -115,13 +123,23 @@ export async function POST(
 
     const teamId = await resolveTeamId(supabase, id, body.role, body.team_id);
 
+    // Best-effort: confirm the target user exists in public.users so we
+    // can warn the admin if they pasted a stale or unknown UUID. We still
+    // perform the upsert so legacy users without a public.users row work.
+    const { data: targetProfile } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", targetUserId)
+      .maybeSingle();
+    const warning = targetProfile ? null : "user_not_found_in_public_users";
+
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("basketball_league_members")
       .upsert(
         {
           basketball_league_id: id,
-          user_id: body.user_id,
+          user_id: targetUserId,
           role: body.role,
           status,
           team_id: teamId,
@@ -135,7 +153,7 @@ export async function POST(
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ member: data });
+    return NextResponse.json({ member: data, warning });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
@@ -160,7 +178,7 @@ export async function PATCH(
       status?: string;
       team_id?: string | null;
     };
-    if (!body.user_id) throw new AccessError("missing_user_id", 400);
+    const targetUserId = requireUuid(body.user_id);
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.role === "string") {
@@ -194,7 +212,7 @@ export async function PATCH(
       .from("basketball_league_members")
       .update(patch)
       .eq("basketball_league_id", id)
-      .eq("user_id", body.user_id)
+      .eq("user_id", targetUserId)
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

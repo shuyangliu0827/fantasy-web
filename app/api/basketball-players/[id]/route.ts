@@ -52,7 +52,7 @@ export async function GET(
       userId,
     );
 
-    const [{ data: team }, { data: statRows }] = await Promise.all([
+    const [{ data: team }, { data: statRows }, { data: claimedUser }] = await Promise.all([
       player.team_id
         ? supabase
             .from("basketball_teams")
@@ -64,6 +64,13 @@ export async function GET(
         .from("basketball_player_game_stats")
         .select("*")
         .eq("player_id", id),
+      player.claimed_by_user_id && player.claim_status === "approved"
+        ? supabase
+            .from("users")
+            .select("id, username, name, avatar_url")
+            .eq("id", player.claimed_by_user_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const games = statRows ?? [];
@@ -86,6 +93,14 @@ export async function GET(
       team: team ?? null,
       season: { games_played: gp, totals, averages },
       game_log: games,
+      claimed_user: claimedUser
+        ? {
+            user_id: (claimedUser as { id: string }).id,
+            username: (claimedUser as { username: string }).username,
+            name: (claimedUser as { name: string | null }).name ?? null,
+            avatar_url: (claimedUser as { avatar_url: string | null }).avatar_url ?? null,
+          }
+        : null,
       access,
     });
   } catch (e) {

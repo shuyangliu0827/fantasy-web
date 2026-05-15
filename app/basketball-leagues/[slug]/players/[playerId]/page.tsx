@@ -29,13 +29,24 @@ type Player = {
   jersey_number: string | null;
   height: string | null;
   weight: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  birth_year: number | null;
   bio: string | null;
   avatar_url: string | null;
   team_id: string | null;
   claim_status: "unclaimed" | "pending" | "approved" | "rejected";
+  claimed_by_user_id: string | null;
 };
 
 type TeamRef = { id: string; name: string; abbreviation: string | null };
+
+type ClaimedUser = {
+  user_id: string;
+  username: string;
+  name: string | null;
+  avatar_url: string | null;
+} | null;
 
 type GameLogRow = {
   game_id: string;
@@ -83,6 +94,7 @@ export default function PlayerDetailPage({
   const [team, setTeam] = useState<TeamRef | null>(null);
   const [season, setSeason] = useState<Season | null>(null);
   const [gameLog, setGameLog] = useState<GameLogRow[]>([]);
+  const [claimedUser, setClaimedUser] = useState<ClaimedUser>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -107,6 +119,7 @@ export default function PlayerDetailPage({
       team: TeamRef | null;
       season: Season;
       game_log: GameLogRow[];
+      claimed_user: ClaimedUser;
     }>(`/api/basketball-players/${playerId}`);
     if (playerRes.error || !playerRes.data) {
       setErr(playerRes.error ?? "player_load_failed");
@@ -117,6 +130,7 @@ export default function PlayerDetailPage({
     setTeam(playerRes.data.team);
     setSeason(playerRes.data.season);
     setGameLog(playerRes.data.game_log);
+    setClaimedUser(playerRes.data.claimed_user ?? null);
     setLoading(false);
   }, [slug, playerId]);
 
@@ -253,8 +267,18 @@ export default function PlayerDetailPage({
                     {team.name}
                   </Link>
                 ) : null,
-                player.height,
-                player.weight,
+                player.height_cm != null
+                  ? `${player.height_cm} cm`
+                  : player.height,
+                player.weight_kg != null
+                  ? `${player.weight_kg} kg`
+                  : player.weight,
+                player.birth_year != null
+                  ? t(
+                      `${new Date().getFullYear() - player.birth_year} 岁`,
+                      `Age ${new Date().getFullYear() - player.birth_year}`,
+                    )
+                  : null,
               ]
                 .filter(Boolean)
                 .map((v, i, arr) => (
@@ -264,6 +288,7 @@ export default function PlayerDetailPage({
                   </span>
                 ))}
             </div>
+            <PlatformLink claimedUser={claimedUser} claimStatus={player.claim_status} />
             {player.bio && (
               <p style={{ marginTop: 12, color: "#475569", fontSize: 14, lineHeight: 1.5 }}>
                 {player.bio}
@@ -397,8 +422,86 @@ export default function PlayerDetailPage({
             </table>
           </div>
         )}
+
+        <section style={{ marginTop: 24 }}>
+          <h2 style={sectionTitle()}>{t("AI 技术画像", "AI Scouting Snapshot")}</h2>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px dashed #cbd5e1",
+              borderRadius: 12,
+              padding: 18,
+              color: "#64748b",
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}
+          >
+            {t(
+              "基于比赛数据的球员技术分析即将上线。",
+              "Data-driven player scouting coming soon.",
+            )}
+            <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.05em" }}>
+              COMING SOON
+            </div>
+          </div>
+        </section>
       </main>
     </>
+  );
+}
+
+function PlatformLink({
+  claimedUser,
+  claimStatus,
+}: {
+  claimedUser: ClaimedUser;
+  claimStatus: Player["claim_status"];
+}) {
+  const { t } = useLang();
+  if (claimedUser && claimStatus === "approved") {
+    return (
+      <div style={{ marginTop: 10 }}>
+        <Link
+          href={`/u/${claimedUser.username}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "6px 12px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#1e3a8a",
+            textDecoration: "none",
+          }}
+        >
+          {claimedUser.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={claimedUser.avatar_url}
+              alt=""
+              style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }}
+            />
+          ) : null}
+          {t("查看平台主页", "View platform profile")} · @{claimedUser.username}
+          <span style={{ color: "#1e3a8a", fontWeight: 800 }}>→</span>
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        marginTop: 10,
+        fontSize: 12,
+        color: "#94a3b8",
+        fontWeight: 600,
+      }}
+    >
+      {t("该球员暂未绑定平台账号。", "This player has not yet been linked to a platform account.")}
+    </div>
   );
 }
 

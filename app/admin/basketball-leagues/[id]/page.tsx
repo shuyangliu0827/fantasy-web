@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import AuthGate from "@/components/basketball/AuthGate";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
@@ -13,6 +14,7 @@ import {
   uploadBasketballTeamLogo,
   uploadBasketballPlayerAvatar,
 } from "@/lib/basketball/uploads";
+import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
 
 type League = {
@@ -189,19 +191,31 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             marginBottom: 10,
           }}
         >
-          <h1
-            style={{
-              fontSize: 28,
-              fontWeight: 900,
-              color: "#0f172a",
-              letterSpacing: "-0.02em",
-              margin: 0,
-            }}
+          <Link
+            href={`/basketball-leagues/${league.slug}`}
+            style={{ textDecoration: "none", color: "inherit" }}
+            title={t("查看公开页面", "View public page")}
           >
-            {league.name}
-          </h1>
+            <h1
+              style={{
+                fontSize: 28,
+                fontWeight: 900,
+                color: "#0f172a",
+                letterSpacing: "-0.02em",
+                margin: 0,
+              }}
+            >
+              {league.name}
+            </h1>
+          </Link>
           <LeagueVisibilityBadge visibility={league.visibility} />
           <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{league.status}</span>
+          <Link
+            href={`/basketball-leagues/${league.slug}`}
+            style={{ fontSize: 13, color: "#1e3a8a", textDecoration: "none", fontWeight: 800 }}
+          >
+            {t("查看公开页面 →", "View public page →")}
+          </Link>
         </div>
 
         <nav
@@ -235,12 +249,12 @@ function LeagueAdminPageInner({ id }: { id: string }) {
         </nav>
 
         {tab === "settings" && <SettingsTab league={league} onSaved={refresh} />}
-        {tab === "teams" && <TeamsTab leagueId={id} teams={teams} onChanged={refresh} />}
+        {tab === "teams" && <TeamsTab leagueId={id} leagueSlug={league.slug} teams={teams} onChanged={refresh} />}
         {tab === "players" && (
-          <PlayersTab leagueId={id} teams={teams} players={players} onChanged={refresh} />
+          <PlayersTab leagueId={id} leagueSlug={league.slug} teams={teams} players={players} onChanged={refresh} />
         )}
         {tab === "games" && (
-          <GamesTab leagueId={id} teams={teams} games={games} onChanged={refresh} />
+          <GamesTab leagueId={id} leagueSlug={league.slug} teams={teams} games={games} onChanged={refresh} />
         )}
         {tab === "boxscore" && (
           <BoxScoreTab
@@ -446,10 +460,12 @@ function ContestEnabledToggle({
 
 function TeamsTab({
   leagueId,
+  leagueSlug,
   teams,
   onChanged,
 }: {
   leagueId: string;
+  leagueSlug: string;
   teams: Team[];
   onChanged: () => void;
 }) {
@@ -589,7 +605,12 @@ function TeamsTab({
                   }}
                 />
               )}
-              <span style={{ fontWeight: 800 }}>{tm.name}</span>
+              <Link
+                href={`/basketball-leagues/${leagueSlug}/teams/${tm.id}`}
+                style={{ fontWeight: 800, color: "#0f172a", textDecoration: "none" }}
+              >
+                {tm.name}
+              </Link>
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {[tm.city, tm.abbreviation].filter(Boolean).join(" · ")}
               </span>
@@ -610,11 +631,13 @@ function TeamsTab({
 
 function PlayersTab({
   leagueId,
+  leagueSlug,
   teams,
   players,
   onChanged,
 }: {
   leagueId: string;
+  leagueSlug: string;
   teams: Team[];
   players: Player[];
   onChanged: () => void;
@@ -802,7 +825,12 @@ function PlayersTab({
                   }}
                 />
               )}
-              <span style={{ fontWeight: 800 }}>{p.display_name}</span>
+              <Link
+                href={`/basketball-leagues/${leagueSlug}/players/${p.id}`}
+                style={{ fontWeight: 800, color: "#0f172a", textDecoration: "none" }}
+              >
+                {p.display_name}
+              </Link>
               {p.jersey_number && (
                 <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
               )}
@@ -826,11 +854,13 @@ function PlayersTab({
 
 function GamesTab({
   leagueId,
+  leagueSlug,
   teams,
   games,
   onChanged,
 }: {
   leagueId: string;
+  leagueSlug: string;
   teams: Team[];
   games: Game[];
   onChanged: () => void;
@@ -944,9 +974,12 @@ function GamesTab({
         <ul style={listStyle()}>
           {games.map((g) => (
             <li key={g.id} style={rowStyle()}>
-              <span style={{ fontWeight: 800 }}>
+              <Link
+                href={`/basketball-leagues/${leagueSlug}/games/${g.id}`}
+                style={{ fontWeight: 800, color: "#0f172a", textDecoration: "none" }}
+              >
                 {teamName(g.away_team_id)} @ {teamName(g.home_team_id)}
-              </span>
+              </Link>
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {g.scheduled_at ? new Date(g.scheduled_at).toLocaleString() : t("时间待定", "TBD")}
               </span>
@@ -1113,14 +1146,6 @@ function BoxScoreTab({
 
 // ─────────── Members tab ───────────
 
-const MEMBER_ROLE_OPTIONS: MemberRole[] = [
-  "league_admin",
-  "team_manager",
-  "player",
-  "referee",
-  "scorekeeper",
-  "viewer",
-];
 const TEAM_SCOPED_MEMBER_ROLES = new Set<MemberRole>(["team_manager", "player"]);
 
 function MembersTab({
@@ -1134,17 +1159,48 @@ function MembersTab({
   members: Member[];
   onChanged: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<MemberRole>("scorekeeper");
   const [memberTeamId, setMemberTeamId] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [usernameQuery, setUsernameQuery] = useState("");
+  const [lookupBusy, setLookupBusy] = useState(false);
 
   const needsTeam = TEAM_SCOPED_MEMBER_ROLES.has(role);
+
+  const lookupByUsername = async () => {
+    const q = usernameQuery.trim();
+    if (!q) return;
+    setErr(null);
+    setInfo(null);
+    setLookupBusy(true);
+    try {
+      const res = await basketballFetch(
+        `/api/basketball-leagues/${leagueId}/lookup-user?u=${encodeURIComponent(q)}`,
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 404) {
+          setErr(t(`未找到用户名 "${q}"`, `Username "${q}" not found`));
+        } else {
+          setErr(body.error ?? `HTTP ${res.status}`);
+        }
+        return;
+      }
+      const body = (await res.json()) as { user_id: string; username: string; name: string | null };
+      setUserId(body.user_id);
+      setInfo(t(`已找到：${body.name ?? body.username}`, `Found: ${body.name ?? body.username}`));
+    } finally {
+      setLookupBusy(false);
+    }
+  };
 
   const invite = async () => {
     if (!userId.trim()) return;
     setErr(null);
+    setInfo(null);
     const res = await basketballFetch(`/api/basketball-leagues/${leagueId}/members`, {
       method: "POST",
       body: JSON.stringify({
@@ -1154,18 +1210,51 @@ function MembersTab({
         team_id: needsTeam ? memberTeamId || null : null,
       }),
     });
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       setErr(body.error ?? `HTTP ${res.status}`);
       return;
     }
+    if (body?.warning === "user_not_found_in_public_users") {
+      setInfo(
+        t(
+          "成员已添加，但该 UUID 在平台用户表中未找到（请确认 UUID 正确）。",
+          "Member added, but this UUID was not found in the platform users table (please verify the UUID).",
+        ),
+      );
+    } else {
+      setInfo(t("已添加为活跃成员。", "Added as an active member."));
+    }
     setUserId("");
+    setUsernameQuery("");
     setMemberTeamId("");
     onChanged();
   };
 
   return (
     <div>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginBottom: 10,
+          alignItems: "center",
+        }}
+      >
+        <input
+          value={usernameQuery}
+          onChange={(e) => setUsernameQuery(e.target.value)}
+          placeholder={t("用户名 (查找)", "Username (lookup)")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") lookupByUsername();
+          }}
+          style={{ ...inputStyle(), flex: "1 1 200px" }}
+        />
+        <button onClick={lookupByUsername} disabled={lookupBusy} style={primaryBtn(lookupBusy)}>
+          {lookupBusy ? t("查找中…", "Looking up…") : t("查找", "Look up")}
+        </button>
+      </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
         <input
           value={userId}
@@ -1182,8 +1271,8 @@ function MembersTab({
           onChange={(e) => setRole(e.target.value as MemberRole)}
           style={{ ...inputStyle(), flex: "0 0 160px" }}
         >
-          {MEMBER_ROLE_OPTIONS.map((r) => (
-            <option key={r} value={r}>{r}</option>
+          {MEMBER_ROLE_VALUES.map((r) => (
+            <option key={r} value={r}>{memberRoleLabel(r, lang)}</option>
           ))}
         </select>
         {needsTeam && (
@@ -1205,6 +1294,11 @@ function MembersTab({
       {err && (
         <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
           {err}
+        </div>
+      )}
+      {info && (
+        <div style={{ color: "#166534", fontSize: 13, fontWeight: 700, marginBottom: 10 }}>
+          {info}
         </div>
       )}
       <LeagueMemberApprovalList

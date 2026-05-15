@@ -9,13 +9,20 @@ import HeroSection from "@/components/HeroSection";
 import DraftWinsSection from "@/components/DraftWinsSection";
 import BrandCurtain from "@/components/BrandCurtain";
 import { HERO_PLAYERS, TEAM_ZH, type HeroPlayer } from "@/lib/players/hero-players";
+import { usePlatformAdmin } from "@/lib/basketball/use-platform-admin";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { href: "/", labelZh: "首页", labelEn: "Home" },
   { href: "/discover", labelZh: "发现", labelEn: "Discover" },
-  { href: "/league", labelZh: "公开联赛", labelEn: "Leagues" },
-  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Fantasy" },
+  { href: "/league", labelZh: "公开联赛", labelEn: "Public Leagues" },
+  { href: "/contest", labelZh: "每日竞赛", labelEn: "Daily Contest" },
+  { href: "/community-leagues", labelZh: "社区联赛", labelEn: "Community Leagues" },
 ];
+const ADMIN_NAV_ITEM = {
+  href: "/admin/platform/basketball-leagues",
+  labelZh: "平台管理",
+  labelEn: "Platform Admin",
+};
 
 const FEATURES = [
   {
@@ -67,6 +74,8 @@ export default function HomePage() {
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [heroPlayer, setHeroPlayer] = useState<HeroPlayer | null>(null);
+  const { isPlatformAdmin } = usePlatformAdmin();
+  const NAV_ITEMS = isPlatformAdmin ? [...BASE_NAV_ITEMS, ADMIN_NAV_ITEM] : BASE_NAV_ITEMS;
 
   useEffect(() => {
     // Pick random player with live stats from rankings API
