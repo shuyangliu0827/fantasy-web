@@ -20,8 +20,6 @@ type Team = { id: string; name: string };
 
 type Props = {
   leagueId: string;
-  /** Pre-bound team for team_manager members; locked when set. */
-  fixedTeamId?: string | null;
   onClose: () => void;
   onSubmitted: () => void;
 };
@@ -42,7 +40,6 @@ const POSITION_OPTIONS = [
 
 export default function PlayerClaimModal({
   leagueId,
-  fixedTeamId,
   onClose,
   onSubmitted,
 }: Props) {
@@ -57,7 +54,7 @@ export default function PlayerClaimModal({
   // "create" form
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
-  const [teamId, setTeamId] = useState<string>(fixedTeamId ?? "");
+  const [teamId, setTeamId] = useState<string>("");
   const [jersey, setJersey] = useState("");
   const [heightCm, setHeightCm] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -304,7 +301,6 @@ export default function PlayerClaimModal({
               <select
                 value={teamId}
                 onChange={(e) => setTeamId(e.target.value)}
-                disabled={!!fixedTeamId}
                 style={{ ...inputStyle(), flex: "2 1 200px" }}
               >
                 <option value="">{t("选择球队", "Pick team")}</option>

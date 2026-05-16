@@ -8,7 +8,8 @@ import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import PendingAccessNotice from "@/components/basketball/PendingAccessNotice";
 import PlayerClaimModal from "@/components/basketball/PlayerClaimModal";
-import { basketballJson } from "@/lib/basketball/client";
+import TeamBindModal from "@/components/basketball/TeamBindModal";
+import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { memberRoleLabel } from "@/lib/basketball/role-labels";
 import type { MemberRole } from "@/lib/basketball/access";
 import { useLang } from "@/lib/lang";
@@ -21,11 +22,13 @@ type League = {
   status: string;
   visibility: "public" | "invite_only" | "private";
   is_contest_enabled: boolean;
+  logo_url: string | null;
 };
 
 type Access = {
   canView: boolean;
   canManageLeague: boolean;
+  canManageOwnTeam: boolean;
   canEditOwnPlayerProfile: boolean;
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
   memberRole: MemberRole | null;
@@ -66,6 +69,12 @@ type MemberPlayer = {
   claim_status: string;
 } | null;
 
+type MemberTeam = {
+  id: string;
+  name: string;
+  logo_url: string | null;
+} | null;
+
 export default function BasketballLeaguePage({
   params,
 }: {
@@ -79,15 +88,19 @@ export default function BasketballLeaguePage({
   const [players, setPlayers] = useState<Player[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [memberPlayer, setMemberPlayer] = useState<MemberPlayer>(null);
+  const [memberTeam, setMemberTeam] = useState<MemberTeam>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [claimModalOpen, setClaimModalOpen] = useState(false);
+  const [teamBindModalOpen, setTeamBindModalOpen] = useState(false);
+  const [unbindingTeam, setUnbindingTeam] = useState(false);
 
   const reload = async () => {
     const { data, error } = await basketballJson<{
       league: League;
       access: Access;
       member_player: MemberPlayer;
+      member_team: MemberTeam;
     }>(`/api/basketball-leagues/by-slug/${slug}`);
     if (error || !data) {
       setErr(error ?? "not_found");
@@ -96,6 +109,31 @@ export default function BasketballLeaguePage({
     setLeague(data.league);
     setAccess(data.access);
     setMemberPlayer(data.member_player ?? null);
+    setMemberTeam(data.member_team ?? null);
+  };
+
+  const unbindTeam = async () => {
+    if (!league) return;
+    if (
+      !window.confirm(
+        t(
+          "解绑后你将不再是该球队的经理。继续？",
+          "After unbinding, you will no longer be the team's manager. Continue?",
+        ),
+      )
+    )
+      return;
+    setUnbindingTeam(true);
+    const res = await basketballFetch(
+      `/api/basketball-leagues/${league.id}/team-bind`,
+      { method: "DELETE" },
+    );
+    setUnbindingTeam(false);
+    if (!res.ok) {
+      alert(t("解绑失败，请重试。", "Unbind failed."));
+      return;
+    }
+    await reload();
   };
 
   useEffect(() => {
@@ -105,6 +143,7 @@ export default function BasketballLeaguePage({
         league: League;
         access: Access;
         member_player: MemberPlayer;
+        member_team: MemberTeam;
       }>(`/api/basketball-leagues/by-slug/${slug}`);
       if (cancelled) return;
       if (error || !data) {
@@ -115,6 +154,7 @@ export default function BasketballLeaguePage({
       setLeague(data.league);
       setAccess(data.access);
       setMemberPlayer(data.member_player ?? null);
+      setMemberTeam(data.member_team ?? null);
       if (data.access.canView) {
         const [teamsRes, playersRes, gamesRes] = await Promise.all([
           basketballJson<{ teams: Team[] }>(`/api/basketball-leagues/${data.league.id}/teams`),
@@ -187,8 +227,23 @@ export default function BasketballLeaguePage({
       <LightHeader activeHref="" />
       <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 20px 80px" }}>
         <div
-          style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}
+          style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 10 }}
         >
+          {league.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={league.logo_url}
+              alt=""
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 12,
+                objectFit: "cover",
+                background: "#f1f5f9",
+                flexShrink: 0,
+              }}
+            />
+          ) : null}
           <h1
             style={{
               fontSize: 32,
@@ -260,6 +315,14 @@ export default function BasketballLeaguePage({
                     · {t("球员档案待绑定", "player profile pending link")}
                   </span>
                 )}
+              {access.memberRole === "team_manager" && memberTeam && (
+                <span>· {t("已绑定球队", "Team")} · {memberTeam.name}</span>
+              )}
+              {access.memberRole === "team_manager" && !memberTeam && (
+                <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
+                  · {t("球队待绑定", "team pending bind")}
+                </span>
+              )}
             </div>
             {access.memberRole === "player" &&
               access.canEditOwnPlayerProfile &&
@@ -273,10 +336,10 @@ export default function BasketballLeaguePage({
                     textDecoration: "none",
                   }}
                 >
-                  {t("查看我的球员档案 →", "View my player profile →")}
+                  {t("查看 / 编辑我的档案 →", "View / Edit my profile →")}
                 </Link>
               )}
-            {(access.memberRole === "player" || access.memberRole === "team_manager") &&
+            {access.memberRole === "player" &&
               !access.canEditOwnPlayerProfile &&
               !memberPlayer && (
                 <button
@@ -295,6 +358,54 @@ export default function BasketballLeaguePage({
                   {t("绑定球员档案", "Bind Player Profile")}
                 </button>
               )}
+            {access.memberRole === "team_manager" && !memberTeam && (
+              <button
+                onClick={() => setTeamBindModalOpen(true)}
+                style={{
+                  padding: "6px 14px",
+                  background: "#1e3a8a",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 999,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                {t("绑定球队", "Bind Team")}
+              </button>
+            )}
+            {access.memberRole === "team_manager" && memberTeam && (
+              <>
+                <Link
+                  href={`/basketball-leagues/${slug}/teams/${memberTeam.id}`}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "#1e3a8a",
+                    textDecoration: "none",
+                  }}
+                >
+                  {t("查看我的球队 →", "View my team →")}
+                </Link>
+                <button
+                  onClick={unbindTeam}
+                  disabled={unbindingTeam}
+                  style={{
+                    padding: "4px 10px",
+                    background: "transparent",
+                    border: "1px solid #fecaca",
+                    color: "#991b1b",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: unbindingTeam ? "default" : "pointer",
+                  }}
+                >
+                  {t("解绑", "Unbind")}
+                </button>
+              </>
+            )}
           </div>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
@@ -316,7 +427,7 @@ export default function BasketballLeaguePage({
               {t("进入每日竞赛 →", "Play daily contest →")}
             </Link>
           )}
-          {access.canManageLeague && (
+          {(access.canManageLeague || access.canManageOwnTeam) && (
             <Link
               href={`/admin/basketball-leagues/${league.id}`}
               style={{
@@ -472,12 +583,19 @@ export default function BasketballLeaguePage({
       {claimModalOpen && (
         <PlayerClaimModal
           leagueId={league.id}
-          fixedTeamId={
-            access.memberRole === "team_manager" ? access.memberTeamId ?? null : null
-          }
           onClose={() => setClaimModalOpen(false)}
           onSubmitted={async () => {
             setClaimModalOpen(false);
+            await reload();
+          }}
+        />
+      )}
+      {teamBindModalOpen && (
+        <TeamBindModal
+          leagueId={league.id}
+          onClose={() => setTeamBindModalOpen(false)}
+          onSubmitted={async () => {
+            setTeamBindModalOpen(false);
             await reload();
           }}
         />

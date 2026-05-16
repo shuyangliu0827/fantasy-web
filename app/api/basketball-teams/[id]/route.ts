@@ -9,8 +9,10 @@ import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
 import {
   AccessError,
+  getBasketballLeagueAdminRole,
+  getBasketballLeagueMemberRole,
   getCurrentUserIdFromRequest,
-  requireLeagueAdmin,
+  isPlatformAdmin,
   requireViewPermission,
 } from "@/lib/basketball/access";
 
@@ -119,7 +121,26 @@ export async function PATCH(
     if (loadErr) throw new AccessError(loadErr.message, 500);
     if (!team) throw new AccessError("team_not_found", 404);
 
-    await requireLeagueAdmin(supabase, team.basketball_league_id, userId);
+    if (!userId) throw new AccessError("unauthorized", 401);
+    const isAdmin =
+      (await isPlatformAdmin(supabase, userId)) ||
+      (await getBasketballLeagueAdminRole(
+        supabase,
+        team.basketball_league_id,
+        userId,
+      )) !== null;
+    if (!isAdmin) {
+      const member = await getBasketballLeagueMemberRole(
+        supabase,
+        team.basketball_league_id,
+        userId,
+      );
+      const isManagerOfTeam =
+        member.role === "team_manager" &&
+        member.status === "approved" &&
+        member.team_id === team.id;
+      if (!isManagerOfTeam) throw new AccessError("forbidden", 403);
+    }
 
     const body = (await req.json()) as Record<string, unknown>;
     const patch: Partial<Record<TeamEditableField, unknown>> & {

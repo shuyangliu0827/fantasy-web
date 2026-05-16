@@ -50,6 +50,11 @@ export async function GET(
       team_id: string | null;
       claim_status: string;
     } | null = null;
+    let memberTeam: {
+      id: string;
+      name: string;
+      logo_url: string | null;
+    } | null = null;
     if (userId) {
       const { data: mp } = await supabase
         .from("basketball_players")
@@ -68,6 +73,24 @@ export async function GET(
           claim_status: mp.claim_status as string,
         };
       }
+      if (
+        access.memberRole === "team_manager" &&
+        access.memberStatus === "approved" &&
+        access.memberTeamId
+      ) {
+        const { data: tm } = await supabase
+          .from("basketball_teams")
+          .select("id, name, logo_url")
+          .eq("id", access.memberTeamId)
+          .maybeSingle();
+        if (tm) {
+          memberTeam = {
+            id: tm.id as string,
+            name: tm.name as string,
+            logo_url: (tm.logo_url as string | null) ?? null,
+          };
+        }
+      }
     }
 
     if (!access.canView) {
@@ -81,9 +104,15 @@ export async function GET(
         },
         access,
         member_player: memberPlayer,
+        member_team: memberTeam,
       });
     }
-    return NextResponse.json({ league, access, member_player: memberPlayer });
+    return NextResponse.json({
+      league,
+      access,
+      member_player: memberPlayer,
+      member_team: memberTeam,
+    });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

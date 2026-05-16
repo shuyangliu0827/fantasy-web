@@ -52,12 +52,14 @@ export async function PATCH(
       description?: string | null;
       slug?: string;
       is_contest_enabled?: boolean;
+      logo_url?: string | null;
     };
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (typeof body.name === "string") patch.name = body.name.trim();
     if (typeof body.description !== "undefined") patch.description = body.description;
     if (typeof body.slug === "string") patch.slug = body.slug.trim();
     if (typeof body.is_contest_enabled === "boolean") patch.is_contest_enabled = body.is_contest_enabled;
+    if (typeof body.logo_url !== "undefined") patch.logo_url = body.logo_url;
 
     const { data, error } = await supabase
       .from("basketball_leagues")

@@ -57,6 +57,19 @@ export default function UserProfilePage() {
     participation_days?: number;
     best_daily_rank?: number | null;
   } | null>(null);
+  const [basketballProfiles, setBasketballProfiles] = useState<Array<{
+    player_id: string;
+    display_name: string;
+    jersey_number: string | null;
+    avatar_url: string | null;
+    position: string | null;
+    league_id: string;
+    league_slug: string;
+    league_name: string;
+    league_logo_url: string | null;
+    team_id: string | null;
+    team_name: string | null;
+  }>>([]);
 
   const loadData = async () => {
     const user = currentUser;
@@ -131,6 +144,26 @@ export default function UserProfilePage() {
   useEffect(() => {
     void loadData(); // eslint-disable-line react-hooks/set-state-in-effect
   }, [username]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/basketball-players/by-user?username=${encodeURIComponent(username)}`,
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as { players?: typeof basketballProfiles };
+        if (cancelled) return;
+        setBasketballProfiles(body.players ?? []);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [username]);
 
   const formatDate = (ts: string | number) => {
     const d = new Date(ts);
@@ -406,6 +439,99 @@ export default function UserProfilePage() {
 
           {/* Right: tabs + content */}
           <div className="content-col">
+            {basketballProfiles.length > 0 && (
+              <div
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 12,
+                  padding: 16,
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: "#64748b",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
+                  {t("篮球球员档案", "Basketball Player Profiles")}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {basketballProfiles.map((p) => (
+                    <Link
+                      key={p.player_id}
+                      href={`/basketball-leagues/${p.league_slug}/players/${p.player_id}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "8px 12px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 10,
+                        textDecoration: "none",
+                        color: "inherit",
+                      }}
+                    >
+                      {p.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.avatar_url}
+                          alt=""
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            background: "#f1f5f9",
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: "50%",
+                            background: "#f1f5f9",
+                            display: "inline-block",
+                          }}
+                        />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 14 }}>
+                          {p.display_name}
+                          {p.jersey_number && (
+                            <span
+                              style={{
+                                color: "#1e3a8a",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                marginLeft: 6,
+                              }}
+                            >
+                              #{p.jersey_number}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                          {[p.position, p.team_name].filter(Boolean).join(" · ")}
+                          {p.team_name && p.position ? " · " : ""}
+                          <span style={{ color: "#1e3a8a", fontWeight: 700 }}>
+                            {p.league_name}
+                          </span>
+                        </div>
+                      </div>
+                      <span style={{ color: "#1e3a8a", fontWeight: 800, fontSize: 13 }}>→</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* Tab bar */}
             <div className="tab-bar">
               {(["posts", "leagues", "drafts", "stats"] as const).map(tab => {

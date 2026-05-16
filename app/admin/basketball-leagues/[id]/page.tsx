@@ -13,6 +13,7 @@ import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import {
   uploadBasketballTeamLogo,
   uploadBasketballPlayerAvatar,
+  uploadBasketballLeagueLogo,
 } from "@/lib/basketball/uploads";
 import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
@@ -25,6 +26,7 @@ type League = {
   visibility: "public" | "invite_only" | "private";
   status: string;
   is_contest_enabled: boolean;
+  logo_url: string | null;
 };
 
 type Access = {
@@ -388,6 +390,7 @@ function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void 
       <button onClick={saveMeta} disabled={busy} style={primaryBtn(busy)}>
         {busy ? t("保存中…", "Saving…") : t("保存", "Save")}
       </button>
+      <LeagueLogoField league={league} onSaved={onSaved} />
       <Field label={t("可见性", "Visibility")}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(["public", "invite_only", "private"] as const).map((v) => (
@@ -413,6 +416,150 @@ function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void 
       <ContestEnabledToggle league={league} onSaved={onSaved} />
       {msg && <div style={{ fontSize: 13, color: "#475569", fontWeight: 700 }}>{msg}</div>}
     </div>
+  );
+}
+
+function LeagueLogoField({
+  league,
+  onSaved,
+}: {
+  league: League;
+  onSaved: () => void;
+}) {
+  const { t } = useLang();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [errDetails, setErrDetails] = useState<string | null>(null);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setErr(null);
+    setErrDetails(null);
+    try {
+      const url = await uploadBasketballLeagueLogo(league.id, file);
+      const res = await basketballFetch(`/api/basketball-leagues/${league.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ logo_url: url }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(t("保存失败，请重试。", "Save failed."));
+        setErrDetails(String((body as { error?: string }).error ?? res.status));
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      const status = e instanceof Error ? (e as Error & { status?: number }).status ?? null : null;
+      setErr(
+        status === 403
+          ? t("你没有权限上传联赛 logo。", "You do not have permission to upload the league logo.")
+          : t("上传失败，请重试。", "Upload failed."),
+      );
+      setErrDetails(raw);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(t("移除联赛 logo？", "Remove league logo?"))) return;
+    setBusy(true);
+    const res = await basketballFetch(`/api/basketball-leagues/${league.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ logo_url: null }),
+    });
+    setBusy(false);
+    if (res.ok) onSaved();
+  };
+
+  return (
+    <Field label={t("联赛 Logo", "League Logo")}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: 10,
+          padding: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        {league.logo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={league.logo_url}
+            alt=""
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 10,
+              objectFit: "cover",
+              background: "#fff",
+              border: "1px solid #e2e8f0",
+            }}
+          />
+        ) : (
+          <span
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 10,
+              background: "#fff",
+              border: "1px dashed #cbd5e1",
+              display: "inline-block",
+            }}
+          />
+        )}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569" }}>
+          {t("选择图片", "Choose image")}
+          <input
+            type="file"
+            accept="image/*"
+            disabled={busy}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload(f);
+              e.target.value = "";
+            }}
+            style={{ fontSize: 12 }}
+          />
+        </label>
+        {league.logo_url && (
+          <button
+            onClick={remove}
+            disabled={busy}
+            style={{
+              padding: "6px 12px",
+              background: "transparent",
+              border: "1px solid #fecaca",
+              color: "#991b1b",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            {t("移除", "Remove")}
+          </button>
+        )}
+        {busy && (
+          <span style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>
+            {t("上传中…", "Uploading…")}
+          </span>
+        )}
+      </div>
+      {err && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ color: "#991b1b", fontSize: 12, fontWeight: 700 }}>{err}</div>
+          {errDetails && (
+            <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>{errDetails}</div>
+          )}
+        </div>
+      )}
+    </Field>
   );
 }
 

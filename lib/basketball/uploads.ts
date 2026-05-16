@@ -73,3 +73,10 @@ export async function uploadBasketballPlayerAvatar(
 ): Promise<string> {
   return postFile(`/api/basketball-players/${playerId}/avatar`, file);
 }
+
+export async function uploadBasketballLeagueLogo(
+  leagueId: string,
+  file: File,
+): Promise<string> {
+  return postFile(`/api/basketball-leagues/${leagueId}/logo`, file);
+}

@@ -1,22 +1,16 @@
 export const dynamic = "force-dynamic";
-// app/api/basketball-teams/[id]/logo/route.ts
+// app/api/basketball-leagues/[id]/logo/route.ts
 //
-// POST — accepts multipart/form-data with a "file" field. Server-side
-// upload to the basketball-team-logos bucket using the service-role
-// Supabase client. Authorization is platform admin / league admin only.
-//
-// Returns { url } — the public URL. Caller is responsible for PATCHing
-// the team row's logo_url with this value (matches the existing client
-// flow).
+// POST — multipart upload of the league logo. League/platform admin only.
+// Server-side via the service-role client; bucket: basketball-league-logos.
+// Returns { url }; the caller PATCHes the league row's logo_url.
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
 import {
   AccessError,
-  getBasketballLeagueAdminRole,
-  getBasketballLeagueMemberRole,
   getCurrentUserIdFromRequest,
-  isPlatformAdmin,
+  requireLeagueAdmin,
 } from "@/lib/basketball/access";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -45,34 +39,7 @@ export async function POST(
   try {
     const userId = await getCurrentUserIdFromRequest(req);
     if (!userId) throw new AccessError("unauthorized", 401);
-
-    const { data: team, error: tErr } = await supabase
-      .from("basketball_teams")
-      .select("id, basketball_league_id")
-      .eq("id", id)
-      .maybeSingle();
-    if (tErr) throw new AccessError(tErr.message, 500);
-    if (!team) throw new AccessError("team_not_found", 404);
-
-    const isAdmin =
-      (await isPlatformAdmin(supabase, userId)) ||
-      (await getBasketballLeagueAdminRole(
-        supabase,
-        team.basketball_league_id,
-        userId,
-      )) !== null;
-    if (!isAdmin) {
-      const member = await getBasketballLeagueMemberRole(
-        supabase,
-        team.basketball_league_id,
-        userId,
-      );
-      const isManagerOfTeam =
-        member.role === "team_manager" &&
-        member.status === "approved" &&
-        member.team_id === team.id;
-      if (!isManagerOfTeam) throw new AccessError("forbidden", 403);
-    }
+    await requireLeagueAdmin(supabase, id, userId);
 
     let formData: FormData;
     try {
@@ -89,11 +56,11 @@ export async function POST(
     }
 
     const ext = extFromFile(file);
-    const path = `${team.basketball_league_id}/${team.id}.${ext}`;
+    const path = `${id}/logo.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
 
     const { error: uploadErr } = await supabase.storage
-      .from("basketball-team-logos")
+      .from("basketball-league-logos")
       .upload(path, bytes, {
         upsert: true,
         contentType: file.type || "application/octet-stream",
@@ -105,7 +72,7 @@ export async function POST(
       );
     }
     const { data: pub } = supabase.storage
-      .from("basketball-team-logos")
+      .from("basketball-league-logos")
       .getPublicUrl(path);
     return NextResponse.json({ url: pub.publicUrl });
   } catch (e) {

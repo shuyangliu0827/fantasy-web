@@ -9,13 +9,14 @@ export const dynamic = "force-dynamic";
 //
 // Authorization:
 //   • caller must be an approved basketball_league_members row
-//     with role IN ('player', 'team_manager') for this league, AND
+//     with role = 'player' for this league, AND
 //   • caller must not already hold a pending/approved claim on any
 //     player in this league.
 //
-// (Platform/league admins use POST /api/basketball-leagues/{id}/players
-//  to create rosters on behalf of others — they are not the audience for
-//  this endpoint.)
+// (Team managers bind themselves to a team via /team-bind; they do not
+//  use this endpoint. Platform/league admins use POST
+//  /api/basketball-leagues/{id}/players to create rosters on behalf of
+//  others.)
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -40,7 +41,7 @@ export async function POST(
     if (member.status !== "approved" || !member.role) {
       throw new AccessError("not_a_league_member", 403);
     }
-    if (!["player", "team_manager"].includes(member.role)) {
+    if (member.role !== "player") {
       throw new AccessError("forbidden", 403);
     }
 
@@ -86,16 +87,6 @@ export async function POST(
     if (teamErr) throw new AccessError(teamErr.message, 500);
     if (!team) throw new AccessError("invalid_team_id", 400);
     if (team.basketball_league_id !== id) {
-      throw new AccessError("team_not_in_league", 400);
-    }
-
-    // Team managers are pre-bound to their own team; reject any attempt
-    // to spawn themselves under a different team.
-    if (
-      member.role === "team_manager" &&
-      member.team_id &&
-      member.team_id !== teamId
-    ) {
       throw new AccessError("team_not_in_league", 400);
     }
 
