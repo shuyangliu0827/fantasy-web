@@ -101,63 +101,84 @@ export default function CommunityLeaguesPage() {
               gap: 14,
             }}
           >
-            {leagues.map((l) => {
-              const href = l.is_contest_enabled
-                ? `/contest/${l.slug}/build`
-                : `/basketball-leagues/${l.slug}`;
-              return (
-                <Link
-                  key={l.id}
-                  href={href}
+            {leagues.map((l) => (
+              <div
+                key={l.id}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 14,
+                  padding: 18,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <h2
+                    style={{
+                      fontSize: 18,
+                      fontWeight: 900,
+                      color: "#0f172a",
+                      letterSpacing: "-0.02em",
+                      margin: 0,
+                    }}
+                  >
+                    {l.name}
+                  </h2>
+                  <LeagueVisibilityBadge visibility={l.visibility} />
+                </div>
+                {l.description && (
+                  <p
+                    style={{
+                      color: "#475569",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      margin: 0,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {l.description}
+                  </p>
+                )}
+                <div
                   style={{
-                    background: "#fff",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: 14,
-                    padding: 18,
-                    textDecoration: "none",
-                    color: "inherit",
                     display: "flex",
                     flexDirection: "column",
-                    gap: 8,
-                    transition: "transform 0.15s, border-color 0.15s",
+                    gap: 4,
+                    marginTop: 4,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <h2
+                  {l.is_contest_enabled && (
+                    <Link
+                      href={`/contest/${l.slug}/build`}
                       style={{
-                        fontSize: 18,
-                        fontWeight: 900,
-                        color: "#0f172a",
-                        letterSpacing: "-0.02em",
-                        margin: 0,
-                      }}
-                    >
-                      {l.name}
-                    </h2>
-                    <LeagueVisibilityBadge visibility={l.visibility} />
-                  </div>
-                  {l.description && (
-                    <p
-                      style={{
-                        color: "#475569",
                         fontSize: 13,
-                        lineHeight: 1.5,
-                        margin: 0,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
+                        color: "#1e3a8a",
+                        fontWeight: 800,
+                        textDecoration: "none",
                       }}
                     >
-                      {l.description}
-                    </p>
+                      {t("进入每日竞赛 →", "Play daily contest →")}
+                    </Link>
                   )}
-                  <span style={{ fontSize: 13, color: "#1e3a8a", fontWeight: 800, marginTop: 4 }}>
-                    {t("进入联赛 →", "Enter league →")}
-                  </span>
-                </Link>
-              );
-            })}
+                  <Link
+                    href={`/basketball-leagues/${l.slug}`}
+                    style={{
+                      fontSize: 13,
+                      color: "#1e3a8a",
+                      fontWeight: 800,
+                      textDecoration: "none",
+                    }}
+                  >
+                    {t("查看联赛详情 →", "View league details →")}
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>

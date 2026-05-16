@@ -4,6 +4,10 @@ export const dynamic = "force-dynamic";
 // Public leagues are readable by anyone; otherwise only members/admins.
 // When access is denied, returns { league: {id,slug,name,visibility}, access }
 // with status 200 so the page can render the appropriate wall.
+//
+// When the caller has a pending/approved claim on a player in this league,
+// the response also includes `member_player` with the bound row so the UI
+// can show "已绑定球员档案 · {name} #{jersey}" and link to the player page.
 
 import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
@@ -39,6 +43,56 @@ export async function GET(
       return NextResponse.json({ error: "league_not_found" }, { status: 404 });
     }
 
+    let memberPlayer: {
+      id: string;
+      display_name: string;
+      jersey_number: string | null;
+      team_id: string | null;
+      claim_status: string;
+    } | null = null;
+    let memberTeam: {
+      id: string;
+      name: string;
+      logo_url: string | null;
+    } | null = null;
+    if (userId) {
+      const { data: mp } = await supabase
+        .from("basketball_players")
+        .select("id, display_name, jersey_number, team_id, claim_status")
+        .eq("basketball_league_id", league.id)
+        .eq("claimed_by_user_id", userId)
+        .in("claim_status", ["pending", "approved"])
+        .limit(1)
+        .maybeSingle();
+      if (mp) {
+        memberPlayer = {
+          id: mp.id as string,
+          display_name: mp.display_name as string,
+          jersey_number: (mp.jersey_number as string | null) ?? null,
+          team_id: (mp.team_id as string | null) ?? null,
+          claim_status: mp.claim_status as string,
+        };
+      }
+      if (
+        access.memberRole === "team_manager" &&
+        access.memberStatus === "approved" &&
+        access.memberTeamId
+      ) {
+        const { data: tm } = await supabase
+          .from("basketball_teams")
+          .select("id, name, logo_url")
+          .eq("id", access.memberTeamId)
+          .maybeSingle();
+        if (tm) {
+          memberTeam = {
+            id: tm.id as string,
+            name: tm.name as string,
+            logo_url: (tm.logo_url as string | null) ?? null,
+          };
+        }
+      }
+    }
+
     if (!access.canView) {
       // Strip full league payload — return only what walls need to render.
       return NextResponse.json({
@@ -49,9 +103,16 @@ export async function GET(
           visibility: league.visibility,
         },
         access,
+        member_player: memberPlayer,
+        member_team: memberTeam,
       });
     }
-    return NextResponse.json({ league, access });
+    return NextResponse.json({
+      league,
+      access,
+      member_player: memberPlayer,
+      member_team: memberTeam,
+    });
   } catch (e) {
     if (e instanceof AccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

@@ -8,8 +8,10 @@ import { NextResponse } from "next/server";
 import { serviceDb } from "@/lib/basketball/db";
 import {
   AccessError,
+  getBasketballLeagueAdminRole,
+  getBasketballLeagueMemberRole,
   getCurrentUserIdFromRequest,
-  requireLeagueAdmin,
+  isPlatformAdmin,
   requireViewPermission,
 } from "@/lib/basketball/access";
 import { isCanonicalPosition } from "@/lib/basketball/contest-positions";
@@ -46,7 +48,23 @@ export async function POST(
   const supabase = serviceDb();
   try {
     const userId = await getCurrentUserIdFromRequest(req);
-    await requireLeagueAdmin(supabase, id, userId);
+    if (!userId) throw new AccessError("unauthorized", 401);
+
+    const isAdmin =
+      (await isPlatformAdmin(supabase, userId)) ||
+      (await getBasketballLeagueAdminRole(supabase, id, userId)) !== null;
+    let managerTeamId: string | null = null;
+    if (!isAdmin) {
+      const member = await getBasketballLeagueMemberRole(supabase, id, userId);
+      if (
+        member.role !== "team_manager" ||
+        member.status !== "approved" ||
+        !member.team_id
+      ) {
+        throw new AccessError("forbidden", 403);
+      }
+      managerTeamId = member.team_id;
+    }
 
     const body = (await req.json()) as {
       display_name?: string;
@@ -89,6 +107,9 @@ export async function POST(
     if (!team) throw new AccessError("invalid_team_id", 400);
     if (team.basketball_league_id !== id) {
       throw new AccessError("team_not_in_league", 400);
+    }
+    if (managerTeamId && managerTeamId !== teamId) {
+      throw new AccessError("forbidden", 403);
     }
 
     const { data, error } = await supabase

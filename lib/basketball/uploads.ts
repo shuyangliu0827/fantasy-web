@@ -1,51 +1,82 @@
 // lib/basketball/uploads.ts
 //
-// Client-side image upload helpers for real basketball league assets.
-// Mirrors the pattern used by /app/league/[slug]/settings/page.tsx
-// (bucket `league-logos`). Buckets are created in migration 034.
+// Client-side helpers that POST image files to the server-side upload
+// endpoints. The endpoints (under /api/basketball-{players,teams}/...)
+// use the service-role Supabase client to write the file to storage,
+// after running the same access checks the rest of the basketball
+// admin API uses (lib/basketball/access.ts).
 //
-// Path scheme:
-//   basketball-team-logos/{leagueId}/{teamId}.{ext}
-//   basketball-player-avatars/{leagueId}/{playerId}.{ext}
+// Why server-side: direct supabase.storage.from(...).upload(...) from
+// the browser is gated by storage.objects RLS, which in this project
+// produced opaque "row violates row-level security policy" denials
+// across migrations 036/037. Routing through the API removes that
+// failure mode entirely and keeps a single authorization path
+// (lib/basketball/access.ts) regardless of whether the caller is an
+// admin, a team manager, or a claim owner.
+//
+// The helpers preserve the previous signature — `(leagueId, entityId,
+// file) => Promise<publicUrl>` — so callers do not need to change.
+// `leagueId` is accepted for symmetry with the previous helpers, but
+// the server route resolves the canonical league id from the player /
+// team row itself.
 
 import { supabase } from "@/lib/shared/supabase";
 
-const TEAM_LOGO_BUCKET = "basketball-team-logos";
-const PLAYER_AVATAR_BUCKET = "basketball-player-avatars";
-
-async function uploadAndGetPublicUrl(
-  bucket: string,
-  path: string,
+async function postFile(
+  url: string,
   file: File,
 ): Promise<string> {
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(path, file, { upsert: true, contentType: file.type });
-  if (error) throw error;
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
-}
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
 
-function extOf(file: File): string {
-  const name = file.name || "";
-  const ext = name.includes(".") ? name.split(".").pop() : "";
-  return (ext || "jpg").toLowerCase();
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    let code = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) code = body.error;
+    } catch {
+      /* ignore */
+    }
+    // Preserve the status on the thrown Error so callers can branch on
+    // 403 vs other failures without re-parsing the message.
+    const err = new Error(code) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  const body = (await res.json()) as { url?: string };
+  if (!body?.url) throw new Error("missing_url_in_response");
+  return body.url;
 }
 
 export async function uploadBasketballTeamLogo(
-  leagueId: string,
+  _leagueId: string,
   teamId: string,
   file: File,
 ): Promise<string> {
-  const path = `${leagueId}/${teamId}.${extOf(file)}`;
-  return uploadAndGetPublicUrl(TEAM_LOGO_BUCKET, path, file);
+  return postFile(`/api/basketball-teams/${teamId}/logo`, file);
 }
 
 export async function uploadBasketballPlayerAvatar(
-  leagueId: string,
+  _leagueId: string,
   playerId: string,
   file: File,
 ): Promise<string> {
-  const path = `${leagueId}/${playerId}.${extOf(file)}`;
-  return uploadAndGetPublicUrl(PLAYER_AVATAR_BUCKET, path, file);
+  return postFile(`/api/basketball-players/${playerId}/avatar`, file);
+}
+
+export async function uploadBasketballLeagueLogo(
+  leagueId: string,
+  file: File,
+): Promise<string> {
+  return postFile(`/api/basketball-leagues/${leagueId}/logo`, file);
 }
