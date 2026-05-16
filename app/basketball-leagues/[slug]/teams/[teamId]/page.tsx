@@ -6,7 +6,8 @@ import LightHeader from "@/components/LightHeader";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
-import { basketballJson } from "@/lib/basketball/client";
+import { basketballFetch, basketballJson } from "@/lib/basketball/client";
+import { uploadBasketballTeamLogo } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
 
 type LeagueLite = {
@@ -20,6 +21,17 @@ type Access = {
   canView: boolean;
   visibility: "public" | "invite_only" | "private";
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
+  isPlatformAdmin?: boolean;
+  leagueAdminRole?: "league_owner" | "league_admin" | null;
+  memberRole?:
+    | "league_admin"
+    | "team_manager"
+    | "player"
+    | "referee"
+    | "scorekeeper"
+    | "viewer"
+    | null;
+  memberTeamId?: string | null;
 };
 
 type Team = {
@@ -178,6 +190,16 @@ export default function TeamDetailPage({
     );
   }
 
+  const isAdminLike =
+    leagueAccess.isPlatformAdmin ||
+    leagueAccess.leagueAdminRole != null ||
+    (leagueAccess.memberRole === "league_admin" && leagueAccess.memberStatus === "approved");
+  const isManagerOfThisTeam =
+    leagueAccess.memberRole === "team_manager" &&
+    leagueAccess.memberStatus === "approved" &&
+    leagueAccess.memberTeamId === team.id;
+  const canEditTeam = isAdminLike || isManagerOfThisTeam;
+
   return (
     <>
       <LightHeader activeHref="" />
@@ -246,6 +268,12 @@ export default function TeamDetailPage({
               </p>
             )}
           </div>
+          {canEditTeam && (
+            <TeamEditButton
+              team={team}
+              onSaved={(updated) => setTeam(updated)}
+            />
+          )}
         </div>
 
         <SeasonSnapshot summary={summary} />
@@ -528,6 +556,301 @@ function LeaderCard({
       </div>
     </Link>
   );
+}
+
+function TeamEditButton({
+  team,
+  onSaved,
+}: {
+  team: Team;
+  onSaved: (team: Team) => void;
+}) {
+  const { t } = useLang();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          alignSelf: "flex-start",
+          padding: "8px 14px",
+          background: "#fff",
+          border: "1px solid #cbd5e1",
+          color: "#1e3a8a",
+          borderRadius: 10,
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        {t("编辑球队", "Edit team")}
+      </button>
+      {open && (
+        <TeamEditModal
+          team={team}
+          onClose={() => setOpen(false)}
+          onSaved={(updated) => {
+            onSaved(updated);
+            setOpen(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function TeamEditModal({
+  team,
+  onClose,
+  onSaved,
+}: {
+  team: Team;
+  onClose: () => void;
+  onSaved: (team: Team) => void;
+}) {
+  const { t } = useLang();
+  const [name, setName] = useState(team.name);
+  const [abbreviation, setAbbreviation] = useState(team.abbreviation ?? "");
+  const [city, setCity] = useState(team.city ?? "");
+  const [bio, setBio] = useState(team.bio ?? "");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [errDetails, setErrDetails] = useState<string | null>(null);
+
+  const save = async () => {
+    if (!name.trim()) {
+      setErr(t("队名不能为空。", "Team name is required."));
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setErrDetails(null);
+    try {
+      let logoUrl: string | undefined;
+      if (logoFile) {
+        try {
+          logoUrl = await uploadBasketballTeamLogo("", team.id, logoFile);
+        } catch (e) {
+          const raw = e instanceof Error ? e.message : String(e);
+          const status =
+            e instanceof Error
+              ? (e as Error & { status?: number }).status ?? null
+              : null;
+          setErr(
+            status === 403
+              ? t(
+                  "你没有权限上传该球队的队徽。",
+                  "You do not have permission to upload this team's logo.",
+                )
+              : t("队徽上传失败，请重试。", "Logo upload failed."),
+          );
+          setErrDetails(raw);
+          setBusy(false);
+          return;
+        }
+      }
+
+      const patch: Record<string, unknown> = {
+        name: name.trim(),
+        abbreviation: abbreviation.trim() || null,
+        city: city.trim() || null,
+        bio: bio.trim() || null,
+      };
+      if (logoUrl) patch.logo_url = logoUrl;
+
+      const res = await basketballFetch(`/api/basketball-teams/${team.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        team?: Team;
+        error?: string;
+      };
+      if (!res.ok) {
+        setErr(t("保存失败，请重试。", "Save failed."));
+        setErrDetails(String(body.error ?? res.status));
+        return;
+      }
+      if (body.team) onSaved(body.team);
+      else onSaved({ ...team, ...patch, logo_url: logoUrl ?? team.logo_url });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.55)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff",
+          borderRadius: 16,
+          padding: 24,
+          width: "100%",
+          maxWidth: 520,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          boxShadow: "0 20px 50px rgba(15, 23, 42, 0.25)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", margin: 0 }}>
+            {t("编辑球队信息", "Edit team info")}
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="close"
+            style={{
+              background: "transparent",
+              border: "none",
+              fontSize: 18,
+              color: "#64748b",
+              cursor: "pointer",
+              padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <ModalField label={t("队名", "Name")}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={modalInput()}
+          />
+        </ModalField>
+        <ModalField label={t("缩写", "Abbreviation")}>
+          <input
+            value={abbreviation}
+            onChange={(e) => setAbbreviation(e.target.value)}
+            style={modalInput()}
+          />
+        </ModalField>
+        <ModalField label={t("城市", "City")}>
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            style={modalInput()}
+          />
+        </ModalField>
+        <ModalField label={t("简介", "Bio")}>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            rows={3}
+            style={{ ...modalInput(), minHeight: 80, resize: "vertical", fontFamily: "inherit" }}
+          />
+        </ModalField>
+        <ModalField label={t("队徽", "Logo")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {team.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={team.logo_url}
+                alt=""
+                style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover", background: "#f1f5f9" }}
+              />
+            ) : (
+              <span style={{ width: 40, height: 40, borderRadius: 8, background: "#f1f5f9", display: "inline-block" }} />
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+              style={{ fontSize: 12 }}
+            />
+            {logoFile && (
+              <span style={{ color: "#475569", fontSize: 12 }}>{logoFile.name}</span>
+            )}
+          </div>
+        </ModalField>
+
+        {err && (
+          <div style={{ marginTop: 6, marginBottom: 6 }}>
+            <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>{err}</div>
+            {errDetails && (
+              <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>{errDetails}</div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 18 }}>
+          <button
+            onClick={onClose}
+            disabled={busy}
+            style={{
+              padding: "10px 16px",
+              background: "transparent",
+              border: "1px solid #cbd5e1",
+              color: "#475569",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            {t("取消", "Cancel")}
+          </button>
+          <button
+            onClick={save}
+            disabled={busy}
+            style={{
+              padding: "10px 16px",
+              background: busy ? "#94a3b8" : "#1e3a8a",
+              border: "none",
+              color: "#fff",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: busy ? "default" : "pointer",
+            }}
+          >
+            {busy ? t("保存中…", "Saving…") : t("保存", "Save")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModalField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 6 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function modalInput(): React.CSSProperties {
+  return {
+    width: "100%",
+    padding: "10px 12px",
+    background: "#fff",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    fontSize: 14,
+    color: "#0f172a",
+    outline: "none",
+  };
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
