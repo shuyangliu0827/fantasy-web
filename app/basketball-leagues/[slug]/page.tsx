@@ -29,6 +29,7 @@ type Access = {
   canView: boolean;
   canManageLeague: boolean;
   canManageOwnTeam: boolean;
+  canInputStats: boolean;
   canEditOwnPlayerProfile: boolean;
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
   memberRole: MemberRole | null;
@@ -427,7 +428,7 @@ export default function BasketballLeaguePage({
               {t("进入每日竞赛 →", "Play daily contest →")}
             </Link>
           )}
-          {(access.canManageLeague || access.canManageOwnTeam) && (
+          {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
             <Link
               href={`/admin/basketball-leagues/${league.id}`}
               style={{

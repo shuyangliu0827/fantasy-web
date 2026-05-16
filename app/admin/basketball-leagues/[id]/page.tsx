@@ -126,10 +126,20 @@ function LeagueAdminPageInner({ id }: { id: string }) {
     setAccess(data.access);
     if (!data.access.canManageLeague && data.access.canManageOwnTeam) {
       setTab("players");
+    } else if (
+      !data.access.canManageLeague &&
+      !data.access.canManageOwnTeam &&
+      data.access.canInputStats
+    ) {
+      setTab("boxscore");
     }
     setLoading(false);
 
-    if (data.access.canManageTeamsPlayersGames || data.access.canManageOwnTeam) {
+    if (
+      data.access.canManageTeamsPlayersGames ||
+      data.access.canManageOwnTeam ||
+      data.access.canInputStats
+    ) {
       const [tRes, pRes, gRes] = await Promise.all([
         basketballJson<{ teams: Team[] }>(`/api/basketball-leagues/${id}/teams`),
         basketballJson<{ players: Player[] }>(`/api/basketball-leagues/${id}/players`),
@@ -173,7 +183,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
     );
   }
 
-  if (!access.canManageLeague && !access.canManageOwnTeam) {
+  if (!access.canManageLeague && !access.canManageOwnTeam && !access.canInputStats) {
     return (
       <>
         <LightHeader activeHref="" />
@@ -299,7 +309,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             restrictedNotice
           ))}
         {tab === "boxscore" &&
-          (isAdminLike ? (
+          (isAdminLike || access.canInputStats ? (
             <BoxScoreTab
               leagueSlug={league.slug}
               games={games}
