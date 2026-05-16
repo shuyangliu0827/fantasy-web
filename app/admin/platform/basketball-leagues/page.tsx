@@ -5,6 +5,7 @@ import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import AuthGate from "@/components/basketball/AuthGate";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
+import LeagueLogo from "@/components/basketball/LeagueLogo";
 import PlatformGrantLeagueAdminForm from "@/components/basketball/PlatformGrantLeagueAdminForm";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
@@ -17,6 +18,7 @@ type League = {
   visibility: "public" | "invite_only" | "private";
   created_by: string;
   created_at: string;
+  logo_url?: string | null;
 };
 
 type MeAccess = {
@@ -102,24 +104,39 @@ function PlatformBasketballLeaguesPageInner() {
   return (
     <>
       <LightHeader activeHref="" />
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 20px 80px" }}>
-        <h1
-          style={{
-            fontSize: 30,
-            fontWeight: 900,
-            color: "#0f172a",
-            letterSpacing: "-0.02em",
-            margin: "0 0 6px",
-          }}
-        >
-          {t("平台管理 · 篮球联赛", "Platform · Basketball Leagues")}
-        </h1>
-        <p style={{ color: "#475569", fontSize: 14, margin: "0 0 24px" }}>
-          {t(
-            "审核联赛申请、归档失活联赛、授予联赛管理员权限。",
-            "Approve / archive leagues and grant league admin permissions.",
-          )}
-        </p>
+      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "36px 20px 96px" }}>
+        <div style={{ marginBottom: 28 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.22em",
+              textTransform: "uppercase",
+              color: "#94a3b8",
+              marginBottom: 8,
+            }}
+          >
+            {t("平台管理", "Platform Admin")}
+          </div>
+          <h1
+            style={{
+              fontSize: 32,
+              fontWeight: 900,
+              color: "#0f172a",
+              letterSpacing: "-0.025em",
+              margin: "0 0 10px",
+              lineHeight: 1.15,
+            }}
+          >
+            {t("篮球联赛", "Basketball Leagues")}
+          </h1>
+          <p style={{ color: "#475569", fontSize: 14, margin: 0, lineHeight: 1.6, maxWidth: 640 }}>
+            {t(
+              "审核联赛申请、归档失活联赛、授予联赛管理员权限。",
+              "Approve / archive leagues and grant league admin permissions.",
+            )}
+          </p>
+        </div>
 
         <CreateLeagueForm onCreated={load} />
 
@@ -140,7 +157,17 @@ function PlatformBasketballLeaguesPageInner() {
         )}
 
         {leagues.length === 0 ? (
-          <div style={{ color: "#94a3b8", padding: 24, textAlign: "center" }}>
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #eef2f7",
+              borderRadius: 16,
+              padding: "48px 24px",
+              textAlign: "center",
+              color: "#64748b",
+              fontSize: 14,
+            }}
+          >
             {t("暂无篮球联赛。", "No basketball leagues yet.")}
           </div>
         ) : (
@@ -150,19 +177,21 @@ function PlatformBasketballLeaguesPageInner() {
                 key={l.id}
                 style={{
                   background: "#fff",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 14,
-                  padding: 16,
+                  border: "1px solid #eef2f7",
+                  borderRadius: 16,
+                  padding: 18,
+                  transition: "border-color 0.18s ease, box-shadow 0.18s ease",
                 }}
               >
                 <div
                   style={{
                     display: "flex",
-                    gap: 12,
+                    gap: 14,
                     alignItems: "center",
                     flexWrap: "wrap",
                   }}
                 >
+                  <LeagueLogo name={l.name} logoUrl={l.logo_url} size={44} />
                   <div style={{ flex: "1 1 240px", minWidth: 0 }}>
                     <Link
                       href={`/basketball-leagues/${l.slug}`}
@@ -171,13 +200,19 @@ function PlatformBasketballLeaguesPageInner() {
                         color: "#0f172a",
                         textDecoration: "none",
                         fontSize: 16,
+                        letterSpacing: "-0.01em",
                       }}
                     >
                       {l.name}
                     </Link>
-                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                      /{l.slug} ·{" "}
-                      <code title={l.created_by}>created_by {l.created_by.slice(0, 8)}…</code>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>
+                      <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                        /{l.slug}
+                      </span>{" "}
+                      ·{" "}
+                      <code title={l.created_by} style={{ color: "#94a3b8" }}>
+                        {l.created_by.slice(0, 8)}…
+                      </code>
                     </div>
                   </div>
                   <LeagueVisibilityBadge visibility={l.visibility} />
@@ -199,35 +234,43 @@ function PlatformBasketballLeaguesPageInner() {
                             : "#991b1b",
                       fontSize: 11,
                       fontWeight: 800,
-                      letterSpacing: "0.05em",
+                      letterSpacing: "0.06em",
                       textTransform: "uppercase",
                     }}
                   >
                     {l.status}
                   </span>
-                  <button
-                    onClick={() => setStatus(l.id, STATUS_NEXT[l.status])}
-                    style={smallBtn("#1e3a8a")}
-                  >
-                    {t("切换到", "→")} {STATUS_NEXT[l.status]}
-                  </button>
-                  {l.status !== "rejected" && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button
-                      onClick={() => setStatus(l.id, "rejected")}
-                      style={smallBtn("#475569")}
+                      onClick={() => setStatus(l.id, STATUS_NEXT[l.status])}
+                      style={smallBtn("primary")}
                     >
-                      {t("拒绝", "Reject")}
+                      → {STATUS_NEXT[l.status]}
                     </button>
-                  )}
-                  <button
-                    onClick={() => setExpanded((id) => (id === l.id ? null : l.id))}
-                    style={smallBtn("#0f172a")}
-                  >
-                    {expanded === l.id ? t("收起", "Hide") : t("授权", "Grant")}
-                  </button>
+                    {l.status !== "rejected" && (
+                      <button
+                        onClick={() => setStatus(l.id, "rejected")}
+                        style={smallBtn("ghost")}
+                      >
+                        {t("拒绝", "Reject")}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setExpanded((id) => (id === l.id ? null : l.id))}
+                      style={smallBtn("dark")}
+                    >
+                      {expanded === l.id ? t("收起", "Hide") : t("授权", "Grant")}
+                    </button>
+                  </div>
                 </div>
                 {expanded === l.id && (
-                  <div style={{ marginTop: 14 }}>
+                  <div
+                    style={{
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid #f1f5f9",
+                    }}
+                  >
                     <PlatformGrantLeagueAdminForm leagueId={l.id} />
                   </div>
                 )}
@@ -240,17 +283,33 @@ function PlatformBasketballLeaguesPageInner() {
   );
 }
 
-function smallBtn(bg: string): React.CSSProperties {
-  return {
+function smallBtn(variant: "primary" | "dark" | "ghost"): React.CSSProperties {
+  const base: React.CSSProperties = {
     minHeight: 32,
-    padding: "0 12px",
-    background: bg,
-    color: "#fff",
+    padding: "0 14px",
     border: "none",
-    borderRadius: 8,
+    borderRadius: 999,
     fontSize: 12,
-    fontWeight: 700,
+    fontWeight: 800,
+    letterSpacing: "0.01em",
     cursor: "pointer",
+    transition: "background 0.15s ease, color 0.15s ease",
+  };
+  if (variant === "primary") {
+    return {
+      ...base,
+      background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
+      color: "#fff",
+    };
+  }
+  if (variant === "dark") {
+    return { ...base, background: "#0f172a", color: "#fff" };
+  }
+  return {
+    ...base,
+    background: "transparent",
+    color: "#475569",
+    border: "1px solid #e2e8f0",
   };
 }
 

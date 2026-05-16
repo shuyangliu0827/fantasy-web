@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
+import LeagueLogo from "@/components/basketball/LeagueLogo";
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import PendingAccessNotice from "@/components/basketball/PendingAccessNotice";
@@ -226,46 +227,145 @@ export default function BasketballLeaguePage({
   return (
     <>
       <LightHeader activeHref="" />
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 20px 80px" }}>
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 10 }}
+      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 20px 96px" }}>
+        <section
+          aria-label="League hero"
+          style={{
+            position: "relative",
+            background:
+              "linear-gradient(135deg, #ffffff 0%, #f8fafc 60%, #eef2f9 100%)",
+            border: "1px solid #eef2f7",
+            borderRadius: 24,
+            padding: "32px 28px",
+            marginBottom: 24,
+            overflow: "hidden",
+          }}
         >
-          {league.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={league.logo_url}
-              alt=""
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 12,
-                objectFit: "cover",
-                background: "#f1f5f9",
-                flexShrink: 0,
-              }}
-            />
-          ) : null}
-          <h1
+          <div
+            aria-hidden
             style={{
-              fontSize: 32,
-              fontWeight: 900,
-              color: "#0f172a",
-              letterSpacing: "-0.02em",
-              margin: 0,
+              position: "absolute",
+              top: -120,
+              right: -120,
+              width: 360,
+              height: 360,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(closest-side, rgba(30, 58, 138, 0.10), transparent 70%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              bottom: -160,
+              left: -80,
+              width: 320,
+              height: 320,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(closest-side, rgba(245, 158, 11, 0.12), transparent 70%)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "relative",
+              display: "flex",
+              gap: 24,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
-            {league.name}
-          </h1>
-          <LeagueVisibilityBadge visibility={league.visibility} />
-          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>
-            {league.status}
-          </span>
-        </div>
-        {league.description && (
-          <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.6, marginBottom: 14 }}>
-            {league.description}
-          </p>
-        )}
+            <LeagueLogo
+              name={league.name}
+              logoUrl={league.logo_url}
+              size={104}
+              emphasis="ring"
+            />
+            <div style={{ flex: 1, minWidth: 260 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.22em",
+                  textTransform: "uppercase",
+                  color: "#94a3b8",
+                  marginBottom: 8,
+                }}
+              >
+                {t("社区联赛", "Community League")}
+              </div>
+              <h1
+                style={{
+                  fontSize: 40,
+                  fontWeight: 900,
+                  color: "#0f172a",
+                  letterSpacing: "-0.03em",
+                  margin: 0,
+                  lineHeight: 1.05,
+                }}
+              >
+                {league.name}
+              </h1>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  marginTop: 12,
+                }}
+              >
+                <LeagueVisibilityBadge visibility={league.visibility} />
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "#475569",
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: "rgba(15, 23, 42, 0.04)",
+                  }}
+                >
+                  {league.status}
+                </span>
+                {league.is_contest_enabled && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: "0.06em",
+                      textTransform: "uppercase",
+                      color: "#92400e",
+                      padding: "4px 10px",
+                      borderRadius: 999,
+                      background: "linear-gradient(135deg, #fef3c7, #fde68a)",
+                    }}
+                  >
+                    {t("每日竞赛", "Daily Contest")}
+                  </span>
+                )}
+              </div>
+              {league.description && (
+                <p
+                  style={{
+                    color: "#475569",
+                    fontSize: 15,
+                    lineHeight: 1.65,
+                    margin: "16px 0 0",
+                    maxWidth: 640,
+                  }}
+                >
+                  {league.description}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
         {access.memberStatus === "approved" && access.memberRole && (
           <div
             style={{
@@ -410,42 +510,57 @@ export default function BasketballLeaguePage({
           </div>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
-          {league.is_contest_enabled && (
-            <Link
-              href={`/contest/${league.slug}/build`}
-              style={{
-                display: "inline-block",
-                padding: "8px 14px",
-                background: "var(--gradient-gold, linear-gradient(135deg,#f59e0b,#d97706))",
-                color: "#0a0e1a",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 800,
-                textDecoration: "none",
-              }}
-            >
-              {t("进入每日竞赛 →", "Play daily contest →")}
-            </Link>
-          )}
-          {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
-            <Link
-              href={`/admin/basketball-leagues/${league.id}`}
-              style={{
-                display: "inline-block",
-                padding: "8px 14px",
-                background: "#1e3a8a",
-                color: "#fff",
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 800,
-                textDecoration: "none",
-              }}
-            >
-              {t("进入管理后台 →", "Manage league →")}
-            </Link>
-          )}
-        </div>
+        {(league.is_contest_enabled ||
+          access.canManageLeague ||
+          access.canManageOwnTeam ||
+          access.canInputStats) && (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
+            {league.is_contest_enabled && (
+              <Link
+                href={`/contest/${league.slug}/build`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "11px 20px",
+                  background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                  color: "#0a0e1a",
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 900,
+                  textDecoration: "none",
+                  boxShadow:
+                    "0 8px 24px -8px rgba(245, 158, 11, 0.45), 0 0 0 1px rgba(245, 158, 11, 0.2)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {t("进入每日竞赛", "Play Daily Contest")} <span aria-hidden>→</span>
+              </Link>
+            )}
+            {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
+              <Link
+                href={`/admin/basketball-leagues/${league.id}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "11px 20px",
+                  background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
+                  color: "#fff",
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 900,
+                  textDecoration: "none",
+                  boxShadow:
+                    "0 8px 24px -8px rgba(30, 58, 138, 0.5), 0 0 0 1px rgba(30, 58, 138, 0.2)",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {t("进入管理后台", "Manage League")} <span aria-hidden>→</span>
+              </Link>
+            )}
+          </div>
+        )}
 
         <Section title={t("球队", "Teams")} count={teams.length}>
           {teams.length === 0 ? (
@@ -577,8 +692,14 @@ export default function BasketballLeaguePage({
       <style>{`
         .bb-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 10px;
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+          gap: 12px;
+        }
+        .bb-grid > a:hover,
+        a[data-bb-card]:hover {
+          transform: translateY(-1px);
+          border-color: #cbd5e1;
+          box-shadow: 0 14px 30px -20px rgba(15, 23, 42, 0.18);
         }
       `}</style>
       {claimModalOpen && (
@@ -615,74 +736,111 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section style={{ marginTop: 28 }}>
-      <h2
+    <section style={{ marginTop: 36 }}>
+      <div
         style={{
-          fontSize: 16,
-          fontWeight: 900,
-          color: "#0f172a",
-          letterSpacing: "-0.01em",
-          margin: "0 0 12px",
+          display: "flex",
+          alignItems: "baseline",
+          gap: 10,
+          marginBottom: 14,
+          paddingBottom: 10,
+          borderBottom: "1px solid #eef2f7",
         }}
       >
-        {title}{" "}
-        <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 13 }}>· {count}</span>
-      </h2>
+        <h2
+          style={{
+            fontSize: 18,
+            fontWeight: 900,
+            color: "#0f172a",
+            letterSpacing: "-0.02em",
+            margin: 0,
+          }}
+        >
+          {title}
+        </h2>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 800,
+            color: "#94a3b8",
+            padding: "2px 8px",
+            borderRadius: 999,
+            background: "#f1f5f9",
+          }}
+        >
+          {count}
+        </span>
+      </div>
       {children}
     </section>
-  );
-}
-
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 12,
-        padding: 14,
-      }}
-    >
-      {children}
-    </div>
   );
 }
 
 function cardLinkStyle(extra?: React.CSSProperties): React.CSSProperties {
   return {
     background: "#fff",
-    border: "1px solid #e2e8f0",
-    borderRadius: 12,
+    border: "1px solid #eef2f7",
+    borderRadius: 14,
     padding: 14,
     textDecoration: "none",
     color: "inherit",
     display: "block",
-    transition: "border-color 0.15s",
+    transition: "transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease",
     ...extra,
   };
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ color: "#94a3b8", fontSize: 14, padding: "8px 0" }}>{text}</div>;
+  return (
+    <div
+      style={{
+        color: "#94a3b8",
+        fontSize: 13,
+        padding: "16px 0",
+        fontStyle: "italic",
+      }}
+    >
+      {text}
+    </div>
+  );
 }
 
 function ComingSoonCard({ title, body }: { title: string; body: string }) {
   return (
     <div
       style={{
-        background: "#fff",
-        border: "1px dashed #cbd5e1",
-        borderRadius: 12,
-        padding: 16,
+        background: "linear-gradient(135deg, #f8fafc, #f1f5f9)",
+        border: "1px solid #eef2f7",
+        borderRadius: 14,
+        padding: 18,
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      <div style={{ fontWeight: 800, color: "#0f172a", marginBottom: 6, fontSize: 14 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: "#94a3b8",
+          marginBottom: 8,
+        }}
+      >
+        Coming Soon
+      </div>
+      <div
+        style={{
+          fontWeight: 900,
+          color: "#0f172a",
+          marginBottom: 6,
+          fontSize: 15,
+          letterSpacing: "-0.01em",
+        }}
+      >
         {title}
       </div>
-      <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>{body}</div>
-      <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.05em" }}>
-        COMING SOON
-      </div>
+      <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>{body}</div>
     </div>
   );
 }
