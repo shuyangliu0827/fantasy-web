@@ -6,7 +6,8 @@ import LightHeader from "@/components/LightHeader";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
-import { basketballJson } from "@/lib/basketball/client";
+import { basketballFetch, basketballJson } from "@/lib/basketball/client";
+import { uploadBasketballPlayerAvatar } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
 
 type LeagueLite = {
@@ -20,6 +21,7 @@ type LeagueAccess = {
   canView: boolean;
   visibility: "public" | "invite_only" | "private";
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
+  canEditOwnPlayerProfile: boolean;
 };
 
 type Player = {
@@ -97,6 +99,7 @@ export default function PlayerDetailPage({
   const [claimedUser, setClaimedUser] = useState<ClaimedUser>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async () => {
     const leagueRes = await basketballJson<{ league: LeagueLite; access: LeagueAccess }>(
@@ -294,8 +297,44 @@ export default function PlayerDetailPage({
                 {player.bio}
               </p>
             )}
+            {leagueAccess.canEditOwnPlayerProfile && !editing && (
+              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => setEditing(true)}
+                  style={{
+                    padding: "6px 14px",
+                    background: "#1e3a8a",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t("编辑资料", "Edit Profile")}
+                </button>
+                <UnbindButton
+                  playerId={player.id}
+                  onUnbound={() => {
+                    setEditing(false);
+                    load();
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
+        {editing && leagueAccess.canEditOwnPlayerProfile && (
+          <SelfEditProfileForm
+            player={player}
+            onCancel={() => setEditing(false)}
+            onSaved={() => {
+              setEditing(false);
+              load();
+            }}
+          />
+        )}
 
         <h2 style={sectionTitle()}>
           {t("赛季均值", "Season averages")}{" "}
@@ -530,4 +569,329 @@ function td(): React.CSSProperties {
 }
 function Empty({ text }: { text: string }) {
   return <div style={{ color: "#94a3b8", fontSize: 14, padding: "8px 0 24px" }}>{text}</div>;
+}
+
+function UnbindButton({
+  playerId,
+  onUnbound,
+}: {
+  playerId: string;
+  onUnbound: () => void;
+}) {
+  const { t } = useLang();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const click = async () => {
+    if (
+      !window.confirm(
+        t(
+          "解绑后此档案将不再与你的账号关联，你的统计仍保留。确认解绑？",
+          "After unbinding, this profile will no longer be linked to your account. Your stats are kept. Continue?",
+        ),
+      )
+    )
+      return;
+    setBusy(true);
+    setErr(null);
+    const res = await basketballFetch(
+      `/api/basketball-players/${playerId}/claim`,
+      { method: "DELETE" },
+    );
+    setBusy(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setErr((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      return;
+    }
+    onUnbound();
+  };
+  return (
+    <>
+      <button
+        onClick={click}
+        disabled={busy}
+        style={{
+          padding: "6px 14px",
+          background: "transparent",
+          border: "1px solid #fecaca",
+          color: "#991b1b",
+          borderRadius: 999,
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: busy ? "default" : "pointer",
+        }}
+      >
+        {busy ? t("解绑中…", "Unbinding…") : t("解绑档案", "Unbind Profile")}
+      </button>
+      {err && (
+        <span style={{ color: "#991b1b", fontSize: 12, fontWeight: 700, alignSelf: "center" }}>
+          {err}
+        </span>
+      )}
+    </>
+  );
+}
+
+function SelfEditProfileForm({
+  player,
+  onCancel,
+  onSaved,
+}: {
+  player: {
+    id: string;
+    display_name: string;
+    position: string | null;
+    jersey_number: string | null;
+    height_cm: number | null;
+    weight_kg: number | null;
+    birth_year: number | null;
+    bio: string | null;
+  };
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useLang();
+  const [displayName, setDisplayName] = useState(player.display_name);
+  const [position, setPosition] = useState(player.position ?? "");
+  const [jersey, setJersey] = useState(player.jersey_number ?? "");
+  const [heightCm, setHeightCm] = useState(
+    player.height_cm != null ? String(player.height_cm) : "",
+  );
+  const [weightKg, setWeightKg] = useState(
+    player.weight_kg != null ? String(player.weight_kg) : "",
+  );
+  const [birthYear, setBirthYear] = useState(
+    player.birth_year != null ? String(player.birth_year) : "",
+  );
+  const [bio, setBio] = useState(player.bio ?? "");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [errDetails, setErrDetails] = useState<string | null>(null);
+
+  const positions = ["PG", "SG", "SF", "PF", "C", "PG/SG", "SG/SF", "SF/PF", "PF/C"];
+
+  const save = async () => {
+    setErr(null);
+    setErrDetails(null);
+    if (!displayName.trim()) {
+      setErr(t("请填写球员名。", "Display name is required."));
+      return;
+    }
+    setBusy(true);
+    try {
+      let avatarUrl: string | null = null;
+      if (avatarFile) {
+        try {
+          avatarUrl = await uploadBasketballPlayerAvatar(
+            "",
+            player.id,
+            avatarFile,
+          );
+        } catch (uploadErr) {
+          const raw =
+            uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          const status =
+            uploadErr instanceof Error
+              ? (uploadErr as Error & { status?: number }).status ?? null
+              : null;
+          setErr(
+            status === 403
+              ? t(
+                  "你没有权限上传该球员头像。",
+                  "You do not have permission to upload this avatar.",
+                )
+              : t("头像上传失败，请重试。", "Avatar upload failed. Please try again."),
+          );
+          setErrDetails(raw);
+          return;
+        }
+      }
+
+      const heightCmNum = heightCm ? Number(heightCm) : null;
+      const weightKgNum = weightKg ? Number(weightKg) : null;
+      const birthYearNum = birthYear ? Number(birthYear) : null;
+      const patch: Record<string, unknown> = {
+        display_name: displayName.trim(),
+        position: position || null,
+        jersey_number: jersey || null,
+        height_cm:
+          heightCmNum != null && Number.isFinite(heightCmNum) ? heightCmNum : null,
+        weight_kg:
+          weightKgNum != null && Number.isFinite(weightKgNum) ? weightKgNum : null,
+        birth_year:
+          birthYearNum != null && Number.isFinite(birthYearNum) ? birthYearNum : null,
+        bio: bio || null,
+      };
+      if (avatarUrl) patch.avatar_url = avatarUrl;
+
+      const res = await basketballFetch(
+        `/api/basketball-players/${player.id}/profile`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr((body as { error?: string }).error ?? `HTTP ${res.status}`);
+        return;
+      }
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: -8,
+        marginBottom: 24,
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 16,
+        padding: 18,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 15 }}>
+        {t("编辑我的资料", "Edit My Profile")}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          placeholder={t("球员名", "Display name")}
+          style={{ ...editInputStyle(), flex: "2 1 200px" }}
+        />
+        <select
+          value={position}
+          onChange={(e) => setPosition(e.target.value)}
+          style={{ ...editInputStyle(), flex: "1 1 110px" }}
+        >
+          <option value="">{t("位置", "Position")}</option>
+          {positions.map((p) => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        <input
+          value={jersey}
+          onChange={(e) => setJersey(e.target.value)}
+          placeholder={t("球衣号", "Jersey #")}
+          style={{ ...editInputStyle(), flex: "0 1 110px" }}
+        />
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={heightCm}
+          onChange={(e) => setHeightCm(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("身高 cm", "Height cm")}
+          style={{ ...editInputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={weightKg}
+          onChange={(e) => setWeightKg(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("体重 kg", "Weight kg")}
+          style={{ ...editInputStyle(), flex: "1 1 120px" }}
+        />
+        <input
+          value={birthYear}
+          onChange={(e) => setBirthYear(e.target.value)}
+          type="number"
+          inputMode="numeric"
+          placeholder={t("出生年", "Birth year")}
+          style={{ ...editInputStyle(), flex: "1 1 130px" }}
+        />
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            color: "#475569",
+            flex: "1 1 200px",
+          }}
+        >
+          {t("替换头像", "Replace avatar")}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 12 }}
+          />
+        </label>
+      </div>
+      <textarea
+        value={bio}
+        onChange={(e) => setBio(e.target.value)}
+        placeholder={t("简介 (可选)", "Bio (optional)")}
+        rows={3}
+        style={{
+          ...editInputStyle(),
+          width: "100%",
+          minHeight: 70,
+          padding: "8px 12px",
+          resize: "vertical",
+          fontFamily: "inherit",
+        }}
+      />
+      {err && (
+        <div>
+          <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>{err}</div>
+          {errDetails && (
+            <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>{errDetails}</div>
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          onClick={save}
+          disabled={busy}
+          style={{
+            padding: "8px 16px",
+            background: busy ? "#94a3b8" : "#1e3a8a",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 800,
+            fontSize: 13,
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          {busy ? t("保存中…", "Saving…") : t("保存", "Save")}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          style={{
+            padding: "8px 16px",
+            background: "#fff",
+            border: "1px solid #cbd5e1",
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 13,
+            color: "#0f172a",
+            cursor: busy ? "default" : "pointer",
+          }}
+        >
+          {t("取消", "Cancel")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function editInputStyle(): React.CSSProperties {
+  return {
+    minHeight: 40,
+    padding: "0 12px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    fontSize: 14,
+    background: "#fff",
+  };
 }

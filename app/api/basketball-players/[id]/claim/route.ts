@@ -155,8 +155,15 @@ export async function DELETE(
   const supabase = serviceDb();
   try {
     const userId = await getCurrentUserIdFromRequest(req);
+    if (!userId) throw new AccessError("unauthorized", 401);
     const player = await loadPlayer(supabase, id);
-    await requireLeagueAdmin(supabase, player.basketball_league_id, userId);
+
+    // Self-unbind: the bound user can disconnect themselves at any time.
+    // Otherwise the caller must be a league/platform admin (existing path).
+    const isSelf = player.claimed_by_user_id === userId;
+    if (!isSelf) {
+      await requireLeagueAdmin(supabase, player.basketball_league_id, userId);
+    }
 
     const { data, error } = await supabase
       .from("basketball_players")
