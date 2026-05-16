@@ -41,15 +41,21 @@ async function postFile(
   });
   if (!res.ok) {
     let code = `HTTP ${res.status}`;
+    let details: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string };
+      const body = (await res.json()) as { error?: string; details?: string };
       if (body?.error) code = body.error;
+      if (body?.details) details = body.details;
     } catch {
       /* ignore */
     }
     // Preserve the status on the thrown Error so callers can branch on
-    // 403 vs other failures without re-parsing the message.
-    const err = new Error(code) as Error & { status?: number };
+    // 403 vs other failures without re-parsing the message. The server's
+    // `details` field (e.g. the storage SDK's underlying error message)
+    // is appended so the UI can show a useful diagnostic instead of just
+    // an opaque "upload_failed".
+    const message = details ? `${code}: ${details}` : code;
+    const err = new Error(message) as Error & { status?: number };
     err.status = res.status;
     throw err;
   }

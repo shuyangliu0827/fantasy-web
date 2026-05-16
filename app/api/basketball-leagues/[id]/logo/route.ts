@@ -58,9 +58,33 @@ export async function POST(
     const ext = extFromFile(file);
     const path = `${id}/logo.${ext}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const BUCKET = "basketball-league-logos";
+
+    // Migration 038 creates this bucket, but some environments may be
+    // running older schemas. Probe the bucket; if it's missing, create
+    // it as a public bucket on the fly using the service-role client.
+    // No-op when the bucket already exists.
+    const { data: bucketInfo, error: bucketLookupErr } =
+      await supabase.storage.getBucket(BUCKET);
+    if (!bucketInfo) {
+      const { error: createErr } = await supabase.storage.createBucket(BUCKET, {
+        public: true,
+      });
+      if (createErr) {
+        return NextResponse.json(
+          {
+            error: "bucket_unavailable",
+            details:
+              createErr.message +
+              (bucketLookupErr ? ` (lookup: ${bucketLookupErr.message})` : ""),
+          },
+          { status: 500 },
+        );
+      }
+    }
 
     const { error: uploadErr } = await supabase.storage
-      .from("basketball-league-logos")
+      .from(BUCKET)
       .upload(path, bytes, {
         upsert: true,
         contentType: file.type || "application/octet-stream",
@@ -71,9 +95,7 @@ export async function POST(
         { status: 500 },
       );
     }
-    const { data: pub } = supabase.storage
-      .from("basketball-league-logos")
-      .getPublicUrl(path);
+    const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
     return NextResponse.json({ url: pub.publicUrl });
   } catch (e) {
     if (e instanceof AccessError) {
