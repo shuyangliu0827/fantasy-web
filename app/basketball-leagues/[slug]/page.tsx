@@ -276,7 +276,7 @@ export default function BasketballLeaguePage({
                   {t("查看我的球员档案 →", "View my player profile →")}
                 </Link>
               )}
-            {access.memberRole === "player" &&
+            {(access.memberRole === "player" || access.memberRole === "team_manager") &&
               !access.canEditOwnPlayerProfile &&
               !memberPlayer && (
                 <button
@@ -292,7 +292,7 @@ export default function BasketballLeaguePage({
                     cursor: "pointer",
                   }}
                 >
-                  {t("认领球员档案", "Claim Player Profile")}
+                  {t("绑定球员档案", "Bind Player Profile")}
                 </button>
               )}
           </div>
@@ -472,6 +472,9 @@ export default function BasketballLeaguePage({
       {claimModalOpen && (
         <PlayerClaimModal
           leagueId={league.id}
+          fixedTeamId={
+            access.memberRole === "team_manager" ? access.memberTeamId ?? null : null
+          }
           onClose={() => setClaimModalOpen(false)}
           onSubmitted={async () => {
             setClaimModalOpen(false);

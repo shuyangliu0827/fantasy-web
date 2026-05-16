@@ -778,10 +778,11 @@ function PlayersTab({
         } catch (uploadErr) {
           const raw =
             uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-          // The supabase-js SDK throws a StorageApiError with `statusCode` when RLS denies.
-          // Detect RLS denial heuristically — the message contains "row-level security".
-          const rls = /row[- ]level security/i.test(raw);
-          setErr(avatarUploadErrorMessage(rls ? 403 : null, t));
+          const status =
+            uploadErr instanceof Error
+              ? (uploadErr as Error & { status?: number }).status ?? null
+              : null;
+          setErr(avatarUploadErrorMessage(status, t));
           setErrDetails(raw);
         }
       }
@@ -1027,8 +1028,11 @@ function PlayerEditForm({
         } catch (uploadErr) {
           const raw =
             uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
-          const rls = /row[- ]level security/i.test(raw);
-          setErr(avatarUploadErrorMessage(rls ? 403 : null, t));
+          const status =
+            uploadErr instanceof Error
+              ? (uploadErr as Error & { status?: number }).status ?? null
+              : null;
+          setErr(avatarUploadErrorMessage(status, t));
           setErrDetails(raw);
           return;
         }

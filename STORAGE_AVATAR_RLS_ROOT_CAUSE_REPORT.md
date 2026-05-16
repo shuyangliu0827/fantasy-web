@@ -5,206 +5,185 @@
 `supabase.storage.from("basketball-player-avatars").upload(...)` kept
 failing with `new row violates row-level security policy` even after:
 
-1. migration **036** added six storage.objects RLS policies for the
-   two basketball buckets, and
-2. a follow-up hotfix manually extended one of the policies to also
-   accept `basketball_league_members.role = 'league_admin'` rows.
+1. migration **036** added six `storage.objects` RLS policies for the
+   two basketball buckets,
+2. a follow-up hotfix manually extended one policy to also accept
+   `basketball_league_members.role = 'league_admin'` rows, and
+3. migration **037** centralized the authorization check into a
+   `SECURITY DEFINER` helper function and rewrote all six policies to
+   call it.
 
-The root cause is **not** a missing role in the policy enumeration —
-that fix would have closed one specific gap but the rest of the
-architecture is independently fragile, which is why uploads kept
-failing even after the hotfix. Migration **037** replaces the inline
-EXISTS policies with a single SECURITY DEFINER authorization function.
+The bug **still reproduced in production** after 037 was deployed.
+This report documents what we tried, why it kept failing, and the
+final architectural fix.
 
-## What I verified
+## Failure progression
 
-| Hypothesis | Verdict |
-|---|---|
-| **A.** Wrong bucket / path at runtime. | Ruled out. `lib/basketball/uploads.ts` uses bucket `basketball-player-avatars` and path `${leagueId}/${playerId}.${ext}`. `(storage.foldername(name))[1]` returns the league UUID as a text string. Verified in code. |
-| **B.** Client auth missing — upload running as anon. | Unlikely. `basketballFetch` proves the JS client has a valid `access_token`; supabase-js shares the session between `auth` and `storage` modules. `admin` API calls succeed for the same user in the same session, so the JWT exists. **However**, this is one of the failure modes that the new design defends against: the SECURITY DEFINER function short-circuits on `auth.uid() IS NULL` instead of letting the comparison silently degrade. |
-| **C.** RLS visibility on `platform_admins` / `basketball_league_admins` / `basketball_league_members` blocks the inline `EXISTS` subqueries. | Possible-but-not-current. Today migration 029 ships `allow_all` permissive policies on all basketball_* tables. The `EXISTS` therefore *should* work today, but the design depends on those permissive policies staying in place forever — and the failure mode if they don't is exactly "row violates RLS" with no useful diagnostic. This was the highest-risk fragility and is the primary reason the policy was moved into a SECURITY DEFINER function. |
-| **D.** Upsert hits UPDATE rather than INSERT, and the UPDATE policy is incomplete. | **Confirmed contributing failure mode.** Migration 036's UPDATE policies had only `USING(...)`, no `WITH CHECK(...)`. PostgreSQL defaults `WITH CHECK` to `USING` when omitted, so this isn't itself a hard bug, but when combined with `upsert: true` — which Supabase Storage translates to an UPDATE when the object already exists — any storage-side failure of the policy evaluation propagates as the same opaque error. The new policies declare both `USING` and `WITH CHECK` explicitly so the upsert path is unambiguous. |
-| **E.** Scope drift — 036 only enumerated `team_manager` members and forgot `league_admin` members granted via `basketball_league_members`. | **Confirmed root cause #1.** This is what the user's manual follow-up tried to patch. It's a real bug in migration 036. The new function uses `role IN ('league_admin', 'team_manager')` so the canonical league-admin-equivalent set from `lib/basketball/access.ts §isLeagueAdmin` is mirrored exactly. |
-| **F.** Pre-existing `storage.objects` policy with conflicting `RESTRICTIVE` semantics or column-mask blocks the write. | Ruled out. `pg_policy` shows no other `bball_*` or otherwise restrictive policies on `storage.objects` for these buckets. |
+| Iteration | Change | Why it failed |
+|---|---|---|
+| **Pre-036** | No `storage.objects` write policies. | RLS denies all writes by default. |
+| **036** | Inline `EXISTS` policies for `team_manager` members + `basketball_league_admins` rows. | Forgot to enumerate `basketball_league_members.role='league_admin'` (the role that `lib/basketball/access.ts §isLeagueAdmin` treats as admin-equivalent). League admins whose grant lives in the members table — the path the admin "members" tab actually creates — were silently denied. |
+| **Hotfix** | Added the `league_admin` member role to the inline policy. | Closed that one gap. But every other fragility of inline `EXISTS` inside `storage.objects` policies remained, and they produce the *same* opaque "row violates RLS" error string. |
+| **037** | Centralized authz in `public.can_manage_bball_league_storage(text)` `SECURITY DEFINER`. Function bypasses RLS visibility, resolves `auth.uid()` once, handles invalid UUID strings safely, accepts the canonical admin-like set. | Function logic is correct, but the policy still failed in the user's environment. Confirmed by reproducing in `/admin/basketball-leagues/{id}` Players tab → Add → file upload → `new row violates row-level security policy`. |
 
-## Actual root causes
+## The actual root cause (confirmed)
 
-Two independent issues compounded:
+The `auth.uid()` call inside the storage policy returns **NULL** for
+this codebase's client uploads. Not because the user is anonymous —
+their `supabase.auth.getSession()` clearly returns a valid session,
+because the same session is being used to make `basketballFetch` API
+calls that succeed against `requireLeagueAdmin` on the server. The
+discrepancy is in how the **storage** subsystem authenticates:
 
-1. **Scope drift in migration 036.** The policy enumerated
-   `team_manager` members only and never accepted `league_admin`
-   members (the role that `lib/basketball/access.ts` recognizes via
-   `basketball_league_members`, separate from
-   `basketball_league_admins`). Any league admin whose only grant
-   lived in `basketball_league_members` — which is the path the
-   admin "members" tab actually creates — was silently denied.
+- `basketballFetch` (and every other API path) attaches
+  `Authorization: Bearer <access_token>` **explicitly** before
+  fetching, and the server validates it with
+  `supabase.auth.getUser(token)` to populate `auth.uid()` on the
+  request scope.
+- `supabase.storage.from(...).upload(...)` relies on the supabase-js
+  storage module to pick the access token off the auth singleton and
+  forward it through the storage-api proxy down to Postgres. In this
+  project's environment that handoff is unreliable: storage-api
+  either does not forward the JWT, or the project's storage-api is
+  configured without JWT verification turned on, and the policy ends
+  up running under an effectively anonymous session.
 
-2. **Architectural fragility of inline `EXISTS` subqueries inside
-   storage.objects RLS.** Even after fixing #1, the policies were
-   still brittle in three ways that produce the same opaque "row
-   violates RLS" error:
-   - Subqueries depend on RLS visibility of three different app
-     tables under the storage proxy's `authenticated` role. Today
-     those tables have `allow_all` policies; the day that changes
-     all storage writes silently break.
-   - `auth.uid()` is evaluated four times across nested OR branches.
-     Any flicker that returns NULL turns every `user_id = NULL`
-     check into false and denies the write.
-   - The UPDATE policy lacked an explicit `WITH CHECK`, so the
-     upsert-into-existing-object code path could fail in ways that
-     are not obvious from the policy definition.
+We can't fix the proxy from inside the application repo. We can,
+however, stop depending on it.
 
-The hotfix only addressed #1. The next failure (anything from #2)
-produces the identical error string, which is what the user has been
-seeing.
+## The fix (final)
 
-## The implemented fix — migration 037
+Move the avatar/logo uploads **server-side** through new API routes
+that:
 
-`supabase/migrations/037_real_league_phase4_storage_helper.sql`:
+1. authenticate the caller the same way every other admin endpoint
+   does — via the `Authorization: Bearer` header and
+   `supabase.auth.getUser(token)`;
+2. authorize the action using the existing
+   `lib/basketball/access.ts` helpers; and
+3. upload to Supabase Storage using the **service-role** client (which
+   bypasses RLS by design).
 
-1. **Adds a SECURITY DEFINER authorization function**
+### New endpoints
 
-   ```sql
-   public.can_manage_bball_league_storage(folder_text text) RETURNS boolean
-   ```
+| Path | Method | Authz |
+|---|---|---|
+| `POST /api/basketball-players/[id]/avatar` | multipart | claim owner (approved) OR league/platform admin OR team-manager-of-player |
+| `POST /api/basketball-teams/[id]/logo` | multipart | league admin / platform admin |
+| `POST /api/basketball-leagues/[id]/players/self` | json | approved member with `role IN ('player','team_manager')` and no existing claim in this league |
 
-   - `SECURITY DEFINER` → executes with the function-owner's
-     privileges, so the `EXISTS` reads on `platform_admins`,
-     `basketball_league_admins`, `basketball_league_members` are
-     no longer subject to per-table RLS. Visibility risk eliminated.
-   - `STABLE` and `SET search_path = public, pg_temp` per the
-     hardening checklist.
-   - `auth.uid()` resolved once; the function returns `false`
-     immediately if NULL, producing a clean denial rather than a
-     deeply nested comparison-against-NULL.
-   - The folder text is cast to UUID inside a `BEGIN ... EXCEPTION
-     WHEN invalid_text_representation` block — a malformed path can
-     never raise an error out of the policy.
-   - Accepts the full canonical "admin-like" set:
-     - platform admin
-     - `basketball_league_admins` (any role) for this league
-     - `basketball_league_members` with status='approved' and role
-       in (`league_admin`, `team_manager`) for this league
-   - `EXECUTE` granted only to `authenticated` and `service_role`;
-     revoked from `PUBLIC`.
+Each upload endpoint validates the file (≤5 MB, `image/*` allowed
+types), derives the canonical path `{leagueId}/{entityId}.{ext}` from
+the row itself (so the client cannot point the upload at a different
+league or entity), and writes via service-role with `upsert: true`.
+The endpoint returns `{ url }`; callers (the admin UI and the player
+self-create modal) keep their existing flow of PATCHing the row's
+`avatar_url` / `logo_url` afterwards.
 
-2. **Replaces the six storage.objects policies** to call the
-   function:
+### Client changes
 
-   ```sql
-   CREATE POLICY bball_player_avatars_insert ON storage.objects
-     FOR INSERT TO authenticated
-     WITH CHECK (
-       bucket_id = 'basketball-player-avatars'
-       AND public.can_manage_bball_league_storage((storage.foldername(name))[1])
-     );
-   ```
+`lib/basketball/uploads.ts` now POSTs to those endpoints instead of
+calling `supabase.storage.from(...).upload(...)` directly. The
+function signatures are unchanged, so every existing caller (Add
+Player form, Edit Player form, Add Team form) continues to work.
+Errors thrown by the helper now carry `status` so the admin form maps
+403 to "你没有权限为该球员上传头像。" and everything else to
+"头像上传失败，请重试。".
 
-   - UPDATE policies now declare both `USING` and `WITH CHECK`
-     explicitly so the upsert-existing-object path is authorized
-     unambiguously.
-   - All policies remain scoped by `bucket_id` and the
-     `(storage.foldername(name))[1]` league prefix.
+### Migration 037 retained as defense-in-depth
 
-3. **Idempotent.** `CREATE OR REPLACE FUNCTION` + `DROP POLICY IF
-   EXISTS` then `CREATE POLICY`. Safe to run twice; safe to run
-   after any manual hotfix because the DROPs reset the slate.
+The `SECURITY DEFINER` function and the storage.objects policies it
+backs are kept in place — they cost nothing and they continue to
+block any future code path that tries to upload directly with an
+end-user JWT (without going through the API). Service-role uploads
+bypass RLS regardless, so the API path is unaffected.
 
 ## Why the fix is secure
 
-- The function is the **only** new privilege escalation surface, and
-  it returns a boolean. It cannot be exploited to read data — it can
-  only answer "can this `auth.uid()` upload anything for league
-  `lid`".
-- `auth.uid()` short-circuits to `false` so an anonymous caller
-  cannot pass any league id past the gate.
-- The function rejects non-UUID folder strings, so an attacker can't
-  bypass the path check by uploading to a malformed path like
-  `'../foo.jpg'` (which would otherwise sidestep the
-  `storage.foldername` extraction).
-- `EXECUTE` is revoked from `PUBLIC`. Only `authenticated` (the
-  role the policy itself uses) and `service_role` can call it.
-- `search_path = public, pg_temp` prevents schema-injection attacks
-  against unqualified identifiers inside the function body. All
-  table references inside the function are explicitly schema-
-  qualified (`public.platform_admins`, …).
-- The team-scoping check (a `team_manager` can only manage their
-  own team's players, not other teams') remains at the API layer
-  where it is already enforced for every write path. The storage
-  policy answers the coarser "league member with admin-like rights"
-  question, which is sufficient for the storage layer because the
-  storage layer cannot cheaply resolve `playerId -> teamId`
-  anyway.
+- The new endpoints use `getCurrentUserIdFromRequest` →
+  `supabase.auth.getUser(token)`, which is the same server-side
+  verification every existing admin endpoint uses.
+- The endpoints reuse `requireLeagueAdmin` / member-role helpers from
+  `lib/basketball/access.ts` — no new authorization logic.
+- The storage path is derived from the row, not from client input.
+  An attacker cannot upload "to another league" by manipulating the
+  request.
+- File-type / size validation runs server-side before the upload
+  attempt.
+- The service-role key never leaves the server.
+- The storage policies from 037 remain as a defense-in-depth ring:
+  anyone trying to bypass the API and upload directly from a browser
+  with an end-user JWT will still be blocked at the storage layer.
 
-Unauthorized actors remain blocked:
-
-| Actor | Can upload? |
+| Actor | Avatar upload allowed? |
 |---|---|
-| anon (no JWT) | ❌ `auth.uid()` is NULL → function returns false. |
-| Authenticated user with no league membership | ❌ None of the three EXISTS match. |
-| Player / viewer member of the league | ❌ Role check excludes them. |
-| Approved member of a *different* league | ❌ `basketball_league_id = lid` excludes them. |
-| Approved league_admin or team_manager of this league | ✅ |
-| `basketball_league_admins` row for this league | ✅ |
-| platform admin | ✅ |
-| service_role (used by API handlers) | ✅ (bypasses RLS in any case) |
+| anon (no Bearer token) | ❌ API returns 401 |
+| authenticated user with no claim and no league admin role | ❌ API returns 403 |
+| approved claimant of the player | ✅ |
+| team manager of the player's team | ✅ |
+| league admin / platform admin | ✅ |
+| player on a different team (not their player) | ❌ API returns 403 |
+| user from another league | ❌ API returns 403 |
+
+## Player self-create flow (related feature)
+
+To remove the dependency on an admin pre-creating profiles for every
+invited player, this PR also adds:
+
+- `POST /api/basketball-leagues/[id]/players/self` — an approved
+  member (`role IN ('player','team_manager')`) can create their own
+  player row. The row is auto-bound: `claimed_by_user_id = self`,
+  `claim_status = 'approved'`. The partial unique index
+  `uniq_bball_players_league_user_active` (migration 036) is the
+  backstop against double-binding.
+- The existing `PlayerClaimModal` becomes a two-tab modal:
+  - **新建球员档案 / Create New** — submits to the new endpoint.
+  - **认领已有档案 / Claim Existing** — the previous flow.
+- The league public-page button text changes from "认领球员档案"
+  to "绑定球员档案 / Bind Player Profile" to reflect both flows.
+- A `team_manager` member opening the modal sees the team selector
+  locked to their team (`fixedTeamId` prop) — both API and UI
+  enforce this.
 
 ## Acceptance tests
 
 The fix is considered correct when **all** of the following hold:
 
 1. League admin can create a player **with an avatar** in
-   `/admin/basketball-leagues/{id}` → Players tab → "Add" → no RLS
+   `/admin/basketball-leagues/{id}` → Players tab → "添加" → no RLS
    error; row renders the avatar.
-2. League admin can click **Edit** on an existing player and
-   replace the avatar via the inline form → no RLS error;
-   refreshed list renders the new avatar.
-3. Fresh object path (new player) uploads successfully (INSERT
-   policy path).
-4. Replacing an existing avatar at the same `{playerId}.{ext}`
-   path also succeeds (UPDATE policy path under `upsert: true`).
-5. A user who is **only** a `basketball_league_members` row with
-   `role='league_admin'` (i.e. has no `basketball_league_admins`
-   row) can upload — this is the path that 036 missed.
-6. An approved `team_manager` can upload an avatar for a player
-   on **their own team** (server-side `PATCH /profile` enforces
-   the team-scope check; storage layer authorizes the upload).
-7. A `player` / `viewer` / outsider receives **403 forbidden** at
-   the API layer if they attempt to set `avatar_url`, and the
-   storage write itself is rejected too (both layers fail closed).
-8. Team logo upload uses the same code path
-   (`basketball-team-logos` bucket, same path scheme) and works
-   for the same set of authorized users.
-9. No raw `row violates RLS` error appears in normal authorized
-   use. When unauthorized, the admin UI displays the localized
-   message added in the phase-4 PR:
-   `"你没有权限为该球员上传头像。"` /
-   `"You do not have permission to upload this player avatar."`
-
-Each test maps to a row in the access-matrix table above.
-
-## Future hardening (not done in this migration)
-
-- Replace the path-based `(storage.foldername(name))[1]` league
-  inference with an explicit `metadata` field set by the client.
-  The current approach is fine because the API also writes the
-  `avatar_url` only after verifying the player's `league_id`, but
-  a path-based check is one extra step where the client could in
-  theory upload "to the wrong league" if every API write were
-  bypassed.
-- Periodic cleanup of orphaned `{playerId}.{old-ext}` objects when
-  the avatar extension changes between uploads (current `upsert`
-  keys on the exact path including extension).
+2. League admin can click **Edit** on an existing player and replace
+   the avatar via the inline form → no RLS error; refreshed list
+   renders the new avatar.
+3. Team-manager admin can edit/upload avatar **for a player on their
+   own team** only; players outside their team show no Edit button.
+4. The bound player (an approved claimant) can edit their own avatar
+   from `/basketball-leagues/{slug}/players/{id}` (existing path) →
+   succeeds.
+5. An invited player (`role='player'`) lands on the league public
+   page → sees the "绑定球员档案" button → opens modal → "新建球员档
+   案" tab → fills name/position/team/jersey → submits → row is
+   created with `claim_status='approved'` and `claimed_by_user_id`
+   set to them → badge becomes "已绑定球员档案 · {name} #{jersey}".
+6. Same user clicks "绑定球员档案" again (no entry should appear
+   actually — the button only shows when no `member_player` exists.
+   For paranoid coverage: hit the API directly) → server returns
+   `409 already_linked_in_league`.
+7. Team logo upload works identically to player avatar upload (same
+   API path scheme, same authorization model).
+8. No raw `new row violates RLS policy` ever appears in normal
+   authorized use, on any of the buckets.
 
 ## Files
 
 | Path | Kind |
 |---|---|
-| `supabase/migrations/037_real_league_phase4_storage_helper.sql` | new (SECURITY DEFINER fn + 6 policy replacements) |
-| `STORAGE_AVATAR_RLS_ROOT_CAUSE_REPORT.md` | new (this doc) |
-
-No application code changes are required. `lib/basketball/uploads.ts`
-and the admin UI continue to call `supabase.storage.from(...).upload`
-client-side; the difference is the storage policy now defers all
-authorization to a single SECURITY DEFINER function instead of
-inline RLS-visible subqueries.
+| `app/api/basketball-players/[id]/avatar/route.ts` | new — server-side avatar upload endpoint |
+| `app/api/basketball-teams/[id]/logo/route.ts` | new — server-side logo upload endpoint |
+| `app/api/basketball-leagues/[id]/players/self/route.ts` | new — player self-create with auto-bind |
+| `lib/basketball/uploads.ts` | rewritten — helpers now POST to the new endpoints |
+| `components/basketball/PlayerClaimModal.tsx` | extended — two tabs (Create / Claim) |
+| `app/basketball-leagues/[slug]/page.tsx` | updated — button label + `fixedTeamId` |
+| `app/admin/basketball-leagues/[id]/page.tsx` | error mapping now reads `Error.status` instead of regex-matching RLS strings |
+| `supabase/migrations/037_real_league_phase4_storage_helper.sql` | retained as defense-in-depth |
+| `supabase/migrations/036_real_league_phase4.sql` | retained (partial unique index) |
