@@ -9,6 +9,7 @@ export type League = {
   status: "pending" | "approved" | "rejected" | "archived";
   visibility: "public" | "invite_only" | "private";
   is_contest_enabled: boolean;
+  logo_url?: string | null;
 };
 
 export type Contest = {
