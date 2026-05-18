@@ -82,10 +82,12 @@ import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 import { SALARY_CAP, ROSTER_SIZE } from "@/lib/fantasy/daily/salary";
 
 function db() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createClient(url, key);
 }
 
 // ── GET ──────────────────────────────────────────────────────
@@ -95,7 +97,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const userId = await getAuthUserId(req);
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const supabase = db();
+  let supabase: ReturnType<typeof db>;
+  try { supabase = db(); } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
 
   // Fetch lineup (try with points_awarded; fall back without it if migration pending).
   const contestRes = supabase.from("contests").select("date, status").eq("id", id).maybeSingle();
@@ -234,7 +239,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "duplicate player in lineup" }, { status: 400 });
   }
 
-  const supabase = db();
+  let supabase: ReturnType<typeof db>;
+  try { supabase = db(); } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
 
   // ── Guard: contest must be open and before lock time ─────
   const { data: contest, error: cErr } = await supabase
