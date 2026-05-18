@@ -12,25 +12,24 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-
 function db() {
-  return createClient(SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-}
-
-// Service role bypasses "pts_select_own" RLS on points_transactions.
-function serviceDb() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
 export async function GET() {
-  const supabase = db();
-  const svcDb   = serviceDb();
+  let supabase: ReturnType<typeof db>;
+  try { supabase = db(); } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
 
-  // ── 1. Total points from points_transactions (service role) ──
+  // ── 1. Total points from points_transactions ─────────────────
   const ptsByUser = new Map<string, number>();
-  const { data: ptRows } = await svcDb
+  const { data: ptRows } = await supabase
     .from("points_transactions")
     .select("user_id, amount")
     .in("reason", ["daily_rank_reward", "participation_reward"]);
@@ -39,7 +38,7 @@ export async function GET() {
     ptsByUser.set(r.user_id, (ptsByUser.get(r.user_id) ?? 0) + (Number(r.amount) || 0));
   }
 
-  // ── 2. Participation + rank stats from user_lineups (anon key) ─
+  // ── 2. Participation + rank stats from user_lineups ───────────
   // Include submitted/locked lineups so players appear on the board even
   // before formal settlement. points_awarded = 0 for unsettled rows.
   const { data: lineups, error: lErr } = await supabase

@@ -56,15 +56,20 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT     = 100;
 
 function db() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+  return createClient(url, key);
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = db();
+  let supabase: ReturnType<typeof db>;
+  try { supabase = db(); } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
   const url    = new URL(req.url);
   const limit  = Math.min(Math.max(parseInt(url.searchParams.get("limit")  ?? String(DEFAULT_LIMIT)), 1), MAX_LIMIT);
   const offset = Math.max(parseInt(url.searchParams.get("offset") ?? "0"), 0);
