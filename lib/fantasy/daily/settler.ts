@@ -16,11 +16,14 @@ import { fetchStatsForDate } from "@/lib/players/game-stats";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
 export function readDb() {
-  return createClient(SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
 
 export function writeDb() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
   return createClient(SUPABASE_URL, key, { auth: { persistSession: false } });
 }
 
