@@ -13,6 +13,8 @@ import { useSearchParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
+import SharePosterModal from "@/components/daily-fantasy/SharePosterModal";
+import { type ResultPosterProps } from "@/components/daily-fantasy/posters/ResultPoster";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
 import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
@@ -274,6 +276,7 @@ function LeaderboardContent() {
   const [contextMsg,  setContextMsg]  = useState<string | null>(null);
   const [page,        setPage]        = useState(0);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [shareOpen,   setShareOpen]   = useState(false);
 
   const PAGE_SIZE = 50;
 
@@ -608,8 +611,21 @@ function LeaderboardContent() {
                     </div>
 
                     {/* Points / status */}
-                    <div className="lb-col-pts" style={{ textAlign: "right" }}>
+                    <div className="lb-col-pts" style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                       <PointsCell entry={entry} t={t} />
+                      {isMe && data.status === "scored" && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShareOpen(true); }}
+                          style={{
+                            padding: "3px 9px", borderRadius: 5,
+                            background: "linear-gradient(135deg, #1e3a8a, #3b82f6)",
+                            border: "none", color: "#fff", cursor: "pointer",
+                            fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                          }}
+                        >
+                          {t("分享", "Share")}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -649,6 +665,38 @@ function LeaderboardContent() {
           </div>
         )}
       </main>
+
+      {/* ── Share poster modal (current user's result) ── */}
+      {(() => {
+        if (!shareOpen || !data || !user || !contestDate) return null;
+        const myEntry = data.entries.find((e: Entry) => e.user_id === user.id);
+        if (!myEntry) return null;
+        return (
+          <SharePosterModal
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            posterType="result"
+            lang={lang as "zh" | "en"}
+            posterProps={({
+              posterType: "result",
+              username: (user as { username?: string; email?: string }).username ?? (user as { username?: string; email?: string }).email?.split("@")[0] ?? "Player",
+              date: contestDate,
+              totalFpts: myEntry.total_fpts ?? 0,
+              rank: myEntry.rank ?? 0,
+              totalEntries: data.total,
+              pointsAwarded: myEntry.points_awarded,
+              lang: lang as "zh" | "en",
+              players: (myEntry.players ?? []).map((p: Player) => ({
+                slotLabel: p.slot_label,
+                name: p.name,
+                team: "",
+                position: p.position ?? "",
+                actualPoints: p.actual_fantasy_points,
+              })),
+            } as ResultPosterProps)}
+          />
+        );
+      })()}
     </div>
   );
 }

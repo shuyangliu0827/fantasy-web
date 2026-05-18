@@ -7,6 +7,8 @@ import ContestNav from "@/components/ContestNav";
 import { getSessionUser, createInsight, uploadImage } from "@/lib/shared/store";
 import PostImageUploader from "@/components/PostImageUploader";
 import LineupShareCard, { type SharePlayer } from "@/components/LineupShareCard";
+import SharePosterModal from "@/components/daily-fantasy/SharePosterModal";
+import { type LineupPosterProps } from "@/components/daily-fantasy/posters/LineupPoster";
 import { translateTeam } from "@/lib/shared/i18n";
 import { useLang } from "@/lib/lang";
 import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
@@ -211,6 +213,7 @@ export default function ContestPage() {
   const [aiPostImages, setAiPostImages]         = useState<string[]>([]);
   const [aiPostUploading, setAiPostUploading]   = useState(false);
   const lineupShareCardRef = useRef<HTMLDivElement>(null);
+  const [shareLineupOpen, setShareLineupOpen] = useState(false);
 
   // ── Clock ───────────────────────────────────────────────────
   useEffect(() => {
@@ -1213,16 +1216,31 @@ export default function ContestPage() {
                 }}>
                   ✓ {t("阵容已提交，锁定前可继续更新。", "Lineup submitted — you can still update it until lock time.")}
                 </div>
-                <button
-                  onClick={() => contest && window.open(`/contest/nba/my-lineup?id=${contest.id}`, "_self")}
-                  style={{
-                    width: "100%", marginTop: 8, padding: "9px 0", borderRadius: 8,
-                    background: "#fff", border: "1px solid #e5e7eb",
-                    fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer",
-                  }}
-                >
-                  {t("查看我的成绩", "View My Results")}
-                </button>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button
+                    onClick={() => contest && window.open(`/contest/nba/my-lineup?id=${contest.id}`, "_self")}
+                    style={{
+                      flex: 1, padding: "9px 0", borderRadius: 8,
+                      background: "#fff", border: "1px solid #e5e7eb",
+                      fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer",
+                    }}
+                  >
+                    {t("查看我的成绩", "View My Results")}
+                  </button>
+                  {lineupValid && (
+                    <button
+                      onClick={() => setShareLineupOpen(true)}
+                      style={{
+                        padding: "9px 16px", borderRadius: 8,
+                        background: "linear-gradient(135deg, #1e3a8a, #3b82f6)",
+                        border: "none", fontSize: 13, fontWeight: 700,
+                        color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      {t("分享阵容", "Share")}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1681,6 +1699,36 @@ export default function ContestPage() {
           </>
         )}
       </main>
+
+      {/* ── Share poster modal ───────────────────────────────────── */}
+      {shareLineupOpen && contest && user && lineupValid && (
+        <SharePosterModal
+          open={shareLineupOpen}
+          onClose={() => setShareLineupOpen(false)}
+          posterType="lineup"
+          lang={lang as "zh" | "en"}
+          posterProps={({
+            username: (user as { username?: string; email?: string }).username ?? (user as { username?: string; email?: string }).email?.split("@")[0] ?? "Player",
+            contestDate: contest.date,
+            lang: lang as "zh" | "en",
+            players: slots
+              .map((pid, idx) => {
+                if (!pid) return null;
+                const p = playerMap.get(pid);
+                if (!p) return null;
+                return {
+                  slotLabel: SLOT_LABEL[idx + 1],
+                  name: p.name,
+                  team: p.team,
+                  position: p.position,
+                  salary: p.salary,
+                  projectedPoints: p.projected_points ?? null,
+                };
+              })
+              .filter(Boolean) as LineupPosterProps["players"],
+          } as LineupPosterProps)}
+        />
+      )}
 
       {/* ── Off-screen lineup share card (for auto-image capture) ─── */}
       {/* Rendered when user is on the final AI post editor. html-to-image

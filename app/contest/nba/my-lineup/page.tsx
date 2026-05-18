@@ -11,6 +11,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import LightHeader from "@/components/LightHeader";
 import PlayerAvatar from "@/components/PlayerAvatar";
 import ContestNav from "@/components/ContestNav";
+import SharePosterModal from "@/components/daily-fantasy/SharePosterModal";
+import { type ResultPosterProps } from "@/components/daily-fantasy/posters/ResultPoster";
 import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
 import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
@@ -268,6 +270,7 @@ function MyLineupContent() {
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [shareEntry, setShareEntry] = useState<LineupEntry | null>(null);
 
   // Load season weeks once
   useEffect(() => {
@@ -704,26 +707,41 @@ function MyLineupContent() {
                           </div>
                         )}
 
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                           <span style={{ fontSize: 12, color: "#6b7280" }}>
                             {t("总工资", "Total Salary")}
                             <span style={{ fontWeight: 600, color: "#374151", marginLeft: 6 }}>
                               {fmtMoney(totalSalary)}
                             </span>
                           </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/contest/nba/leaderboard?id=${entry.contest_id}`);
-                            }}
-                            style={{
-                              padding: "5px 12px", borderRadius: 6, border: "1px solid #e5e7eb",
-                              background: "#fff", color: "#374151", cursor: "pointer",
-                              fontSize: 12, fontWeight: 600,
-                            }}
-                          >
-                            {t("查看排行榜", "Leaderboard")}
-                          </button>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            {isScored && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setShareEntry(entry); }}
+                                style={{
+                                  padding: "5px 12px", borderRadius: 6,
+                                  background: "linear-gradient(135deg, #1e3a8a, #3b82f6)",
+                                  border: "none", color: "#fff", cursor: "pointer",
+                                  fontSize: 12, fontWeight: 700,
+                                }}
+                              >
+                                {t("分享", "Share")}
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/contest/nba/leaderboard?id=${entry.contest_id}`);
+                              }}
+                              style={{
+                                padding: "5px 12px", borderRadius: 6, border: "1px solid #e5e7eb",
+                                background: "#fff", color: "#374151", cursor: "pointer",
+                                fontSize: 12, fontWeight: 600,
+                              }}
+                            >
+                              {t("查看排行榜", "Leaderboard")}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </>
@@ -734,6 +752,32 @@ function MyLineupContent() {
           </div>
         )}
       </main>
+      {/* ── Share poster modal ── */}
+      {shareEntry && (
+        <SharePosterModal
+          open={!!shareEntry}
+          onClose={() => setShareEntry(null)}
+          posterType="result"
+          lang={lang as "zh" | "en"}
+          posterProps={({
+            posterType: "result",
+            username: (user as { username?: string; email?: string } | null)?.username ?? (user as { username?: string; email?: string } | null)?.email?.split("@")[0] ?? "Player",
+            date: shareEntry.contest_date ?? "",
+            totalFpts: shareEntry.total_fpts ?? 0,
+            rank: shareEntry.rank ?? 0,
+            totalEntries: 0,
+            pointsAwarded: shareEntry.points_awarded,
+            lang: lang as "zh" | "en",
+            players: shareEntry.players.map((p) => ({
+              slotLabel: p.slot_label,
+              name: p.name,
+              team: p.team ?? "",
+              position: p.position ?? "",
+              actualPoints: p.actual_fantasy_points,
+            })),
+          } as ResultPosterProps)}
+        />
+      )}
     </div>
   );
 }
