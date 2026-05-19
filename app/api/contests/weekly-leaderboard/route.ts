@@ -125,5 +125,5 @@ export async function GET(req: Request) {
     return { weekly_rank: rankCursor, ...u };
   });
 
-  return NextResponse.json({ week_start: weekStart, week_end: weekEnd, settled_contests, total_contests, entries });
+  return NextResponse.json({ week_start: weekStart, week_end: weekEnd, settled_contests, total_contests, entries }, { headers: { "Cache-Control": "no-store" } });
 }

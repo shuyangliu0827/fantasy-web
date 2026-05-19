@@ -136,5 +136,5 @@ export async function GET() {
     return { ...e, overall_rank: rankCursor };
   });
 
-  return NextResponse.json({ entries });
+  return NextResponse.json({ entries }, { headers: { "Cache-Control": "no-store" } });
 }

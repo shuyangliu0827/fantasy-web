@@ -69,6 +69,9 @@ type LineupEntry = {
   rank: number | null;
   points_awarded: number;
   submitted_at: string | null;
+  score_display_type: "final" | "live" | "pending_final";
+  result_status_label_zh: string;
+  result_status_label_en: string;
   players: Player[];
 };
 
@@ -503,7 +506,7 @@ function MyLineupContent() {
                       </div>
                     </div>
 
-                    {isScored ? (
+                    {entry.score_display_type === "final" ? (
                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                         <div style={{ textAlign: "center" }}>
                           <div style={{ fontSize: 15, fontWeight: 800, color: "#111827" }}>
@@ -523,6 +526,19 @@ function MyLineupContent() {
                           </div>
                           <div style={{ fontSize: 10, color: "#9ca3af" }}>{t("积分", "Pts")}</div>
                         </div>
+                      </div>
+                    ) : entry.score_display_type === "pending_final" ? (
+                      // Contest date has passed but settlement hasn't run yet.
+                      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 15, fontWeight: 800, color: "#9ca3af" }}>
+                            {entry.live_total_fpts != null ? fmtFpts(entry.live_total_fpts) : "—"}
+                          </div>
+                          <div style={{ fontSize: 10, color: "#f59e0b", fontWeight: 600 }}>
+                            {lang === "zh" ? entry.result_status_label_zh : entry.result_status_label_en}
+                          </div>
+                        </div>
+                        {statusBadge(entry.status)}
                       </div>
                     ) : hasLive ? (
                       <div style={{ display: "flex", gap: 14, alignItems: "center" }}>

@@ -185,6 +185,8 @@ export async function GET(req: Request) {
     });
   }
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   // ── 5. Build result sorted by contest_date ASC (Mon → Sun) ──
   const result = weekLineups
     .map((l: any) => {
@@ -213,17 +215,40 @@ export async function GET(req: Request) {
         ? players.reduce((sum: number, p: any) => sum + (p.live_fpts ?? 0), 0)
         : null;
 
+      // score_display_type distinguishes final result from live/pending states.
+      //   "final"        — settlement complete; total_fpts and rank are authoritative.
+      //   "pending_final"— contest date has passed but settlement hasn't run yet.
+      //   "live"         — contest date is today; live data is in-progress.
+      const scoreDisplayType: "final" | "live" | "pending_final" =
+        isScored
+          ? "final"
+          : contestDate && contestDate < todayStr
+          ? "pending_final"
+          : "live";
+
+      const resultStatusLabelZh =
+        scoreDisplayType === "final"        ? "已结算"
+        : scoreDisplayType === "pending_final" ? "最终结算中"
+        : "实时数据同步中";
+      const resultStatusLabelEn =
+        scoreDisplayType === "final"        ? "Settled"
+        : scoreDisplayType === "pending_final" ? "Settling…"
+        : "Live";
+
       return {
-        lineup_id:        l.id,
-        contest_id:       l.contest_id,
-        contest_date:     contestDate,
-        contest_status:   contest?.status ?? null,
-        status:           l.status,
-        total_fpts:       l.total_fpts    ?? null,
+        lineup_id:              l.id,
+        contest_id:             l.contest_id,
+        contest_date:           contestDate,
+        contest_status:         contest?.status ?? null,
+        status:                 l.status,
+        total_fpts:             l.total_fpts    ?? null,
         live_total_fpts,
-        rank:             l.rank          ?? null,
-        points_awarded:   pointsMap.get(l.id) ?? 0,
-        submitted_at:     l.submitted_at  ?? null,
+        rank:                   l.rank          ?? null,
+        points_awarded:         pointsMap.get(l.id) ?? 0,
+        submitted_at:           l.submitted_at  ?? null,
+        score_display_type:     scoreDisplayType,
+        result_status_label_zh: resultStatusLabelZh,
+        result_status_label_en: resultStatusLabelEn,
         players,
       };
     })
@@ -234,5 +259,7 @@ export async function GET(req: Request) {
       return a.contest_date.localeCompare(b.contest_date); // oldest first (Mon → Sun)
     });
 
-  return NextResponse.json({ lineups: result });
+  return NextResponse.json({ lineups: result }, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
