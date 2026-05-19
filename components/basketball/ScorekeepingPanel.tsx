@@ -24,12 +24,13 @@
 //     `game.away_score`, which `recomputeTeamScores` keeps in sync with
 //     the event log.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { basketballJson, basketballFetch } from "@/lib/basketball/client";
 import type { StatEventType } from "@/lib/basketball/events";
 import { eventLabel, statLabel } from "@/lib/basketball/stat-labels";
+import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/fantasy/shared/scoring-config";
 
 type Player = {
   id: string;
@@ -129,6 +130,8 @@ export default function ScorekeepingPanel({
   const [stats, setStats] = useState<Record<string, StatRow>>({});
   const [events, setEvents] = useState<StatEvent[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -136,6 +139,8 @@ export default function ScorekeepingPanel({
   const awayTeam = teams.find((tm) => tm.id === game.away_team_id) ?? null;
   const onCourtSet = new Set(game.on_court_player_ids ?? []);
   const isFinished = game.status === "final";
+  const queueRef = useRef<Array<{ player: Player; type: StatEventType }>>([]);
+  const drainingRef = useRef(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -189,7 +194,33 @@ export default function ScorekeepingPanel({
     }
   };
 
-  const addEvent = async (player: Player, type: StatEventType) => {
+  const drainQueue = useCallback(async () => {
+    if (drainingRef.current) return;
+    drainingRef.current = true;
+    while (queueRef.current.length > 0) {
+      const item = queueRef.current[0];
+      const res = await basketballFetch(`/api/basketball-games/${game.id}/events`, {
+        method: "POST",
+        body: JSON.stringify({
+          player_id: item.player.id,
+          event_type: item.type,
+          team_id: item.player.team_id,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFailedCount((v) => v + 1);
+        setErr(t("某次数据同步失败，请检查网络后重试", "A stat sync failed. Please check your network and retry."));
+      } else {
+        applyEventResponse(body);
+      }
+      queueRef.current.shift();
+      setPendingCount(queueRef.current.length);
+    }
+    drainingRef.current = false;
+  }, [game.id, t]);
+
+  const addEvent = (player: Player, type: StatEventType) => {
     if (isFinished) {
       setErr(
         t(
@@ -200,7 +231,6 @@ export default function ScorekeepingPanel({
       return;
     }
     const start = performance.now();
-    setBusy(`${player.id}:${type}`);
     setErr(null);
     const prevStat = stats[player.id] ?? null;
     const prevScore = { home: game.home_score ?? 0, away: game.away_score ?? 0 };
@@ -214,26 +244,10 @@ export default function ScorekeepingPanel({
         away_score: player.team_id && player.team_id === prev.away_team_id ? (prev.away_score ?? 0) + delta : (prev.away_score ?? 0),
       }));
     }
-    const res = await basketballFetch(`/api/basketball-games/${game.id}/events`, {
-      method: "POST",
-      body: JSON.stringify({
-        player_id: player.id,
-        event_type: type,
-        team_id: player.team_id,
-      }),
-    });
-    setBusy(null);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      if (prevStat) setStats((prev) => ({ ...prev, [player.id]: prevStat }));
-      else setStats((prev) => {
-        const c = { ...prev }; delete c[player.id]; return c;
-      });
-      setGame((prev) => ({ ...prev, home_score: prevScore.home, away_score: prevScore.away }));
-      setErr(body.error ?? `HTTP ${res.status}`);
-      return;
-    }
-    applyEventResponse(body);
+    void prevScore;
+    queueRef.current.push({ player, type });
+    setPendingCount(queueRef.current.length);
+    void drainQueue();
     console.info("[perf] scorekeeping:addEvent", { type, playerId: player.id, ms: Math.round(performance.now() - start) });
   };
 
@@ -379,7 +393,6 @@ export default function ScorekeepingPanel({
                 player={p}
                 stats={stats[p.id]}
                 onCourt
-                busy={busy}
                 disabled={isFinished}
                 leagueSlug={leagueSlug}
                 onAddEvent={addEvent}
@@ -397,7 +410,6 @@ export default function ScorekeepingPanel({
                 player={p}
                 stats={stats[p.id]}
                 onCourt={false}
-                busy={busy}
                 disabled={isFinished}
                 leagueSlug={leagueSlug}
                 onAddEvent={addEvent}
@@ -537,6 +549,13 @@ export default function ScorekeepingPanel({
             {t("最近操作", "Recent Actions")}
             <span style={{ color: "#94a3b8", fontWeight: 700, marginLeft: 8 }}>· {recent.length}</span>
           </h3>
+          <div style={{ fontSize: 12, fontWeight: 700, color: failedCount > 0 ? "#b91c1c" : pendingCount > 0 ? "#1e3a8a" : "#065f46" }}>
+            {failedCount > 0
+              ? t(`同步失败 · ${failedCount}`, `Sync failed · ${failedCount}`)
+              : pendingCount > 0
+                ? t(`同步中 · ${pendingCount}`, `Syncing · ${pendingCount}`)
+                : t("已同步", "Synced")}
+          </div>
         </div>
         {recent.length === 0 ? (
           <div style={{ color: "#94a3b8", fontSize: 13 }}>
@@ -589,7 +608,7 @@ export default function ScorekeepingPanel({
                   </span>
                   <button
                     onClick={() => undoEvent(ev)}
-                    disabled={busy !== null || isFinished}
+                    disabled={isFinished}
                     style={undoBtnStyle()}
                     title={t("撤销", "Undo")}
                   >
@@ -618,6 +637,7 @@ function applyOptimisticEvent(current: StatRow | null, playerId: string, type: S
   else if (type === "stl") { next.stl += 1; }
   else if (type === "blk") { next.blk += 1; }
   else if (type === "tov") { next.tov += 1; }
+  next.fantasy_points = calcFantasyPoints(next, ESPN_DEFAULT_WEIGHTS);
   return next;
 }
 
@@ -627,7 +647,6 @@ function PlayerCard({
   player,
   stats,
   onCourt,
-  busy,
   disabled,
   leagueSlug,
   onAddEvent,
@@ -636,7 +655,6 @@ function PlayerCard({
   player: Player;
   stats: StatRow | undefined;
   onCourt: boolean;
-  busy: string | null;
   disabled: boolean;
   leagueSlug: string;
   onAddEvent: (player: Player, type: StatEventType) => void;
@@ -695,7 +713,7 @@ function PlayerCard({
         </div>
         <button
           onClick={() => onToggleOnCourt(player)}
-          disabled={busy !== null || disabled}
+          disabled={disabled}
           style={toggleBtnStyle(onCourt)}
         >
           {onCourt ? t("下场", "Bench") : t("上场", "On Court")}
@@ -734,8 +752,8 @@ function PlayerCard({
           <button
             key={b.type}
             onClick={() => onAddEvent(player, b.type)}
-            disabled={busy !== null || disabled}
-            style={eventBtnStyle(b.variant, busy === `${player.id}:${b.type}`)}
+            disabled={disabled}
+            style={eventBtnStyle(b.variant, false)}
           >
             {eventLabel(b.type, lang)}
           </button>
