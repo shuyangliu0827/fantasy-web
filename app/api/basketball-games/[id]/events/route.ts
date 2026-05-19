@@ -87,6 +87,7 @@ export async function POST(
       player_id?: string;
       event_type?: string;
       team_id?: string | null;
+      client_event_id?: string;
     };
     if (!body.player_id) throw new AccessError("missing_player_id", 400);
     if (!body.event_type || !ALLOWED.has(body.event_type as StatEventType)) {
@@ -113,11 +114,15 @@ export async function POST(
         player_id: body.player_id,
         team_id: teamId,
         event_type: body.event_type,
+        client_event_id: body.client_event_id ?? null,
         created_by: userId,
       })
       .select()
       .single();
     if (insertErr) {
+      if (insertErr.code === "23505" && body.client_event_id) {
+        return NextResponse.json({ duplicate: true, client_event_id: body.client_event_id });
+      }
       return NextResponse.json(
         {
           error: insertErr.message,

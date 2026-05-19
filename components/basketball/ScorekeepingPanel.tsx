@@ -90,6 +90,15 @@ type StatEvent = {
   team_id: string | null;
   created_at: string;
 };
+type PendingEvent = {
+  clientEventId: string;
+  clientSeq: number;
+  gameId: string;
+  player_id: string;
+  team_id: string | null;
+  event_type: StatEventType;
+  queued_at: string;
+};
 
 type Props = {
   leagueSlug: string;
@@ -132,6 +141,7 @@ export default function ScorekeepingPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
+  const [syncError, setSyncError] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -139,10 +149,11 @@ export default function ScorekeepingPanel({
   const awayTeam = teams.find((tm) => tm.id === game.away_team_id) ?? null;
   const onCourtSet = new Set(game.on_court_player_ids ?? []);
   const isFinished = game.status === "final";
-  const queueRef = useRef<Array<{ player: Player; type: StatEventType; clientSeq: number }>>([]);
+  const queueRef = useRef<PendingEvent[]>([]);
   const drainingRef = useRef(false);
   const nextSeqRef = useRef(1);
-  const [pendingEvents, setPendingEvents] = useState<Array<{ player: Player; type: StatEventType; clientSeq: number }>>([]);
+  const [pendingEvents, setPendingEvents] = useState<PendingEvent[]>([]);
+  const storageKey = `bball:pending-events:${game.id}`;
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -170,6 +181,21 @@ export default function ScorekeepingPanel({
   useEffect(() => {
     reload();
   }, [reload]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const restored = (JSON.parse(raw) as PendingEvent[]).filter((e) => e.gameId === game.id);
+      queueRef.current = restored;
+      setPendingEvents(restored);
+      setPendingCount(restored.length);
+    } catch {}
+  }, [game.id, storageKey]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(pendingEvents));
+    } catch {}
+  }, [pendingEvents, storageKey]);
 
   // --- mutation helpers ------------------------------------------------
 
@@ -200,30 +226,37 @@ export default function ScorekeepingPanel({
     if (drainingRef.current) return;
     drainingRef.current = true;
     while (queueRef.current.length > 0) {
-      const item = queueRef.current[0];
-      const res = await basketballFetch(`/api/basketball-games/${game.id}/events`, {
+      const batch = queueRef.current.slice(0, 20);
+      const res = await basketballFetch(`/api/basketball-games/${game.id}/events/batch`, {
         method: "POST",
-        body: JSON.stringify({
-          player_id: item.player.id,
-          event_type: item.type,
-          team_id: item.player.team_id,
-        }),
+        body: JSON.stringify({ events: batch }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setFailedCount((v) => v + 1);
-        setErr(t("某次数据同步失败，已尝试重新校准，请检查网络或刷新页面确认。", "A stat sync failed and we attempted to re-sync. Please check network or refresh."));
-        setPendingEvents((prev) => prev.filter((p) => p.clientSeq !== item.clientSeq));
-        void reload();
+        setSyncError(true);
+        setErr(t("网络异常，存在待同步记录。", "Network issue, pending entries are waiting to sync."));
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
       } else {
-        applyEventResponse(body);
-        setPendingEvents((prev) => prev.filter((p) => p.clientSeq !== item.clientSeq));
+        setSyncError(false);
+        const processed = (body.processed ?? []) as Array<{ client_event_id: string | null; status: string }>;
+        const ack = new Set(processed.filter((p) => p.status === "inserted" || p.status === "duplicate").map((p) => p.client_event_id));
+        const fail = processed.filter((p) => p.status === "invalid").length;
+        if (fail > 0) setFailedCount((v) => v + fail);
+        setPendingEvents((prev) => prev.filter((p) => !ack.has(p.clientEventId)));
+        queueRef.current = queueRef.current.filter((p) => !ack.has(p.clientEventId));
+        if (body.team_scores) {
+          setGame((prev) => ({ ...prev, home_score: body.team_scores.home_score, away_score: body.team_scores.away_score }));
+        }
+        void reload();
       }
-      queueRef.current.shift();
       setPendingCount(queueRef.current.length);
     }
     drainingRef.current = false;
   }, [game.id, t]);
+  useEffect(() => {
+    if (pendingEvents.length > 0) void drainQueue();
+  }, [pendingEvents.length, drainQueue]);
 
   const addEvent = (player: Player, type: StatEventType) => {
     if (isFinished) {
@@ -238,7 +271,15 @@ export default function ScorekeepingPanel({
     const start = performance.now();
     setErr(null);
     const clientSeq = nextSeqRef.current++;
-    const pending = { player, type, clientSeq };
+    const pending: PendingEvent = {
+      clientEventId: crypto.randomUUID(),
+      clientSeq,
+      gameId: game.id,
+      player_id: player.id,
+      team_id: player.team_id,
+      event_type: type,
+      queued_at: new Date().toISOString(),
+    };
     setPendingEvents((prev) => [...prev, pending]);
     queueRef.current.push(pending);
     setPendingCount(queueRef.current.length);
@@ -250,12 +291,12 @@ export default function ScorekeepingPanel({
     let home = game.home_score ?? 0;
     let away = game.away_score ?? 0;
     for (const p of pendingEvents) {
-      const cur = statMap[p.player.id] ?? null;
-      statMap[p.player.id] = applyOptimisticEvent(cur, p.player.id, p.type);
-      if (p.type === "two_pt_made" || p.type === "three_pt_made" || p.type === "ft_made") {
-        const delta = p.type === "two_pt_made" ? 2 : p.type === "three_pt_made" ? 3 : 1;
-        if (p.player.team_id && p.player.team_id === game.home_team_id) home += delta;
-        if (p.player.team_id && p.player.team_id === game.away_team_id) away += delta;
+      const cur = statMap[p.player_id] ?? null;
+      statMap[p.player_id] = applyOptimisticEvent(cur, p.player_id, p.event_type);
+      if (p.event_type === "two_pt_made" || p.event_type === "three_pt_made" || p.event_type === "ft_made") {
+        const delta = p.event_type === "two_pt_made" ? 2 : p.event_type === "three_pt_made" ? 3 : 1;
+        if (p.team_id && p.team_id === game.home_team_id) home += delta;
+        if (p.team_id && p.team_id === game.away_team_id) away += delta;
       }
     }
     return { stats: statMap, home, away };
@@ -562,8 +603,10 @@ export default function ScorekeepingPanel({
           <div style={{ fontSize: 12, fontWeight: 700, color: failedCount > 0 ? "#b91c1c" : pendingCount > 0 ? "#1e3a8a" : "#065f46" }}>
             {failedCount > 0
               ? t(`同步失败 · ${failedCount}`, `Sync failed · ${failedCount}`)
-              : pendingCount > 0
-                ? t(`同步中 · ${pendingCount}`, `Syncing · ${pendingCount}`)
+              : syncError
+                ? t(`网络异常，${pendingCount} 条记录待同步`, `${pendingCount} pending (network issue)`)
+                : pendingCount > 0
+                  ? t(`同步中 · ${pendingCount}`, `Syncing · ${pendingCount}`)
                 : t("已同步", "Synced")}
           </div>
         </div>
