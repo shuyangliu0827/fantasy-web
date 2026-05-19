@@ -10,7 +10,11 @@
     },
     {
       "path": "/api/contests/settle-all-pending",
-      "schedule": "0 7 * * *"
+      "schedule": "*/30 4-8 * * *"
+    },
+    {
+      "path": "/api/contests/settle-all-pending",
+      "schedule": "0 10 * * *"
     }
   ]
 }
