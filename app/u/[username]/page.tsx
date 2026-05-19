@@ -6,6 +6,43 @@ import { useState, useEffect } from "react";
 import LightHeader from "@/components/LightHeader";
 import { useLang } from "@/lib/lang";
 import { getSessionUser, listInsights, getUserJoinedLeagues, uploadImage, updateUserProfile, getUserProfile, League, Insight } from "@/lib/shared/store";
+import { supabase } from "@/lib/shared/supabase";
+
+type LeagueLite = {
+  id: string;
+  slug: string;
+  name: string;
+  logo_url: string | null;
+  status: string;
+};
+type CommunityIdentity =
+  | {
+      identity_type: "league_admin";
+      identity_ref_id: string;
+      visible: boolean;
+      league: LeagueLite;
+      admin_role: string;
+    }
+  | {
+      identity_type: "team_manager";
+      identity_ref_id: string;
+      visible: boolean;
+      league: LeagueLite;
+      team: { id: string; name: string } | null;
+    }
+  | {
+      identity_type: "player";
+      identity_ref_id: string;
+      visible: boolean;
+      league: LeagueLite;
+      team: { id: string; name: string } | null;
+      player: {
+        id: string;
+        display_name: string;
+        jersey_number: string | null;
+        avatar_url: string | null;
+      };
+    };
 
 type DraftHistory = {
   id: string;
@@ -70,6 +107,9 @@ export default function UserProfilePage() {
     team_id: string | null;
     team_name: string | null;
   }>>([]);
+  const [identities, setIdentities] = useState<CommunityIdentity[]>([]);
+  const [identityBusy, setIdentityBusy] = useState<string | null>(null);
+  const [uuidCopied, setUuidCopied] = useState(false);
 
   const loadData = async () => {
     const user = currentUser;
@@ -164,6 +204,103 @@ export default function UserProfilePage() {
       cancelled = true;
     };
   }, [username]);
+
+  // Community basketball league identities (admin / manager / player roles).
+  useEffect(() => {
+    if (!profileUser?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        const res = await fetch(
+          `/api/users/${profileUser.id}/basketball-identities`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as { identities?: CommunityIdentity[] };
+        if (cancelled) return;
+        setIdentities(body.identities ?? []);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileUser?.id]);
+
+  const toggleIdentityVisible = async (
+    identity: CommunityIdentity,
+    next: boolean,
+  ) => {
+    const key = `${identity.identity_type}:${identity.identity_ref_id}`;
+    setIdentityBusy(key);
+    // Optimistic update
+    setIdentities((prev) =>
+      prev.map((i) =>
+        i.identity_type === identity.identity_type &&
+        i.identity_ref_id === identity.identity_ref_id
+          ? ({ ...i, visible: next } as CommunityIdentity)
+          : i,
+      ),
+    );
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const res = await fetch(
+        `/api/users/me/basketball-identities/visibility`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            identity_type: identity.identity_type,
+            identity_ref_id: identity.identity_ref_id,
+            visible: next,
+          }),
+        },
+      );
+      if (!res.ok) {
+        // Roll back on failure
+        setIdentities((prev) =>
+          prev.map((i) =>
+            i.identity_type === identity.identity_type &&
+            i.identity_ref_id === identity.identity_ref_id
+              ? ({ ...i, visible: !next } as CommunityIdentity)
+              : i,
+          ),
+        );
+      }
+    } finally {
+      setIdentityBusy(null);
+    }
+  };
+
+  const handleCopyUuid = async () => {
+    if (!currentUser?.id) return;
+    const text = currentUser.id;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.cssText = "position:fixed;left:-9999px;top:-9999px;opacity:0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setUuidCopied(true);
+      setTimeout(() => setUuidCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const formatDate = (ts: string | number) => {
     const d = new Date(ts);
@@ -330,6 +467,52 @@ export default function UserProfilePage() {
               <p className="bio" style={{ color: "#64748b" }}>
                 @{username}
               </p>
+              {isOwnProfile && currentUser?.id && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    marginTop: 4,
+                    marginBottom: 8,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {t("用户 UUID", "User UUID")}
+                  </span>
+                  <code
+                    title={currentUser.id}
+                    style={{
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      fontSize: 12,
+                      padding: "2px 8px",
+                      background: "#f1f5f9",
+                      borderRadius: 6,
+                      color: "#0f172a",
+                    }}
+                  >
+                    {currentUser.id.length > 18
+                      ? `${currentUser.id.slice(0, 8)}…${currentUser.id.slice(-4)}`
+                      : currentUser.id}
+                  </code>
+                  <button
+                    onClick={handleCopyUuid}
+                    style={{
+                      padding: "3px 10px",
+                      background: uuidCopied ? "#dcfce7" : "#eff6ff",
+                      color: uuidCopied ? "#065f46" : "#1e3a8a",
+                      border: `1px solid ${uuidCopied ? "#bbf7d0" : "#bfdbfe"}`,
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {uuidCopied ? t("已复制", "Copied") : t("复制 UUID", "Copy UUID")}
+                  </button>
+                </div>
+              )}
               <p className="bio">
                 {profileBio
                   || (isOwnProfile
@@ -341,7 +524,6 @@ export default function UserProfilePage() {
                 <span><strong>{stats.totalPosts}</strong> {t("帖子", "Posts")}</span>
                 <span><strong>{followersCount}</strong> {t("粉丝", "Followers")}</span>
                 <span><strong>{followingCount}</strong> {t("关注", "Following")}</span>
-                <span><strong>{stats.leaguesJoined}</strong> {t("联赛", "Leagues")}</span>
               </div>
             </div>
           </div>
@@ -349,11 +531,6 @@ export default function UserProfilePage() {
 
         {/* ── Stats Cards ── */}
         <div className="stats-cards-row">
-          <div className="card stat-card">
-            <div className="stat-card-label">{t("已加入联赛", "Leagues Joined")}</div>
-            <div className="stat-card-value">{stats.leaguesJoined}</div>
-            <div className="stat-card-sub">{t("公开联赛与好友联赛并行进行", "Public and friend leagues in progress")}</div>
-          </div>
           <div className="card stat-card">
             <div className="stat-card-label">{t("发帖数", "Posts")}</div>
             <div className="stat-card-value">{stats.totalPosts}</div>
@@ -411,6 +588,177 @@ export default function UserProfilePage() {
                   </div>
                   <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{t("最佳单日排名", "Best Rank")}</div>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Community basketball league identities ── */}
+        {(identities.length > 0 || isOwnProfile) && (
+          <div className="card" style={{ padding: 20 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: identities.length === 0 ? 0 : 12,
+                flexWrap: "wrap",
+                gap: 8,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "#6b7280",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                {t("社区联赛身份", "Community League Identities")}
+              </div>
+              {isOwnProfile && identities.length > 0 && (
+                <div style={{ fontSize: 11, color: "#94a3b8" }}>
+                  {t(
+                    "勾选以在公开主页展示",
+                    "Toggle to show on your public profile",
+                  )}
+                </div>
+              )}
+            </div>
+            {identities.length === 0 ? (
+              <div style={{ fontSize: 14, color: "#9ca3af" }}>
+                {isOwnProfile
+                  ? t(
+                      "你还没有任何社区联赛身份。加入一个社区联赛后，可在此选择是否公开展示。",
+                      "You have no community league identities yet. Join one and choose whether to show it here.",
+                    )
+                  : t("该用户尚未公开任何社区联赛身份", "No community identities to show")}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {identities.map((iden) => {
+                  const key = `${iden.identity_type}:${iden.identity_ref_id}`;
+                  const leagueHref = `/basketball-leagues/${iden.league.slug}`;
+                  let roleLabel = "";
+                  let detail: React.ReactNode = null;
+                  if (iden.identity_type === "league_admin") {
+                    roleLabel = t("联赛管理员", "League Admin");
+                  } else if (iden.identity_type === "team_manager") {
+                    roleLabel = t("球队经理", "Team Manager");
+                    if (iden.team?.name) {
+                      detail = (
+                        <>
+                          {" · "}
+                          <span style={{ color: "#0f172a", fontWeight: 700 }}>
+                            {iden.team.name}
+                          </span>
+                        </>
+                      );
+                    }
+                  } else {
+                    roleLabel = t("球员", "Player");
+                    detail = (
+                      <>
+                        {" · "}
+                        <span style={{ color: "#0f172a", fontWeight: 700 }}>
+                          {iden.player.display_name}
+                        </span>
+                        {iden.player.jersey_number && (
+                          <span style={{ color: "#1e3a8a", marginLeft: 4 }}>
+                            #{iden.player.jersey_number}
+                          </span>
+                        )}
+                        {iden.team?.name && (
+                          <span style={{ color: "#64748b" }}>
+                            {" · "}
+                            {iden.team.name}
+                          </span>
+                        )}
+                      </>
+                    );
+                  }
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 12px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 10,
+                      }}
+                    >
+                      {iden.league.logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={iden.league.logo_url}
+                          alt=""
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            objectFit: "cover",
+                            background: "#f1f5f9",
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: "#f1f5f9",
+                            display: "inline-block",
+                          }}
+                        />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+                        <Link
+                          href={leagueHref}
+                          style={{
+                            color: "#1e3a8a",
+                            fontWeight: 800,
+                            textDecoration: "none",
+                          }}
+                        >
+                          {iden.league.name}
+                        </Link>
+                        <span style={{ color: "#64748b" }}>
+                          {" · "}
+                          {roleLabel}
+                          {detail}
+                        </span>
+                      </div>
+                      {isOwnProfile && (
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 12,
+                            color: "#475569",
+                            fontWeight: 700,
+                            cursor: identityBusy === key ? "default" : "pointer",
+                            opacity: identityBusy === key ? 0.6 : 1,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={iden.visible}
+                            disabled={identityBusy === key}
+                            onChange={(e) =>
+                              toggleIdentityVisible(iden, e.target.checked)
+                            }
+                          />
+                          {t("在个人主页展示", "Show on profile")}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -532,12 +880,13 @@ export default function UserProfilePage() {
                 </div>
               </div>
             )}
-            {/* Tab bar */}
+            {/* Tab bar — community leagues are surfaced in the dedicated
+                identity section above; the legacy season-long fantasy
+                leagues tab is intentionally hidden here. */}
             <div className="tab-bar">
-              {(["posts", "leagues", "drafts", "stats"] as const).map(tab => {
+              {(["posts", "drafts", "stats"] as const).map(tab => {
                 const labels: Record<string, [string, string]> = {
                   posts: [t("帖子", "Posts") + ` (${userInsights.length})`, "posts"],
-                  leagues: [t("联赛", "Leagues") + ` (${userLeagues.length})`, "leagues"],
                   drafts: [t("选秀历史", "Draft History") + ` (${draftHistory.length})`, "drafts"],
                   stats: [t("战绩统计", "Stats"), "stats"],
                 };
@@ -690,62 +1039,10 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        {/* ── Bottom: Leagues + Season Stats ── */}
-        {userLeagues.length > 0 && (
-          <div className="bottom-two-col">
-            {/* Recent leagues */}
-            <div className="card bottom-card">
-              <div className="bottom-card-header">
-                <div>
-                  <div className="bottom-card-sup">{t("我的联赛", "My Leagues")}</div>
-                  <div className="bottom-card-title">{t("近期活跃联赛", "Recent Active Leagues")}</div>
-                </div>
-                <Link href="/league" className="bottom-see-all">{t("查看全部", "View All")}</Link>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {userLeagues.slice(0, 2).map(league => (
-                  <Link key={league.id} href={`/league/${league.slug}`} className="bottom-league-row">
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>{league.name}</div>
-                      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                        {league.visibility === "public" ? t("公开联赛", "Public") : t("私人联赛", "Private")}
-                      </div>
-                    </div>
-                    <span className="status-badge-active">{t("进行中", "Active")}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-
-            {/* Season overview (placeholder until match data is tracked) */}
-            <div className="card bottom-card">
-              <div className="bottom-card-header">
-                <div>
-                  <div className="bottom-card-sup">{t("战绩统计", "Season Stats")}</div>
-                  <div className="bottom-card-title">{t("赛季概览", "Season Overview")}</div>
-                </div>
-              </div>
-              <div className="season-stats-grid">
-                <div className="season-stat-cell">
-                  <div className="season-stat-cap">{t("胜场", "Wins")}</div>
-                  <div className="season-stat-val" style={{ color: "#1e3a8a" }}>--</div>
-                </div>
-                <div className="season-stat-cell">
-                  <div className="season-stat-cap">{t("负场", "Losses")}</div>
-                  <div className="season-stat-val" style={{ color: "#1e3a8a" }}>--</div>
-                </div>
-                <div className="season-stat-cell">
-                  <div className="season-stat-cap">{t("场均得分", "Avg Pts")}</div>
-                  <div className="season-stat-val" style={{ color: "#16a34a" }}>--</div>
-                </div>
-                <div className="season-stat-cell">
-                  <div className="season-stat-cap">{t("排名", "Rank")}</div>
-                  <div className="season-stat-val" style={{ color: "#f59e0b" }}>--</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Bottom "近期活跃联赛 / 赛季概览" block intentionally removed —
+            the legacy season-long fantasy leagues are no longer foregrounded
+            on the public profile. Community league identities are surfaced
+            in the dedicated 社区联赛身份 section above. */}
       </main>
 
       {/* Delete modal */}
@@ -975,7 +1272,7 @@ export default function UserProfilePage() {
         .profile-stats-row strong { color: #111827; }
 
         /* ── Stats Cards ── */
-        .stats-cards-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .stats-cards-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
         .stat-card { padding: 20px; }
         .stat-card-label { font-size: 12px; color: #6b7280; font-weight: 500; margin-bottom: 6px; }
         .stat-card-value { font-size: 36px; font-weight: 800; color: #111827; line-height: 1; margin-bottom: 6px; }

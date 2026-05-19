@@ -417,7 +417,7 @@ export default function BasketballLeaguePage({
                   </span>
                 )}
               {access.memberRole === "team_manager" && memberTeam && (
-                <span>· {t("已绑定球队", "Team")} · {memberTeam.name}</span>
+                <span>· {memberTeam.name}</span>
               )}
               {access.memberRole === "team_manager" && !memberTeam && (
                 <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>
@@ -473,7 +473,7 @@ export default function BasketballLeaguePage({
                   cursor: "pointer",
                 }}
               >
-                {t("绑定球队", "Bind Team")}
+                {t("绑定或创建球队", "Bind or create team")}
               </button>
             )}
             {access.memberRole === "team_manager" && memberTeam && (
