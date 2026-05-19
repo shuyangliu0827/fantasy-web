@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLang } from "@/lib/lang";
 import { basketballFetch } from "@/lib/basketball/client";
+import { statLabel, type StatKey } from "@/lib/basketball/stat-labels";
 
 type Player = { id: string; display_name: string; team_id: string | null };
 type StatRow = {
@@ -31,20 +32,20 @@ type Props = {
   onSaved?: (stats: StatRow[]) => void;
 };
 
-const COLS: Array<{ key: keyof StatRow; label: string }> = [
-  { key: "min", label: "MIN" },
-  { key: "pts", label: "PTS" },
-  { key: "reb", label: "REB" },
-  { key: "ast", label: "AST" },
-  { key: "stl", label: "STL" },
-  { key: "blk", label: "BLK" },
-  { key: "tov", label: "TOV" },
-  { key: "fgm", label: "FGM" },
-  { key: "fga", label: "FGA" },
-  { key: "fg3m", label: "3PM" },
-  { key: "fg3a", label: "3PA" },
-  { key: "ftm", label: "FTM" },
-  { key: "fta", label: "FTA" },
+const COLS: Array<{ key: keyof StatRow; statKey: StatKey }> = [
+  { key: "min", statKey: "min" },
+  { key: "pts", statKey: "pts" },
+  { key: "reb", statKey: "reb" },
+  { key: "ast", statKey: "ast" },
+  { key: "stl", statKey: "stl" },
+  { key: "blk", statKey: "blk" },
+  { key: "tov", statKey: "tov" },
+  { key: "fgm", statKey: "fgm" },
+  { key: "fga", statKey: "fga" },
+  { key: "fg3m", statKey: "fg3m" },
+  { key: "fg3a", statKey: "fg3a" },
+  { key: "ftm", statKey: "ftm" },
+  { key: "fta", statKey: "fta" },
 ];
 
 function blankRow(p: Player): StatRow {
@@ -73,7 +74,7 @@ export default function BoxScoreInputTable({
   initialStats,
   onSaved,
 }: Props) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const initialMap = useMemo(() => {
     const m = new Map<string, StatRow>();
     (initialStats ?? []).forEach((s) => m.set(s.player_id, s));
@@ -149,10 +150,10 @@ export default function BoxScoreInputTable({
               <th style={th()}>{t("球员", "Player")}</th>
               {COLS.map((c) => (
                 <th key={c.key} style={{ ...th(), textAlign: "center" }}>
-                  {c.label}
+                  {statLabel(c.statKey, lang)}
                 </th>
               ))}
-              <th style={{ ...th(), textAlign: "center" }}>FPTS</th>
+              <th style={{ ...th(), textAlign: "center" }}>{statLabel("fpts", lang)}</th>
             </tr>
           </thead>
           <tbody>

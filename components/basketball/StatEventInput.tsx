@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLang } from "@/lib/lang";
 import { basketballJson, basketballFetch } from "@/lib/basketball/client";
 import type { StatEventType } from "@/lib/basketball/events";
+import { eventLabel, statLabel } from "@/lib/basketball/stat-labels";
 
 type Player = { id: string; display_name: string; team_id: string | null };
 
@@ -36,37 +37,24 @@ type Props = {
   players: Player[];
 };
 
+// Wire button order and visual variant only; labels come from
+// lib/basketball/stat-labels.ts so Chinese/English mode share one source.
 const EVENT_BUTTONS: Array<{
   type: StatEventType;
-  label: string;
   variant: "made" | "miss" | "neutral";
 }> = [
-  { type: "two_pt_made", label: "+2", variant: "made" },
-  { type: "two_pt_missed", label: "2 miss", variant: "miss" },
-  { type: "three_pt_made", label: "+3", variant: "made" },
-  { type: "three_pt_missed", label: "3 miss", variant: "miss" },
-  { type: "ft_made", label: "FT+", variant: "made" },
-  { type: "ft_missed", label: "FT−", variant: "miss" },
-  { type: "reb", label: "REB", variant: "neutral" },
-  { type: "ast", label: "AST", variant: "neutral" },
-  { type: "stl", label: "STL", variant: "neutral" },
-  { type: "blk", label: "BLK", variant: "neutral" },
-  { type: "tov", label: "TOV", variant: "miss" },
+  { type: "two_pt_made", variant: "made" },
+  { type: "two_pt_missed", variant: "miss" },
+  { type: "three_pt_made", variant: "made" },
+  { type: "three_pt_missed", variant: "miss" },
+  { type: "ft_made", variant: "made" },
+  { type: "ft_missed", variant: "miss" },
+  { type: "reb", variant: "neutral" },
+  { type: "ast", variant: "neutral" },
+  { type: "stl", variant: "neutral" },
+  { type: "blk", variant: "neutral" },
+  { type: "tov", variant: "miss" },
 ];
-
-const EVENT_LABEL_ZH: Record<StatEventType, string> = {
-  two_pt_made: "2分中",
-  two_pt_missed: "2分不中",
-  three_pt_made: "3分中",
-  three_pt_missed: "3分不中",
-  ft_made: "罚球中",
-  ft_missed: "罚球不中",
-  reb: "篮板",
-  ast: "助攻",
-  stl: "抢断",
-  blk: "盖帽",
-  tov: "失误",
-};
 
 export default function StatEventInput({ gameId, players }: Props) {
   const { t, lang } = useLang();
@@ -213,17 +201,17 @@ export default function StatEventInput({ gameId, players }: Props) {
                 {p.display_name}
               </div>
               <div style={{ display: "flex", gap: 12, fontSize: 13, color: "#475569" }}>
-                <Stat label="PTS" value={row?.pts ?? 0} />
-                <Stat label="FG" value={`${row?.fgm ?? 0}/${row?.fga ?? 0}`} />
-                <Stat label="3P" value={`${row?.fg3m ?? 0}/${row?.fg3a ?? 0}`} />
-                <Stat label="FT" value={`${row?.ftm ?? 0}/${row?.fta ?? 0}`} />
-                <Stat label="REB" value={row?.reb ?? 0} />
-                <Stat label="AST" value={row?.ast ?? 0} />
-                <Stat label="STL" value={row?.stl ?? 0} />
-                <Stat label="BLK" value={row?.blk ?? 0} />
-                <Stat label="TOV" value={row?.tov ?? 0} />
+                <Stat label={statLabel("pts", lang)} value={row?.pts ?? 0} />
+                <Stat label={statLabel("fg", lang)} value={`${row?.fgm ?? 0}/${row?.fga ?? 0}`} />
+                <Stat label={statLabel("fg3", lang)} value={`${row?.fg3m ?? 0}/${row?.fg3a ?? 0}`} />
+                <Stat label={statLabel("ft", lang)} value={`${row?.ftm ?? 0}/${row?.fta ?? 0}`} />
+                <Stat label={statLabel("reb", lang)} value={row?.reb ?? 0} />
+                <Stat label={statLabel("ast", lang)} value={row?.ast ?? 0} />
+                <Stat label={statLabel("stl", lang)} value={row?.stl ?? 0} />
+                <Stat label={statLabel("blk", lang)} value={row?.blk ?? 0} />
+                <Stat label={statLabel("tov", lang)} value={row?.tov ?? 0} />
                 <Stat
-                  label="FPTS"
+                  label={statLabel("fpts", lang)}
                   value={
                     row?.fantasy_points != null
                       ? Number(row.fantasy_points).toFixed(1)
@@ -243,7 +231,7 @@ export default function StatEventInput({ gameId, players }: Props) {
                   disabled={busy !== null}
                   style={eventBtnStyle(b.variant, busy === `${p.id}:${b.type}`)}
                 >
-                  {b.label}
+                  {eventLabel(b.type, lang)}
                 </button>
               ))}
             </div>
@@ -286,8 +274,7 @@ export default function StatEventInput({ gameId, players }: Props) {
                     }}
                     title={t("点击撤销", "Click to undo")}
                   >
-                    {lang === "zh" ? EVENT_LABEL_ZH[ev.event_type] : ev.event_type}{" "}
-                    ✕
+                    {eventLabel(ev.event_type, lang)} ✕
                   </button>
                 ))}
               </div>

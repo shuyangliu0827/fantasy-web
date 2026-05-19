@@ -6,9 +6,11 @@ import LightHeader from "@/components/LightHeader";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
+import ShareButton from "@/components/basketball/ShareButton";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { uploadBasketballPlayerAvatar } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
+import { statLabel } from "@/lib/basketball/stat-labels";
 
 type LeagueLite = {
   id: string;
@@ -74,13 +76,13 @@ type Season = {
 };
 
 const AVG_KEYS = [
-  ["pts", "PTS"],
-  ["reb", "REB"],
-  ["ast", "AST"],
-  ["stl", "STL"],
-  ["blk", "BLK"],
-  ["tov", "TOV"],
-  ["fantasy_points", "FPTS"],
+  ["pts", "pts"],
+  ["reb", "reb"],
+  ["ast", "ast"],
+  ["stl", "stl"],
+  ["blk", "blk"],
+  ["tov", "tov"],
+  ["fantasy_points", "fpts"],
 ] as const;
 
 export default function PlayerDetailPage({
@@ -89,7 +91,7 @@ export default function PlayerDetailPage({
   params: Promise<{ slug: string; playerId: string }>;
 }) {
   const { slug, playerId } = use(params);
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<LeagueLite | null>(null);
   const [leagueAccess, setLeagueAccess] = useState<LeagueAccess | null>(null);
   const [player, setPlayer] = useState<Player | null>(null);
@@ -297,32 +299,39 @@ export default function PlayerDetailPage({
                 {player.bio}
               </p>
             )}
-            {leagueAccess.canEditOwnPlayerProfile && !editing && (
-              <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={() => setEditing(true)}
-                  style={{
-                    padding: "6px 14px",
-                    background: "#1e3a8a",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 999,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  {t("编辑资料", "Edit Profile")}
-                </button>
-                <UnbindButton
-                  playerId={player.id}
-                  onUnbound={() => {
-                    setEditing(false);
-                    load();
-                  }}
-                />
-              </div>
-            )}
+            <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <ShareButton
+                label={t("分享球员", "Share Player")}
+                shareTitle={player.display_name}
+                compact
+              />
+              {leagueAccess.canEditOwnPlayerProfile && !editing && (
+                <>
+                  <button
+                    onClick={() => setEditing(true)}
+                    style={{
+                      padding: "6px 14px",
+                      background: "#1e3a8a",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 999,
+                      fontSize: 13,
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("编辑资料", "Edit Profile")}
+                  </button>
+                  <UnbindButton
+                    playerId={player.id}
+                    onUnbound={() => {
+                      setEditing(false);
+                      load();
+                    }}
+                  />
+                </>
+              )}
+            </div>
           </div>
         </div>
         {editing && leagueAccess.canEditOwnPlayerProfile && (
@@ -350,7 +359,7 @@ export default function PlayerDetailPage({
             marginBottom: 24,
           }}
         >
-          {AVG_KEYS.map(([key, label]) => (
+          {AVG_KEYS.map(([key, statKey]) => (
             <div
               key={key}
               style={{
@@ -367,17 +376,16 @@ export default function PlayerDetailPage({
                   fontSize: 11,
                   fontWeight: 800,
                   letterSpacing: "0.08em",
-                  textTransform: "uppercase",
                 }}
               >
-                {label}
+                {statLabel(statKey, lang)}
               </div>
               <div
                 style={{
                   marginTop: 6,
                   fontSize: 22,
                   fontWeight: 900,
-                  color: label === "FPTS" ? "#1e3a8a" : "#0f172a",
+                  color: statKey === "fpts" ? "#1e3a8a" : "#0f172a",
                 }}
               >
                 {(season.averages[key] ?? 0).toFixed(1)}
@@ -409,15 +417,15 @@ export default function PlayerDetailPage({
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={th()}>{t("比赛", "Game")}</th>
-                  <th style={{ ...th(), textAlign: "center" }}>PTS</th>
-                  <th style={{ ...th(), textAlign: "center" }}>REB</th>
-                  <th style={{ ...th(), textAlign: "center" }}>AST</th>
-                  <th style={{ ...th(), textAlign: "center" }}>STL</th>
-                  <th style={{ ...th(), textAlign: "center" }}>BLK</th>
-                  <th style={{ ...th(), textAlign: "center" }}>FG</th>
-                  <th style={{ ...th(), textAlign: "center" }}>3P</th>
-                  <th style={{ ...th(), textAlign: "center" }}>FT</th>
-                  <th style={{ ...th(), textAlign: "center", color: "#1e3a8a" }}>FPTS</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("pts", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("reb", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("ast", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("stl", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("blk", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("fg", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("fg3", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center" }}>{statLabel("ft", lang)}</th>
+                  <th style={{ ...th(), textAlign: "center", color: "#1e3a8a" }}>{statLabel("fpts", lang)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -480,7 +488,7 @@ export default function PlayerDetailPage({
               "Data-driven player scouting coming soon.",
             )}
             <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.05em" }}>
-              COMING SOON
+              {t("即将上线", "COMING SOON")}
             </div>
           </div>
         </section>

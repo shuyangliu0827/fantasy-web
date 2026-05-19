@@ -6,9 +6,11 @@ import LightHeader from "@/components/LightHeader";
 import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge";
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
+import ShareButton from "@/components/basketball/ShareButton";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { uploadBasketballTeamLogo } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
+import { gameStatusLabel } from "@/lib/basketball/status-labels";
 
 type LeagueLite = {
   id: string;
@@ -84,7 +86,7 @@ export default function TeamDetailPage({
   params: Promise<{ slug: string; teamId: string }>;
 }) {
   const { slug, teamId } = use(params);
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<LeagueLite | null>(null);
   const [leagueAccess, setLeagueAccess] = useState<Access | null>(null);
   const [team, setTeam] = useState<Team | null>(null);
@@ -268,12 +270,25 @@ export default function TeamDetailPage({
               </p>
             )}
           </div>
-          {canEditTeam && (
-            <TeamEditButton
-              team={team}
-              onSaved={(updated) => setTeam(updated)}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignSelf: "flex-start",
+            }}
+          >
+            <ShareButton
+              label={t("分享球队", "Share Team")}
+              shareTitle={team.name}
             />
-          )}
+            {canEditTeam && (
+              <TeamEditButton
+                team={team}
+                onSaved={(updated) => setTeam(updated)}
+              />
+            )}
+          </div>
         </div>
 
         <SeasonSnapshot summary={summary} />
@@ -383,14 +398,14 @@ export default function TeamDetailPage({
                     )}
                     <div>
                       <div style={{ fontWeight: 800, color: "#0f172a" }}>
-                        {isAway ? "@ " : "vs "}
+                        {isAway ? t("客 ", "@ ") : t("主 ", "vs ")}
                         {oppName}
                       </div>
                       <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
                         {g.scheduled_at
                           ? new Date(g.scheduled_at).toLocaleString()
                           : t("时间待定", "TBD")}{" "}
-                        · {g.status}
+                        · {gameStatusLabel(g.status, lang)}
                       </div>
                     </div>
                   </div>

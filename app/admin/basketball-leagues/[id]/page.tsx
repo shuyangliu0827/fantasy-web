@@ -17,6 +17,7 @@ import {
 } from "@/lib/basketball/uploads";
 import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
+import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
 
 type League = {
   id: string;
@@ -99,7 +100,7 @@ export default function LeagueAdminPage({ params }: { params: Promise<{ id: stri
 }
 
 function LeagueAdminPageInner({ id }: { id: string }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<League | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [tab, setTab] = useState<Tab>("settings");
@@ -244,7 +245,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             </h1>
           </Link>
           <LeagueVisibilityBadge visibility={league.visibility} />
-          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{league.status}</span>
+          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{leagueStatusLabel(league.status, lang)}</span>
           <Link
             href={`/basketball-leagues/${league.slug}`}
             style={{ fontSize: 13, color: "#1e3a8a", textDecoration: "none", fontWeight: 800 }}
@@ -1444,6 +1445,237 @@ function PlayerEditForm({
           </button>
         )}
       </div>
+      <InvitePlayerBindBlock player={player} onChanged={onSaved} />
+    </div>
+  );
+}
+
+// ─────────── Invite-by-UUID block (inside PlayerEditForm) ───────────
+
+function InvitePlayerBindBlock({
+  player,
+  onChanged,
+}: {
+  player: Player;
+  onChanged: () => void;
+}) {
+  const { t } = useLang();
+  const [uuid, setUuid] = useState("");
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [bindBusy, setBindBusy] = useState(false);
+  const [found, setFound] = useState<{
+    id: string;
+    username: string | null;
+    name: string | null;
+    avatar_url: string | null;
+  } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const translate = (code: string) => {
+    if (code === "user_not_found") {
+      return t("未找到对应 UUID 的用户。", "No user with that UUID.");
+    }
+    if (code === "user_already_linked_in_league") {
+      return t(
+        "该用户已在本联赛绑定其他球员。",
+        "This user is already linked to another player in this league.",
+      );
+    }
+    if (code === "player_already_claimed") {
+      return t(
+        "该球员身份已被其他用户认领。",
+        "This player profile is already claimed.",
+      );
+    }
+    if (code === "not_your_team_player") {
+      return t("你只能管理自己球队的球员。", "You can only manage your own team's players.");
+    }
+    if (code === "forbidden") {
+      return t("无权邀请该用户绑定此球员。", "Not authorized to bind this player.");
+    }
+    if (code === "missing_user_id") {
+      return t("请输入用户 UUID。", "Enter a user UUID.");
+    }
+    return code;
+  };
+
+  const lookup = async () => {
+    setErr(null);
+    setOk(null);
+    setFound(null);
+    const id = uuid.trim();
+    if (!id) {
+      setErr(translate("missing_user_id"));
+      return;
+    }
+    setLookupBusy(true);
+    try {
+      const res = await basketballFetch(
+        `/api/users/lookup?id=${encodeURIComponent(id)}`,
+        { method: "GET" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(translate((body as { error?: string }).error ?? `HTTP ${res.status}`));
+        return;
+      }
+      const body = (await res.json()) as {
+        user?: {
+          id: string;
+          username: string | null;
+          name: string | null;
+          avatar_url: string | null;
+        };
+      };
+      if (body.user) setFound(body.user);
+    } finally {
+      setLookupBusy(false);
+    }
+  };
+
+  const bind = async () => {
+    if (!found) return;
+    setErr(null);
+    setOk(null);
+    setBindBusy(true);
+    try {
+      const res = await basketballFetch(
+        `/api/basketball-players/${player.id}/admin-bind`,
+        { method: "POST", body: JSON.stringify({ user_id: found.id }) },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErr(translate((body as { error?: string }).error ?? `HTTP ${res.status}`));
+        return;
+      }
+      setOk(t("已授权绑定。", "Binding authorized."));
+      setFound(null);
+      setUuid("");
+      onChanged();
+    } finally {
+      setBindBusy(false);
+    }
+  };
+
+  const truncate = (s: string) =>
+    s.length > 16 ? `${s.slice(0, 8)}…${s.slice(-4)}` : s;
+
+  const alreadyBound =
+    player.claim_status === "approved" && player.claimed_by_user_id != null;
+
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: 12,
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+        {t("邀请用户绑定该球员", "Invite a user to bind this player")}
+      </div>
+      {alreadyBound && (
+        <div style={{ fontSize: 12, color: "#64748b" }}>
+          {t(
+            "该球员已绑定平台用户。如需更换请先解绑。",
+            "This player is already bound to a user. Unbind first to replace.",
+          )}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          value={uuid}
+          onChange={(e) => setUuid(e.target.value)}
+          placeholder={t("输入或粘贴用户 UUID", "Paste user UUID")}
+          style={{
+            ...inputStyle(),
+            flex: "1 1 280px",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 12,
+          }}
+          disabled={alreadyBound}
+        />
+        <button
+          onClick={lookup}
+          disabled={lookupBusy || alreadyBound}
+          style={smallBtn(lookupBusy || alreadyBound ? "#94a3b8" : "#1e3a8a")}
+        >
+          {lookupBusy ? t("查询中…", "Searching…") : t("查找用户", "Look up")}
+        </button>
+      </div>
+      {found && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 10px",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: 8,
+          }}
+        >
+          {found.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={found.avatar_url}
+              alt=""
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                objectFit: "cover",
+                background: "#f1f5f9",
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                background: "#f1f5f9",
+                display: "inline-block",
+              }}
+            />
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>
+              {found.name ?? found.username ?? "—"}
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+              {found.username ? `@${found.username} · ` : ""}
+              <span
+                style={{
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                }}
+                title={found.id}
+              >
+                {truncate(found.id)}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={bind}
+            disabled={bindBusy || alreadyBound}
+            style={smallBtn(bindBusy || alreadyBound ? "#94a3b8" : "#1e3a8a")}
+          >
+            {bindBusy ? t("绑定中…", "Binding…") : t("授权绑定", "Authorize")}
+          </button>
+        </div>
+      )}
+      {err && (
+        <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>{err}</div>
+      )}
+      {ok && (
+        <div style={{ color: "#065f46", fontSize: 13, fontWeight: 700 }}>{ok}</div>
+      )}
     </div>
   );
 }
@@ -1463,7 +1695,7 @@ function GamesTab({
   games: Game[];
   onChanged: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [home, setHome] = useState<string>("");
   const [away, setAway] = useState<string>("");
   const [when, setWhen] = useState("");
@@ -1581,7 +1813,7 @@ function GamesTab({
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {g.scheduled_at ? new Date(g.scheduled_at).toLocaleString() : t("时间待定", "TBD")}
               </span>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{g.status}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{gameStatusLabel(g.status, lang)}</span>
               {(g.home_score != null || g.away_score != null) && (
                 <span style={{ color: "#1e3a8a", fontWeight: 800, fontSize: 12 }}>
                   {g.away_score ?? 0} – {g.home_score ?? 0}
@@ -1699,7 +1931,7 @@ function BoxScoreTab({
   players: Player[];
   canOverride: boolean;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [gameId, setGameId] = useState<string>(games[0]?.id ?? "");
   const game = games.find((g) => g.id === gameId);
   const gamePlayers = game
@@ -1734,7 +1966,7 @@ function BoxScoreTab({
           {games.map((g) => (
             <option key={g.id} value={g.id}>
               {teamName(g.away_team_id)} @ {teamName(g.home_team_id)} ·{" "}
-              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : "TBD"} · {g.status}
+              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : t("时间待定", "TBD")} · {gameStatusLabel(g.status, lang)}
             </option>
           ))}
         </select>
