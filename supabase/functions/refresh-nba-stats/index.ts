@@ -72,10 +72,17 @@ Deno.serve(async () => {
   const r1 = (v: number) => Math.round(v * 10) / 10;
 
   try {
-    // Dynamic: Oct–Dec → next year, Jan–Sep → this year (matches NBA season convention)
+    // BDL season parameter uses the season's STARTING year:
+    //   Oct–Dec YYYY     → YYYY        (e.g. Nov 2025 → 2025)
+    //   Jan–Sep YYYY     → YYYY - 1    (e.g. May 2026 → 2025)
+    // The UI helper getCurrentSeasonYear() in lib/fantasy/shared/season.ts returns
+    // the ENDING year (May 2026 → 2026); using that here yields 0 rows from BDL.
+    // Mirrors getCurrentBdlSeasonYear() — kept inline because this is a Deno edge
+    // function and cannot import from @/lib. Use UTC to match the shared helper.
     // Evaluate at invocation time to avoid module-load season freeze.
     const runStartedAt = new Date().toISOString();
-    const CURRENT_SEASON = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
+    const _now = new Date();
+    const CURRENT_SEASON = _now.getUTCMonth() >= 9 ? _now.getUTCFullYear() : _now.getUTCFullYear() - 1;
     console.log("[refresh-nba-stats][1] Starting active players fetch", { source: "edge-refresh", reason: "scheduled", season: CURRENT_SEASON });
     // 1. Get all active players (~6 API calls, sorted by id for stable ordering)
     const allPlayers: BDLPlayer[] = [];
