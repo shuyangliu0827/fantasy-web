@@ -45,6 +45,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const reqStart = Date.now();
   const supabase = serviceDb();
   try {
     const userId = await getCurrentUserIdFromRequest(req);
@@ -112,6 +113,7 @@ export async function POST(
       throw new AccessError("forbidden", 403);
     }
 
+    const insertStart = Date.now();
     const { data, error } = await supabase
       .from("basketball_players")
       .insert({
@@ -137,6 +139,11 @@ export async function POST(
       const status = error.code === "23505" ? 409 : 500;
       return NextResponse.json({ error: error.message }, { status });
     }
+    console.info("[perf][api] POST /api/basketball-leagues/[id]/players", {
+      leagueId: id,
+      insertMs: Date.now() - insertStart,
+      totalMs: Date.now() - reqStart,
+    });
     return NextResponse.json({ player: data }, { status: 201 });
   } catch (e) {
     if (e instanceof AccessError) {

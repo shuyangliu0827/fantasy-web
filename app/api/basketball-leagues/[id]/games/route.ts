@@ -59,6 +59,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const reqStart = Date.now();
   const supabase = serviceDb();
   try {
     const userId = await getCurrentUserIdFromRequest(req);
@@ -97,6 +98,7 @@ export async function POST(
     if (teamsErr) return NextResponse.json({ error: teamsErr.message }, { status: 500 });
     if (!teams || teams.length !== 2) return invalid("team_not_in_league");
 
+    const insertStart = Date.now();
     const { data, error } = await supabase
       .from("basketball_games")
       .insert({
@@ -111,6 +113,11 @@ export async function POST(
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    console.info("[perf][api] POST /api/basketball-leagues/[id]/games", {
+      leagueId: id,
+      insertMs: Date.now() - insertStart,
+      totalMs: Date.now() - reqStart,
+    });
     return NextResponse.json({ game: data }, { status: 201 });
   } catch (e) {
     if (e instanceof AccessError) {

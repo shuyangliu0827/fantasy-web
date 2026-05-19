@@ -75,6 +75,12 @@ type StatRow = {
   fta: number;
   fantasy_points: number | null;
 };
+const ZERO_STAT_ROW = (playerId: string): StatRow => ({
+  player_id: playerId,
+  pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0,
+  fgm: 0, fga: 0, fg3m: 0, fg3a: 0, ftm: 0, fta: 0,
+  fantasy_points: 0,
+});
 
 type StatEvent = {
   id: string;
@@ -193,8 +199,21 @@ export default function ScorekeepingPanel({
       );
       return;
     }
+    const start = performance.now();
     setBusy(`${player.id}:${type}`);
     setErr(null);
+    const prevStat = stats[player.id] ?? null;
+    const prevScore = { home: game.home_score ?? 0, away: game.away_score ?? 0 };
+    const optimistic = applyOptimisticEvent(prevStat, player.id, type);
+    setStats((prev) => ({ ...prev, [player.id]: optimistic }));
+    if (type === "two_pt_made" || type === "three_pt_made" || type === "ft_made") {
+      const delta = type === "two_pt_made" ? 2 : type === "three_pt_made" ? 3 : 1;
+      setGame((prev) => ({
+        ...prev,
+        home_score: player.team_id && player.team_id === prev.home_team_id ? (prev.home_score ?? 0) + delta : (prev.home_score ?? 0),
+        away_score: player.team_id && player.team_id === prev.away_team_id ? (prev.away_score ?? 0) + delta : (prev.away_score ?? 0),
+      }));
+    }
     const res = await basketballFetch(`/api/basketball-games/${game.id}/events`, {
       method: "POST",
       body: JSON.stringify({
@@ -206,10 +225,16 @@ export default function ScorekeepingPanel({
     setBusy(null);
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (prevStat) setStats((prev) => ({ ...prev, [player.id]: prevStat }));
+      else setStats((prev) => {
+        const c = { ...prev }; delete c[player.id]; return c;
+      });
+      setGame((prev) => ({ ...prev, home_score: prevScore.home, away_score: prevScore.away }));
       setErr(body.error ?? `HTTP ${res.status}`);
       return;
     }
     applyEventResponse(body);
+    console.info("[perf] scorekeeping:addEvent", { type, playerId: player.id, ms: Math.round(performance.now() - start) });
   };
 
   const undoEvent = async (ev: StatEvent) => {
@@ -578,6 +603,22 @@ export default function ScorekeepingPanel({
       </section>
     </div>
   );
+}
+
+function applyOptimisticEvent(current: StatRow | null, playerId: string, type: StatEventType): StatRow {
+  const next = { ...(current ?? ZERO_STAT_ROW(playerId)) };
+  if (type === "two_pt_made") { next.pts += 2; next.fgm += 1; next.fga += 1; }
+  else if (type === "two_pt_missed") { next.fga += 1; }
+  else if (type === "three_pt_made") { next.pts += 3; next.fgm += 1; next.fga += 1; next.fg3m += 1; next.fg3a += 1; }
+  else if (type === "three_pt_missed") { next.fga += 1; next.fg3a += 1; }
+  else if (type === "ft_made") { next.pts += 1; next.ftm += 1; next.fta += 1; }
+  else if (type === "ft_missed") { next.fta += 1; }
+  else if (type === "reb") { next.reb += 1; }
+  else if (type === "ast") { next.ast += 1; }
+  else if (type === "stl") { next.stl += 1; }
+  else if (type === "blk") { next.blk += 1; }
+  else if (type === "tov") { next.tov += 1; }
+  return next;
 }
 
 // ─────────────────────── sub-components ────────────────────────────────

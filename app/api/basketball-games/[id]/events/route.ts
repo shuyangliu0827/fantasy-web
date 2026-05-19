@@ -76,6 +76,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const reqStart = Date.now();
   const supabase = serviceDb();
   try {
     const userId = await getCurrentUserIdFromRequest(req);
@@ -103,6 +104,7 @@ export async function POST(
       teamId = player?.team_id ?? null;
     }
 
+    const insertStart = Date.now();
     const { data: event, error: insertErr } = await supabase
       .from("basketball_stat_events")
       .insert({
@@ -125,6 +127,7 @@ export async function POST(
         { status: 500 },
       );
     }
+    const recomputeStart = Date.now();
 
     const { stats, error: aggErr } = await recomputeBoxScore(
       supabase,
@@ -135,6 +138,12 @@ export async function POST(
       return NextResponse.json({ error: aggErr }, { status: 500 });
     }
     const team_scores = await recomputeTeamScores(supabase, id);
+    console.info("[perf][api] POST /api/basketball-games/[id]/events", {
+      gameId: id,
+      insertMs: Date.now() - insertStart,
+      recomputeMs: Date.now() - recomputeStart,
+      totalMs: Date.now() - reqStart,
+    });
     return NextResponse.json({ event, stats, team_scores });
   } catch (e) {
     if (e instanceof AccessError) {

@@ -299,13 +299,21 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             teams={teams}
             players={players}
             onChanged={refresh}
+            onAdded={(player) => setPlayers((prev) => [player, ...prev])}
             isAdminLike={isAdminLike}
             managerTeamId={access.memberTeamId ?? null}
           />
         )}
         {tab === "games" &&
           (isAdminLike ? (
-            <GamesTab leagueId={id} leagueSlug={league.slug} teams={teams} games={games} onChanged={refresh} />
+            <GamesTab
+              leagueId={id}
+              leagueSlug={league.slug}
+              teams={teams}
+              games={games}
+              onAdded={(game) => setGames((prev) => [game, ...prev])}
+              onDeleted={(gameId) => setGames((prev) => prev.filter((g) => g.id !== gameId))}
+            />
           ) : (
             restrictedNotice
           ))}
@@ -864,6 +872,7 @@ function PlayersTab({
   teams,
   players,
   onChanged,
+  onAdded,
   isAdminLike,
   managerTeamId,
 }: {
@@ -872,6 +881,7 @@ function PlayersTab({
   teams: Team[];
   players: Player[];
   onChanged: () => void;
+  onAdded: (player: Player) => void;
   isAdminLike: boolean;
   managerTeamId: string | null;
 }) {
@@ -893,6 +903,7 @@ function PlayersTab({
     isAdminLike || (managerTeamId != null && p.team_id === managerTeamId);
 
   const add = async () => {
+    const start = performance.now();
     setErr(null);
     setErrDetails(null);
     if (!name.trim()) { setErr(t("请填写球员名", "Display name is required")); return; }
@@ -920,9 +931,11 @@ function PlayersTab({
         setErr(body.error ?? `HTTP ${res.status}`);
         return;
       }
+      const body = (await res.json().catch(() => ({}))) as { player?: Player };
+      if (body.player) onAdded(body.player);
       if (avatarFile) {
-        const body = (await res.json()) as { player: { id: string } };
         try {
+          if (!body.player?.id) throw new Error("missing_created_player");
           const url = await uploadBasketballPlayerAvatar(leagueId, body.player.id, avatarFile);
           const patchRes = await basketballFetch(`/api/basketball-players/${body.player.id}/profile`, {
             method: "PATCH",
@@ -952,7 +965,8 @@ function PlayersTab({
       setWeightKg("");
       setBirthYear("");
       setAvatarFile(null);
-      onChanged();
+      if (avatarFile) onChanged();
+      console.info("[perf] admin:addPlayer", { ms: Math.round(performance.now() - start) });
     } finally {
       setBusy(false);
     }
@@ -1687,13 +1701,15 @@ function GamesTab({
   leagueSlug,
   teams,
   games,
-  onChanged,
+  onAdded,
+  onDeleted,
 }: {
   leagueId: string;
   leagueSlug: string;
   teams: Team[];
   games: Game[];
-  onChanged: () => void;
+  onAdded: (game: Game) => void;
+  onDeleted: (gameId: string) => void;
 }) {
   const { t, lang } = useLang();
   const [home, setHome] = useState<string>("");
@@ -1705,6 +1721,7 @@ function GamesTab({
   const canSubmit = !!home && !!away && !!when && !sameTeam;
 
   const add = async () => {
+    const start = performance.now();
     setErr(null);
     if (!home) { setErr(t("请选择主队", "Pick a home team")); return; }
     if (!away) { setErr(t("请选择客队", "Pick an away team")); return; }
@@ -1724,10 +1741,12 @@ function GamesTab({
       setErr(body.reason ?? body.error ?? `HTTP ${res.status}`);
       return;
     }
+    const body = (await res.json().catch(() => ({}))) as { game?: Game };
+    if (body.game) onAdded(body.game);
     setHome("");
     setAway("");
     setWhen("");
-    onChanged();
+    console.info("[perf] admin:addGame", { ms: Math.round(performance.now() - start) });
   };
 
   const remove = async (gameId: string) => {
@@ -1740,7 +1759,7 @@ function GamesTab({
       { method: "DELETE" },
     );
     if (res.status === 204) {
-      onChanged();
+      onDeleted(gameId);
       return;
     }
     const body = await res.json().catch(() => ({}));
