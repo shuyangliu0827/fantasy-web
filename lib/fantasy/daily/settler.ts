@@ -39,15 +39,20 @@ export type SettleResult = {
 
 /**
  * Settles a single contest:
- *  1. Ensures player_day_stats is populated (calls BDL if needed).
+ *  1. Force-refreshes player_day_stats from BDL (final box scores).
  *  2. Computes total_fpts per lineup from player_day_stats.
  *  3. Assigns competition ranks and points_awarded.
  *  4. Writes user_lineup_players.actual_fantasy_points, user_lineups, points_transactions.
  *  5. Marks the contest as scored.
  *
  * Safe to call multiple times — all writes are idempotent.
+ * Pass `{ force: true }` to bypass the lineup_lock_at guard and re-settle already-scored contests.
  */
-export async function settleContest(contestId: string): Promise<SettleResult> {
+export async function settleContest(
+  contestId: string,
+  options?: { force?: boolean },
+): Promise<SettleResult> {
+  const force = options?.force ?? false;
   const supabase = readDb();
   const svcDb    = writeDb();
 
@@ -73,16 +78,16 @@ export async function settleContest(contestId: string): Promise<SettleResult> {
 
   result.contest_date = contest.date;
 
-  if (new Date() < new Date(contest.lineup_lock_at)) {
+  if (!force && new Date() < new Date(contest.lineup_lock_at)) {
     result.errors.push("contest_not_yet_locked");
     return result;
   }
 
-  // ── 2. Ensure player_day_stats is populated for this date ─────────────
-  // fetchStatsForDate pulls from in-memory cache → DB → BDL in that order.
-  // This guarantees player_day_stats rows exist before the scoring query below.
+  // ── 2. Force-refresh player_day_stats from BDL for this date ────────────
+  // forceRefresh bypasses in-memory and DB caches so settlement always uses
+  // the latest final box scores, not partial mid-game data.
   try {
-    await fetchStatsForDate(contest.date);
+    await fetchStatsForDate(contest.date, { forceRefresh: true });
   } catch (err) {
     const msg = `stats_fetch_warning: ${err}`;
     console.warn("[contest-settler]", { contestId, date: contest.date, msg });
@@ -90,11 +95,17 @@ export async function settleContest(contestId: string): Promise<SettleResult> {
   }
 
   // ── 3. Fetch submitted / locked / scored lineups ───────────────────────
+  // When force=true, include "completed" status so already-settled lineups
+  // can be re-scored with corrected stats (idempotent via UPSERT).
+  const lineupStatuses = force
+    ? ["submitted", "locked", "scored", "completed"]
+    : ["submitted", "locked", "scored"];
+
   const { data: lineups, error: lErr } = await supabase
     .from("user_lineups")
     .select("id, user_id, status, submitted_at")
     .eq("contest_id", contestId)
-    .in("status", ["submitted", "locked", "scored"]);
+    .in("status", lineupStatuses);
 
   if (lErr) { result.errors.push(`lineups: ${lErr.message}`); return result; }
 

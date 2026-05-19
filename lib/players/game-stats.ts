@@ -34,10 +34,10 @@ export type DateStatsMap = Record<string, PlayerGameStats>;
 const cache = new Map<string, { data: DateStatsMap; timestamp: number }>();
 
 function getSupabase() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  // Prefer service role so RLS doesn't block player_day_stats writes during settlement.
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createClient(url, key, { auth: { persistSession: false } });
 }
 
 function todayUtcStr(): string {
@@ -163,17 +163,26 @@ async function writeToDB(
  * Returns box-score stats (including fpts) for all players on a given date.
  * Uses in-memory cache → DB → BDL API in that order.
  * Safe to call from any server-side context.
+ *
+ * Pass `{ forceRefresh: true }` to bypass all caches and re-fetch from BDL.
+ * Required before final settlement so stale mid-game data is not used.
  */
-export async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
-  const cached = cache.get(date);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
+export async function fetchStatsForDate(
+  date: string,
+  options?: { forceRefresh?: boolean },
+): Promise<DateStatsMap> {
+  const forceRefresh = options?.forceRefresh ?? false;
+
+  if (!forceRefresh) {
+    const cached = cache.get(date);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) return cached.data;
   }
 
   const isPastDate = date < todayUtcStr();
   const supabase   = getSupabase();
 
-  if (isPastDate) {
+  // DB-first for past dates only when not force-refreshing.
+  if (isPastDate && !forceRefresh) {
     const dbStats = await readFromDB(supabase, date);
     if (Object.keys(dbStats).length > 0) {
       cache.set(date, { data: dbStats, timestamp: Date.now() });
@@ -186,17 +195,18 @@ export async function fetchStatsForDate(date: string): Promise<DateStatsMap> {
     isPastDate ? "historical_backfill" : "live_day",
   );
 
-  if (isPastDate && Object.keys(bdlStats).length > 0) {
-    await writeToDB(supabase, date, bdlStats);
+  if (Object.keys(bdlStats).length > 0) {
+    // Write synchronously for past dates; fire-and-forget for today.
+    if (isPastDate) {
+      await writeToDB(supabase, date, bdlStats);
+    } else {
+      writeToDB(supabase, date, bdlStats).catch((err) => {
+        console.error("[player-game-stats] Failed to persist today stats:", { date, error: err });
+      });
+    }
     const merged = await readFromDB(supabase, date);
     if (!hadError) cache.set(date, { data: merged, timestamp: Date.now() });
     return merged;
-  }
-
-  if (!isPastDate && Object.keys(bdlStats).length > 0) {
-    writeToDB(supabase, date, bdlStats).catch((err) => {
-      console.error("[player-game-stats] Failed to persist today stats:", { date, error: err });
-    });
   }
 
   if (!hadError) cache.set(date, { data: bdlStats, timestamp: Date.now() });

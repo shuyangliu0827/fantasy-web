@@ -44,12 +44,14 @@ async function handler(req: Request, { params }: { params: Promise<{ id: string 
   }
 
   const { id } = await params;
-  const result  = await settleContest(id);
+  const force   = new URL(req.url).searchParams.get("force") === "true";
+  const result  = await settleContest(id, { force });
 
   if (result.errors.includes("contest_not_found")) {
     return NextResponse.json({ error: "contest_not_found" }, { status: 404 });
   }
-  if (result.errors.includes("contest_not_yet_locked")) {
+  // Only block on not-yet-locked when not using force mode.
+  if (!force && result.errors.includes("contest_not_yet_locked")) {
     return NextResponse.json({ error: "contest_not_yet_locked" }, { status: 409 });
   }
 

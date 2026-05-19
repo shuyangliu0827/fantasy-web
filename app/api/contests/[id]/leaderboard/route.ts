@@ -185,5 +185,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     locked:     isLocked,
     total:      count ?? 0,
     entries:    shaped,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
