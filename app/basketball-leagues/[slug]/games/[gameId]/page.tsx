@@ -7,8 +7,11 @@ import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import GameMediaList from "@/components/basketball/GameMediaList";
+import ShareButton from "@/components/basketball/ShareButton";
 import { basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
+import { statLabel, type StatKey } from "@/lib/basketball/stat-labels";
+import { gameStatusLabel } from "@/lib/basketball/status-labels";
 
 type LeagueLite = {
   id: string;
@@ -56,19 +59,19 @@ type Access = {
   memberStatus: "pending" | "approved" | "rejected" | "removed" | null;
 };
 
-const STAT_COLS: Array<{ key: keyof BoxRow; label: string }> = [
-  { key: "pts", label: "PTS" },
-  { key: "reb", label: "REB" },
-  { key: "ast", label: "AST" },
-  { key: "stl", label: "STL" },
-  { key: "blk", label: "BLK" },
-  { key: "tov", label: "TOV" },
-  { key: "fgm", label: "FGM" },
-  { key: "fga", label: "FGA" },
-  { key: "fg3m", label: "3PM" },
-  { key: "fg3a", label: "3PA" },
-  { key: "ftm", label: "FTM" },
-  { key: "fta", label: "FTA" },
+const STAT_COLS: Array<{ key: keyof BoxRow; statKey: StatKey }> = [
+  { key: "pts", statKey: "pts" },
+  { key: "reb", statKey: "reb" },
+  { key: "ast", statKey: "ast" },
+  { key: "stl", statKey: "stl" },
+  { key: "blk", statKey: "blk" },
+  { key: "tov", statKey: "tov" },
+  { key: "fgm", statKey: "fgm" },
+  { key: "fga", statKey: "fga" },
+  { key: "fg3m", statKey: "fg3m" },
+  { key: "fg3a", statKey: "fg3a" },
+  { key: "ftm", statKey: "ftm" },
+  { key: "fta", statKey: "fta" },
 ];
 
 export default function GameDetailPage({
@@ -77,7 +80,7 @@ export default function GameDetailPage({
   params: Promise<{ slug: string; gameId: string }>;
 }) {
   const { slug, gameId } = use(params);
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<LeagueLite | null>(null);
   const [leagueAccess, setLeagueAccess] = useState<Access | null>(null);
   const [game, setGame] = useState<Game | null>(null);
@@ -247,14 +250,26 @@ export default function GameDetailPage({
                 fontSize: 11,
                 fontWeight: 900,
                 letterSpacing: "0.06em",
-                textTransform: "uppercase",
                 display: "inline-block",
               }}
             >
-              {game.status}
+              {gameStatusLabel(game.status, lang)}
             </div>
-            {leagueAccess.canInputStats && (
-              <div style={{ marginTop: 8 }}>
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+                flexWrap: "wrap",
+              }}
+            >
+              <ShareButton
+                label={t("分享比赛", "Share Game")}
+                shareTitle={`${teamName(game.away_team_id)} @ ${teamName(game.home_team_id)}`}
+                compact
+              />
+              {leagueAccess.canInputStats && (
                 <Link
                   href={`/admin/basketball-leagues/${league.id}`}
                   style={{
@@ -262,12 +277,13 @@ export default function GameDetailPage({
                     color: "#1e3a8a",
                     textDecoration: "none",
                     fontWeight: 800,
+                    alignSelf: "center",
                   }}
                 >
                   {t("数据录入 →", "Manage stats →")}
                 </Link>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -333,7 +349,7 @@ function BoxScoreTable({
   rows: BoxRow[];
   slug: string;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (rows.length === 0) {
     return (
       <div>
@@ -391,10 +407,12 @@ function BoxScoreTable({
               <th style={th()}>{t("球员", "Player")}</th>
               {STAT_COLS.map((c) => (
                 <th key={c.key} style={{ ...th(), textAlign: "center" }}>
-                  {c.label}
+                  {statLabel(c.statKey, lang)}
                 </th>
               ))}
-              <th style={{ ...th(), textAlign: "center", color: "#1e3a8a" }}>FPTS</th>
+              <th style={{ ...th(), textAlign: "center", color: "#1e3a8a" }}>
+                {statLabel("fpts", lang)}
+              </th>
             </tr>
           </thead>
           <tbody>

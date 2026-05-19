@@ -22,7 +22,7 @@ export async function DELETE(
 
     const { data: media, error: loadErr } = await supabase
       .from("basketball_game_media")
-      .select("id, basketball_league_id, game_id")
+      .select("id, basketball_league_id, game_id, source_type, storage_path")
       .eq("id", mediaId)
       .maybeSingle();
     if (loadErr) throw new AccessError(loadErr.message, 500);
@@ -36,6 +36,17 @@ export async function DELETE(
       .delete()
       .eq("id", mediaId);
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+
+    // For uploaded videos, remove the storage object too. External-link
+    // highlights have no storage_path so nothing to clean up. Best-effort:
+    // if the bucket remove fails, the DB row is already gone.
+    if (media.source_type === "upload" && media.storage_path) {
+      await supabase.storage
+        .from("basketball-game-videos")
+        .remove([media.storage_path])
+        .catch(() => undefined);
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof AccessError) {

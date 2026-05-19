@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { basketballJson, basketballFetch } from "@/lib/basketball/client";
 import type { StatEventType } from "@/lib/basketball/events";
+import { eventLabel, statLabel } from "@/lib/basketball/stat-labels";
 
 type Player = {
   id: string;
@@ -91,37 +92,24 @@ type Props = {
   canStart: boolean; // gated by stats permission upstream
 };
 
+// Wire button order and visual variant only; labels come from
+// lib/basketball/stat-labels.ts so Chinese/English mode share one source.
 const EVENT_BUTTONS: Array<{
   type: StatEventType;
-  label: string;
   variant: "made" | "miss" | "neutral";
 }> = [
-  { type: "two_pt_made", label: "+2", variant: "made" },
-  { type: "two_pt_missed", label: "2 miss", variant: "miss" },
-  { type: "three_pt_made", label: "+3", variant: "made" },
-  { type: "three_pt_missed", label: "3 miss", variant: "miss" },
-  { type: "ft_made", label: "FT+", variant: "made" },
-  { type: "ft_missed", label: "FT−", variant: "miss" },
-  { type: "reb", label: "REB", variant: "neutral" },
-  { type: "ast", label: "AST", variant: "neutral" },
-  { type: "stl", label: "STL", variant: "neutral" },
-  { type: "blk", label: "BLK", variant: "neutral" },
-  { type: "tov", label: "TOV", variant: "miss" },
+  { type: "two_pt_made", variant: "made" },
+  { type: "two_pt_missed", variant: "miss" },
+  { type: "three_pt_made", variant: "made" },
+  { type: "three_pt_missed", variant: "miss" },
+  { type: "ft_made", variant: "made" },
+  { type: "ft_missed", variant: "miss" },
+  { type: "reb", variant: "neutral" },
+  { type: "ast", variant: "neutral" },
+  { type: "stl", variant: "neutral" },
+  { type: "blk", variant: "neutral" },
+  { type: "tov", variant: "miss" },
 ];
-
-const EVENT_LABEL_ZH: Record<StatEventType, string> = {
-  two_pt_made: "2分中",
-  two_pt_missed: "2分不中",
-  three_pt_made: "3分中",
-  three_pt_missed: "3分不中",
-  ft_made: "罚球中",
-  ft_missed: "罚球不中",
-  reb: "篮板",
-  ast: "助攻",
-  stl: "抢断",
-  blk: "盖帽",
-  tov: "失误",
-};
 
 export default function ScorekeepingPanel({
   leagueSlug,
@@ -569,7 +557,7 @@ export default function ScorekeepingPanel({
                     {p ? (p.jersey_number ? `#${p.jersey_number} ${p.display_name}` : p.display_name) : "—"}
                   </span>
                   <span style={{ color: "#475569" }}>
-                    · {lang === "zh" ? EVENT_LABEL_ZH[ev.event_type] : ev.event_type}
+                    · {eventLabel(ev.event_type, lang)}
                   </span>
                   <span style={{ color: "#94a3b8", fontSize: 11, marginLeft: "auto" }}>
                     {new Date(ev.created_at).toLocaleTimeString()}
@@ -613,7 +601,7 @@ function PlayerCard({
   onAddEvent: (player: Player, type: StatEventType) => void;
   onToggleOnCourt: (player: Player) => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   return (
     <div
       style={{
@@ -684,17 +672,17 @@ function PlayerCard({
           borderTop: "1px solid #f1f5f9",
         }}
       >
-        <StatChip label="PTS" value={stats?.pts ?? 0} />
-        <StatChip label="FG" value={`${stats?.fgm ?? 0}/${stats?.fga ?? 0}`} />
-        <StatChip label="3P" value={`${stats?.fg3m ?? 0}/${stats?.fg3a ?? 0}`} />
-        <StatChip label="FT" value={`${stats?.ftm ?? 0}/${stats?.fta ?? 0}`} />
-        <StatChip label="REB" value={stats?.reb ?? 0} />
-        <StatChip label="AST" value={stats?.ast ?? 0} />
-        <StatChip label="STL" value={stats?.stl ?? 0} />
-        <StatChip label="BLK" value={stats?.blk ?? 0} />
-        <StatChip label="TOV" value={stats?.tov ?? 0} />
+        <StatChip label={statLabel("pts", lang)} value={stats?.pts ?? 0} />
+        <StatChip label={statLabel("fg", lang)} value={`${stats?.fgm ?? 0}/${stats?.fga ?? 0}`} />
+        <StatChip label={statLabel("fg3", lang)} value={`${stats?.fg3m ?? 0}/${stats?.fg3a ?? 0}`} />
+        <StatChip label={statLabel("ft", lang)} value={`${stats?.ftm ?? 0}/${stats?.fta ?? 0}`} />
+        <StatChip label={statLabel("reb", lang)} value={stats?.reb ?? 0} />
+        <StatChip label={statLabel("ast", lang)} value={stats?.ast ?? 0} />
+        <StatChip label={statLabel("stl", lang)} value={stats?.stl ?? 0} />
+        <StatChip label={statLabel("blk", lang)} value={stats?.blk ?? 0} />
+        <StatChip label={statLabel("tov", lang)} value={stats?.tov ?? 0} />
         <StatChip
-          label="FPTS"
+          label={statLabel("fpts", lang)}
           value={stats?.fantasy_points != null ? Number(stats.fantasy_points).toFixed(1) : "0.0"}
           highlight
         />
@@ -708,7 +696,7 @@ function PlayerCard({
             disabled={busy !== null || disabled}
             style={eventBtnStyle(b.variant, busy === `${player.id}:${b.type}`)}
           >
-            {b.label}
+            {eventLabel(b.type, lang)}
           </button>
         ))}
       </div>

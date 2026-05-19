@@ -86,3 +86,64 @@ export async function uploadBasketballLeagueLogo(
 ): Promise<string> {
   return postFile(`/api/basketball-leagues/${leagueId}/logo`, file);
 }
+
+/**
+ * Upload a video highlight file for a game. Server route enforces
+ * league_admin permission and validates file size / MIME type. Returns
+ * the freshly created basketball_game_media row.
+ */
+export async function uploadBasketballGameVideo(
+  gameId: string,
+  file: File,
+  opts?: { title?: string; visibility?: "public" | "members_only" },
+): Promise<{
+  id: string;
+  url: string;
+  title: string | null;
+  visibility: string;
+  media_type: string;
+  source_type: string;
+}> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+  if (opts?.title) formData.append("title", opts.title);
+  if (opts?.visibility) formData.append("visibility", opts.visibility);
+
+  const res = await fetch(`/api/basketball-games/${gameId}/media/video`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    let code = `HTTP ${res.status}`;
+    let details: string | undefined;
+    try {
+      const body = (await res.json()) as { error?: string; details?: string };
+      if (body?.error) code = body.error;
+      if (body?.details) details = body.details;
+    } catch {
+      /* ignore */
+    }
+    const message = details ? `${code}: ${details}` : code;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  const body = (await res.json()) as {
+    media?: {
+      id: string;
+      url: string;
+      title: string | null;
+      visibility: string;
+      media_type: string;
+      source_type: string;
+    };
+  };
+  if (!body.media) throw new Error("missing_media_in_response");
+  return body.media;
+}

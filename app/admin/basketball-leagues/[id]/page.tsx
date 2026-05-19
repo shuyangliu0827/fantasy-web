@@ -17,6 +17,7 @@ import {
 } from "@/lib/basketball/uploads";
 import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
+import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
 
 type League = {
   id: string;
@@ -99,7 +100,7 @@ export default function LeagueAdminPage({ params }: { params: Promise<{ id: stri
 }
 
 function LeagueAdminPageInner({ id }: { id: string }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [league, setLeague] = useState<League | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [tab, setTab] = useState<Tab>("settings");
@@ -244,7 +245,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             </h1>
           </Link>
           <LeagueVisibilityBadge visibility={league.visibility} />
-          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{league.status}</span>
+          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>{leagueStatusLabel(league.status, lang)}</span>
           <Link
             href={`/basketball-leagues/${league.slug}`}
             style={{ fontSize: 13, color: "#1e3a8a", textDecoration: "none", fontWeight: 800 }}
@@ -1694,7 +1695,7 @@ function GamesTab({
   games: Game[];
   onChanged: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [home, setHome] = useState<string>("");
   const [away, setAway] = useState<string>("");
   const [when, setWhen] = useState("");
@@ -1812,7 +1813,7 @@ function GamesTab({
               <span style={{ color: "#64748b", fontSize: 12 }}>
                 {g.scheduled_at ? new Date(g.scheduled_at).toLocaleString() : t("时间待定", "TBD")}
               </span>
-              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{g.status}</span>
+              <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>{gameStatusLabel(g.status, lang)}</span>
               {(g.home_score != null || g.away_score != null) && (
                 <span style={{ color: "#1e3a8a", fontWeight: 800, fontSize: 12 }}>
                   {g.away_score ?? 0} – {g.home_score ?? 0}
@@ -1930,7 +1931,7 @@ function BoxScoreTab({
   players: Player[];
   canOverride: boolean;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [gameId, setGameId] = useState<string>(games[0]?.id ?? "");
   const game = games.find((g) => g.id === gameId);
   const gamePlayers = game
@@ -1965,7 +1966,7 @@ function BoxScoreTab({
           {games.map((g) => (
             <option key={g.id} value={g.id}>
               {teamName(g.away_team_id)} @ {teamName(g.home_team_id)} ·{" "}
-              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : "TBD"} · {g.status}
+              {g.scheduled_at ? new Date(g.scheduled_at).toLocaleDateString() : t("时间待定", "TBD")} · {gameStatusLabel(g.status, lang)}
             </option>
           ))}
         </select>

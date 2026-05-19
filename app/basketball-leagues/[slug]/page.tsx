@@ -10,10 +10,12 @@ import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import PendingAccessNotice from "@/components/basketball/PendingAccessNotice";
 import PlayerClaimModal from "@/components/basketball/PlayerClaimModal";
 import TeamBindModal from "@/components/basketball/TeamBindModal";
+import ShareButton from "@/components/basketball/ShareButton";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { memberRoleLabel } from "@/lib/basketball/role-labels";
 import type { MemberRole } from "@/lib/basketball/access";
 import { useLang } from "@/lib/lang";
+import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
 
 type League = {
   id: string;
@@ -324,14 +326,13 @@ export default function BasketballLeaguePage({
                     fontSize: 11,
                     fontWeight: 800,
                     letterSpacing: "0.06em",
-                    textTransform: "uppercase",
                     color: "#475569",
                     padding: "4px 10px",
                     borderRadius: 999,
                     background: "rgba(15, 23, 42, 0.04)",
                   }}
                 >
-                  {league.status}
+                  {leagueStatusLabel(league.status, lang)}
                 </span>
                 {league.is_contest_enabled && (
                   <span
@@ -510,57 +511,64 @@ export default function BasketballLeaguePage({
           </div>
         )}
         {access.memberStatus === "pending" && <PendingAccessNotice />}
-        {(league.is_contest_enabled ||
-          access.canManageLeague ||
-          access.canManageOwnTeam ||
-          access.canInputStats) && (
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 28 }}>
-            {league.is_contest_enabled && (
-              <Link
-                href={`/contest/${league.slug}/build`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "11px 20px",
-                  background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-                  color: "#0a0e1a",
-                  borderRadius: 12,
-                  fontSize: 14,
-                  fontWeight: 900,
-                  textDecoration: "none",
-                  boxShadow:
-                    "0 8px 24px -8px rgba(245, 158, 11, 0.45), 0 0 0 1px rgba(245, 158, 11, 0.2)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {t("进入每日竞赛", "Play Daily Contest")} <span aria-hidden>→</span>
-              </Link>
-            )}
-            {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
-              <Link
-                href={`/admin/basketball-leagues/${league.id}`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "11px 20px",
-                  background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
-                  color: "#fff",
-                  borderRadius: 12,
-                  fontSize: 14,
-                  fontWeight: 900,
-                  textDecoration: "none",
-                  boxShadow:
-                    "0 8px 24px -8px rgba(30, 58, 138, 0.5), 0 0 0 1px rgba(30, 58, 138, 0.2)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {t("进入管理后台", "Manage League")} <span aria-hidden>→</span>
-              </Link>
-            )}
-          </div>
-        )}
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginBottom: 28,
+          }}
+        >
+          {league.is_contest_enabled && (
+            <Link
+              href={`/contest/${league.slug}/build`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "11px 20px",
+                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                color: "#0a0e1a",
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 900,
+                textDecoration: "none",
+                boxShadow:
+                  "0 8px 24px -8px rgba(245, 158, 11, 0.45), 0 0 0 1px rgba(245, 158, 11, 0.2)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {t("进入每日竞赛", "Play Daily Contest")} <span aria-hidden>→</span>
+            </Link>
+          )}
+          {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
+            <Link
+              href={`/admin/basketball-leagues/${league.id}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "11px 20px",
+                background: "linear-gradient(135deg, #1e3a8a, #1e40af)",
+                color: "#fff",
+                borderRadius: 12,
+                fontSize: 14,
+                fontWeight: 900,
+                textDecoration: "none",
+                boxShadow:
+                  "0 8px 24px -8px rgba(30, 58, 138, 0.5), 0 0 0 1px rgba(30, 58, 138, 0.2)",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              {t("进入管理后台", "Manage League")} <span aria-hidden>→</span>
+            </Link>
+          )}
+          <ShareButton
+            label={t("分享联赛", "Share League")}
+            shareTitle={league.name}
+          />
+        </div>
 
         <Section title={t("球队", "Teams")} count={teams.length}>
           {teams.length === 0 ? (
@@ -675,7 +683,7 @@ export default function BasketballLeaguePage({
                       {g.scheduled_at
                         ? new Date(g.scheduled_at).toLocaleString()
                         : t("时间待定", "TBD")}{" "}
-                      · {g.status}
+                      · {gameStatusLabel(g.status, lang)}
                     </div>
                   </div>
                   {g.status === "final" && (
@@ -806,6 +814,7 @@ function Empty({ text }: { text: string }) {
 }
 
 function ComingSoonCard({ title, body }: { title: string; body: string }) {
+  const { t } = useLang();
   return (
     <div
       style={{
@@ -827,7 +836,7 @@ function ComingSoonCard({ title, body }: { title: string; body: string }) {
           marginBottom: 8,
         }}
       >
-        Coming Soon
+        {t("即将上线", "Coming Soon")}
       </div>
       <div
         style={{
