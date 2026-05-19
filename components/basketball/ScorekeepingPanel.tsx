@@ -24,7 +24,7 @@
 //     `game.away_score`, which `recomputeTeamScores` keeps in sync with
 //     the event log.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useLang } from "@/lib/lang";
 import { basketballJson, basketballFetch } from "@/lib/basketball/client";
@@ -127,7 +127,7 @@ export default function ScorekeepingPanel({
 }: Props) {
   const { t, lang } = useLang();
   const [game, setGame] = useState<Game>(initialGame);
-  const [stats, setStats] = useState<Record<string, StatRow>>({});
+  const [confirmedStats, setConfirmedStats] = useState<Record<string, StatRow>>({});
   const [events, setEvents] = useState<StatEvent[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -139,8 +139,10 @@ export default function ScorekeepingPanel({
   const awayTeam = teams.find((tm) => tm.id === game.away_team_id) ?? null;
   const onCourtSet = new Set(game.on_court_player_ids ?? []);
   const isFinished = game.status === "final";
-  const queueRef = useRef<Array<{ player: Player; type: StatEventType }>>([]);
+  const queueRef = useRef<Array<{ player: Player; type: StatEventType; clientSeq: number }>>([]);
   const drainingRef = useRef(false);
+  const nextSeqRef = useRef(1);
+  const [pendingEvents, setPendingEvents] = useState<Array<{ player: Player; type: StatEventType; clientSeq: number }>>([]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -155,7 +157,7 @@ export default function ScorekeepingPanel({
     if (boxRes.data) {
       const map: Record<string, StatRow> = {};
       boxRes.data.stats.forEach((r) => (map[r.player_id] = r));
-      setStats(map);
+      setConfirmedStats(map);
     }
     if (evRes.data) setEvents(evRes.data.events);
     setLoading(false);
@@ -177,9 +179,9 @@ export default function ScorekeepingPanel({
   ) => {
     if (body.event) setEvents((prev) => [body.event!, ...prev]);
     if (body.stats) {
-      setStats((prev) => ({ ...prev, [body.stats!.player_id]: body.stats! }));
+      setConfirmedStats((prev) => ({ ...prev, [body.stats!.player_id]: body.stats! }));
     } else if (fallbackPlayerId) {
-      setStats((prev) => {
+      setConfirmedStats((prev) => {
         const copy = { ...prev };
         delete copy[fallbackPlayerId];
         return copy;
@@ -210,9 +212,12 @@ export default function ScorekeepingPanel({
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         setFailedCount((v) => v + 1);
-        setErr(t("某次数据同步失败，请检查网络后重试", "A stat sync failed. Please check your network and retry."));
+        setErr(t("某次数据同步失败，已尝试重新校准，请检查网络或刷新页面确认。", "A stat sync failed and we attempted to re-sync. Please check network or refresh."));
+        setPendingEvents((prev) => prev.filter((p) => p.clientSeq !== item.clientSeq));
+        void reload();
       } else {
         applyEventResponse(body);
+        setPendingEvents((prev) => prev.filter((p) => p.clientSeq !== item.clientSeq));
       }
       queueRef.current.shift();
       setPendingCount(queueRef.current.length);
@@ -232,24 +237,29 @@ export default function ScorekeepingPanel({
     }
     const start = performance.now();
     setErr(null);
-    const prevStat = stats[player.id] ?? null;
-    const prevScore = { home: game.home_score ?? 0, away: game.away_score ?? 0 };
-    const optimistic = applyOptimisticEvent(prevStat, player.id, type);
-    setStats((prev) => ({ ...prev, [player.id]: optimistic }));
-    if (type === "two_pt_made" || type === "three_pt_made" || type === "ft_made") {
-      const delta = type === "two_pt_made" ? 2 : type === "three_pt_made" ? 3 : 1;
-      setGame((prev) => ({
-        ...prev,
-        home_score: player.team_id && player.team_id === prev.home_team_id ? (prev.home_score ?? 0) + delta : (prev.home_score ?? 0),
-        away_score: player.team_id && player.team_id === prev.away_team_id ? (prev.away_score ?? 0) + delta : (prev.away_score ?? 0),
-      }));
-    }
-    void prevScore;
-    queueRef.current.push({ player, type });
+    const clientSeq = nextSeqRef.current++;
+    const pending = { player, type, clientSeq };
+    setPendingEvents((prev) => [...prev, pending]);
+    queueRef.current.push(pending);
     setPendingCount(queueRef.current.length);
     void drainQueue();
     console.info("[perf] scorekeeping:addEvent", { type, playerId: player.id, ms: Math.round(performance.now() - start) });
   };
+  const display = useMemo(() => {
+    const statMap: Record<string, StatRow> = { ...confirmedStats };
+    let home = game.home_score ?? 0;
+    let away = game.away_score ?? 0;
+    for (const p of pendingEvents) {
+      const cur = statMap[p.player.id] ?? null;
+      statMap[p.player.id] = applyOptimisticEvent(cur, p.player.id, p.type);
+      if (p.type === "two_pt_made" || p.type === "three_pt_made" || p.type === "ft_made") {
+        const delta = p.type === "two_pt_made" ? 2 : p.type === "three_pt_made" ? 3 : 1;
+        if (p.player.team_id && p.player.team_id === game.home_team_id) home += delta;
+        if (p.player.team_id && p.player.team_id === game.away_team_id) away += delta;
+      }
+    }
+    return { stats: statMap, home, away };
+  }, [confirmedStats, pendingEvents, game.home_score, game.away_score, game.home_team_id, game.away_team_id]);
 
   const undoEvent = async (ev: StatEvent) => {
     setBusy(`undo:${ev.id}`);
@@ -266,9 +276,9 @@ export default function ScorekeepingPanel({
     }
     setEvents((prev) => prev.filter((e) => e.id !== ev.id));
     if (body.stats) {
-      setStats((prev) => ({ ...prev, [body.stats.player_id]: body.stats }));
+      setConfirmedStats((prev) => ({ ...prev, [body.stats.player_id]: body.stats }));
     } else {
-      setStats((prev) => {
+      setConfirmedStats((prev) => {
         const copy = { ...prev };
         delete copy[ev.player_id];
         return copy;
@@ -320,7 +330,7 @@ export default function ScorekeepingPanel({
 
   const renderTeamColumn = (team: Team | null, side: "away" | "home") => {
     const sideLabel = side === "away" ? t("客队", "Away") : t("主队", "Home");
-    const score = side === "away" ? (game.away_score ?? 0) : (game.home_score ?? 0);
+    const score = side === "away" ? display.away : display.home;
     const roster = players.filter((p) => p.team_id && p.team_id === team?.id);
     const onCourt = roster.filter((p) => onCourtSet.has(p.id));
     const bench = roster.filter((p) => !onCourtSet.has(p.id));
@@ -391,7 +401,7 @@ export default function ScorekeepingPanel({
               <PlayerCard
                 key={p.id}
                 player={p}
-                stats={stats[p.id]}
+                stats={display.stats[p.id]}
                 onCourt
                 disabled={isFinished}
                 leagueSlug={leagueSlug}
@@ -408,7 +418,7 @@ export default function ScorekeepingPanel({
               <PlayerCard
                 key={p.id}
                 player={p}
-                stats={stats[p.id]}
+                stats={display.stats[p.id]}
                 onCourt={false}
                 disabled={isFinished}
                 leagueSlug={leagueSlug}
@@ -442,9 +452,9 @@ export default function ScorekeepingPanel({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-          <ScoreChip label={t("客队", "Away")} team={awayTeam} score={game.away_score ?? 0} />
+          <ScoreChip label={t("客队", "Away")} team={awayTeam} score={display.away} />
           <span style={{ fontSize: 22, color: "#94a3b8", fontWeight: 900 }}>—</span>
-          <ScoreChip label={t("主队", "Home")} team={homeTeam} score={game.home_score ?? 0} />
+          <ScoreChip label={t("主队", "Home")} team={homeTeam} score={display.home} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ textAlign: "right" }}>
