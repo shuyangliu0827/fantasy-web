@@ -6,6 +6,7 @@ import { useLang } from "@/lib/lang";
 import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 import { listInsights, getSessionUser, searchInsights, searchUsers, type Insight, type User } from "@/lib/shared/store";
 import { usePlatformAdmin } from "@/lib/basketball/use-platform-admin";
+import PostShareButton from "@/components/discover/PostShareButton";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
@@ -465,13 +466,8 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
   const coverUrl = insight.cover_url || (insight.images?.[0] ?? null);
 
   return (
-    <Link
-      href={`/discover/${insight.id}`}
-      style={{ textDecoration: "none" }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <div style={{
+    <div
+      style={{
         background: "#fff",
         borderRadius: 16,
         overflow: "hidden",
@@ -479,8 +475,12 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
         boxShadow: hovered ? "0 8px 28px rgba(30,58,138,0.10)" : "0 2px 8px rgba(0,0,0,0.05)",
         transition: "all 0.2s ease",
         transform: hovered ? "translateY(-3px)" : "none",
-        cursor: "pointer",
-      }}>
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Clickable area: cover + title → navigates to post */}
+      <Link href={`/discover/${insight.id}`} style={{ display: "block", textDecoration: "none", cursor: "pointer" }}>
         {/* Cover image */}
         <div style={{
           aspectRatio: "4/3",
@@ -509,42 +509,49 @@ function InsightCard({ insight, formatDate }: { insight: Insight; formatDate: (d
           )}
         </div>
 
-        {/* Body */}
-        <div style={{ padding: "14px 16px 16px" }}>
+        {/* Title */}
+        <div style={{ padding: "14px 16px 10px" }}>
           <h3 style={{
-            fontSize: 15, fontWeight: 700, color: "#0f172a", margin: "0 0 10px", lineHeight: 1.45,
+            fontSize: 15, fontWeight: 700, color: "#0f172a", margin: 0, lineHeight: 1.45,
             display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
           }}>
             {insight.title}
           </h3>
+        </div>
+      </Link>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {authorAvatar ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={authorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-              ) : (
-                <div style={{
-                  width: 28, height: 28, borderRadius: "50%",
-                  background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
-                  color: "#fff", fontSize: 12, fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  {authorName[0]?.toUpperCase()}
-                </div>
-              )}
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>{authorName}</div>
-                <div style={{ fontSize: 11, color: "#94a3b8" }}>{formatDate(insight.created_at)}</div>
-              </div>
+      {/* Author + heat + share — outside the Link so the share button isn't nested inside <a> */}
+      <div style={{ padding: "0 16px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          {authorAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={authorAvatar} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+          ) : (
+            <div style={{
+              width: 28, height: 28, borderRadius: "50%",
+              background: "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)",
+              color: "#fff", fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>
+              {authorName[0]?.toUpperCase()}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#94a3b8" }}>
-              <div style={{ width: 14, height: 14, background: "#fecaca", borderRadius: "50%", flexShrink: 0 }} />
-              <span style={{ fontWeight: 600 }}>{insight.heat || 0}</span>
-            </div>
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{authorName}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>{formatDate(insight.created_at)}</div>
           </div>
         </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          {/* Heat count */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "#94a3b8" }}>
+            <div style={{ width: 14, height: 14, background: "#fecaca", borderRadius: "50%", flexShrink: 0 }} />
+            <span style={{ fontWeight: 600 }}>{insight.heat || 0}</span>
+          </div>
+          {/* Share button */}
+          <PostShareButton postId={insight.id} title={insight.title} body={insight.body} />
+        </div>
       </div>
-    </Link>
+    </div>
   );
 }

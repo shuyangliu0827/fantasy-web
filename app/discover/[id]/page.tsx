@@ -21,6 +21,7 @@ import {
   Insight
 } from "@/lib/shared/store";
 import { usePlatformAdmin } from "@/lib/basketball/use-platform-admin";
+import PostShareButton from "@/components/discover/PostShareButton";
 
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif";
 
@@ -372,8 +373,8 @@ export default function DiscoverPostPage() {
                 )}
               </div>
 
-              {/* Like / comment counts */}
-              <div style={{ display: "flex", gap: 12, padding: "14px 0", borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
+              {/* Like / comment counts / share */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0", borderTop: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", marginBottom: 16 }}>
                 <button
                   onClick={handleLike}
                   style={{
@@ -391,6 +392,9 @@ export default function DiscoverPostPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 8, color: "#64748b", fontSize: 14, fontWeight: 600 }}>
                   <div style={{ width: 14, height: 14, background: "#cbd5e1", borderRadius: 3, flexShrink: 0 }} />
                   <span>{visibleComments.length}</span>
+                </div>
+                <div style={{ marginLeft: "auto" }}>
+                  <PostShareButton postId={id} title={insight.title} body={insight.body} />
                 </div>
               </div>
 
