@@ -544,7 +544,7 @@ export default function BasketballLeaguePage({
           )}
           {(access.canManageLeague || access.canManageOwnTeam || access.canInputStats) && (
             <Link
-              href={`/admin/basketball-leagues/${league.id}`}
+              href={`/league-admin/${league.id}`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",

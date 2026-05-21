@@ -54,17 +54,12 @@ export default function LeaguePage() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [teamName, setTeamName] = useState("");
   const [joining, setJoining] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [activeTab, setActiveTab] = useState<"standings" | "schedule" | "chat" | "news" | "settings">("standings");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [annTitle, setAnnTitle] = useState("");
-  const [annContent, setAnnContent] = useState("");
-  const [annPosting, setAnnPosting] = useState(false);
-  const [showAnnForm, setShowAnnForm] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -129,29 +124,8 @@ export default function LeaguePage() {
       .then(({ data }) => setAnnouncements(data || []));
   }, [activeTab, league]);
 
-  async function postAnnouncement() {
-    if (!annContent.trim() || !league || !currentUser) return;
-    setAnnPosting(true);
-    const { data, error } = await storeSupa.from("league_announcements").insert({
-      league_id: league.id,
-      title: annTitle.trim() || null,
-      content: annContent.trim(),
-    }).select().single();
-    if (!error && data) {
-      setAnnouncements((prev) => [data, ...prev]);
-      setAnnTitle("");
-      setAnnContent("");
-      setShowAnnForm(false);
-    } else if (error) {
-      alert(t("发布失败：", "Failed to post: ") + error.message);
-    }
-    setAnnPosting(false);
-  }
-
-  async function deleteAnnouncement(id: string) {
-    await storeSupa.from("league_announcements").delete().eq("id", id);
-    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
-  }
+  // Announcement composing/deletion moved to /league/[slug]/settings#announcements.
+  // The public page only renders the read-only list.
 
   async function sendChatMessage() {
     if (!chatInput.trim() || !myTeam || !league || !currentUser) return;
@@ -264,20 +238,9 @@ export default function LeaguePage() {
     }
   }
 
-  async function handleStartDraft() {
-    if (!confirm(t("确定开始选秀吗？", "Start draft now?"))) return;
-    setStarting(true);
-    try {
-      const { error } = await storeSupa.from("leagues").update({ status: "drafting" }).eq("slug", leagueId);
-      if (error) throw error;
-      await loadLeagueInfo();
-    } catch (err) {
-      console.error("Start draft error:", err);
-      alert(err instanceof Error ? err.message : t("开始选秀失败", "Failed to start draft"));
-    } finally {
-      setStarting(false);
-    }
-  }
+  // Start Draft was moved to /league/[slug]/settings (Draft Control section).
+  // The public page now only links commissioners to settings via the
+  // "Manage League" CTA.
 
   if (loading) {
     return (
@@ -439,7 +402,7 @@ export default function LeaguePage() {
                     border: "1.5px solid rgba(255,255,255,0.3)", borderRadius: 10, fontSize: 14,
                     fontWeight: 600, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center",
                   }}>
-                    {t("联赛设置", "League Settings")}
+                    {t("管理联赛", "Manage League")}
                   </Link>
                 )}
               </div>
@@ -663,52 +626,23 @@ export default function LeaguePage() {
             </div>
           )}
 
-          {/* Announcements tab */}
+          {/* Announcements tab — read-only public view.
+              Commissioner edits live in /league/[slug]/settings (Announcements section). */}
           {activeTab === "news" && (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-              {currentUser?.id === league?.commissioner_id && (
-                <div>
-                  {!showAnnForm ? (
-                    <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                      + {t("发布公告", "Post Announcement")}
-                    </button>
-                  ) : (
-                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{t("发布新公告", "Post Announcement")}</div>
-                      <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder={t("标题（选填）", "Title (optional)")} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
-                      <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder={t("公告内容...", "Announcement content...")} rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
-                          {annPosting ? t("发布中...", "Posting...") : t("发布", "Post")}
-                        </button>
-                        <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                          {t("取消", "Cancel")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
               {announcements.length === 0 ? (
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                   <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
                   <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>{t("暂无公告", "No announcements")}</p>
-                  <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在此发布公告", "Commissioner can post announcements here")}</p>
+                  <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在联赛设置中发布公告", "Commissioner can post announcements from League Settings")}</p>
                 </div>
               ) : (
                 announcements.map((ann) => (
                   <div key={ann.id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: 20 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ flex: 1 }}>
-                        {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
-                        <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
-                        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-                          {new Date(ann.created_at).toLocaleString("zh-CN")}
-                        </div>
-                      </div>
-                      {currentUser?.id === league?.commissioner_id && (
-                        <button onClick={() => deleteAnnouncement(ann.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, marginLeft: 12, padding: 4 }}>×</button>
-                      )}
+                    {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
+                    <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+                      {new Date(ann.created_at).toLocaleString("zh-CN")}
                     </div>
                   </div>
                 ))
@@ -985,19 +919,18 @@ export default function LeaguePage() {
         {/* ── Teams tab ── */}
         {activeTab === "standings" && (
           <div style={{ flex: 1 }}>
-            {/* draft-ready notice */}
+            {/* draft-ready notice — commissioner only, links to settings */}
             {canStartDraft && (
               <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ fontSize: 14, color: "#15803d", fontWeight: 600 }}>
                   ✅ {t("已有", "")} {teams.length} {t("支队伍加入（偶数），可以开始选秀了！", "teams joined (even), draft can start!")}
                 </div>
-                <button
-                  onClick={handleStartDraft}
-                  disabled={starting}
-                  style={{ padding: "9px 20px", background: "#15803d", border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, fontSize: 13, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT, whiteSpace: "nowrap", flexShrink: 0 }}
+                <Link
+                  href={`/league/${leagueId}/settings`}
+                  style={{ padding: "9px 20px", background: "#15803d", border: "none", borderRadius: 9, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: FONT, whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
                 >
-                  {starting ? t("⏳ 开始中...", "⏳ Starting...") : t("🎯 开始选秀", "🎯 Start Draft")}
-                </button>
+                  {t("前往设置开始选秀 →", "Start in Settings →")}
+                </Link>
               </div>
             )}
 
@@ -1045,52 +978,23 @@ export default function LeaguePage() {
           </div>
         )}
 
-        {/* ── Announcement tab ── */}
+        {/* ── Announcement tab — read-only public view.
+              Commissioner edits live in /league/[slug]/settings (Announcements section). */}
         {activeTab === "news" && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
-            {currentUser?.id === league?.commissioner_id && (
-              <div>
-                {!showAnnForm ? (
-                  <button onClick={() => setShowAnnForm(true)} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                    + {t("发布公告", "Post Announcement")}
-                  </button>
-                ) : (
-                  <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{t("发布新公告", "Post Announcement")}</div>
-                    <input value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} placeholder={t("标题（选填）", "Title (optional)")} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none" }} />
-                    <textarea value={annContent} onChange={(e) => setAnnContent(e.target.value)} placeholder={t("公告内容...", "Announcement content...")} rows={4} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, fontFamily: FONT, outline: "none", resize: "vertical" }} />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={postAnnouncement} disabled={annPosting || !annContent.trim()} style={{ background: "#1e3a8a", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer", opacity: annPosting || !annContent.trim() ? 0.5 : 1 }}>
-                        {annPosting ? t("发布中...", "Posting...") : t("发布", "Post")}
-                      </button>
-                      <button onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }} style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                        {t("取消", "Cancel")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
             {announcements.length === 0 ? (
               <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "60px 24px", textAlign: "center", color: "#9ca3af" }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>📢</div>
                 <p style={{ fontSize: 15, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>{t("暂无公告", "No announcements")}</p>
-                <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在此发布公告", "Commissioner can post announcements here")}</p>
+                <p style={{ fontSize: 13, margin: 0 }}>{t("联赛房主可在联赛设置中发布公告", "Commissioner can post announcements from League Settings")}</p>
               </div>
             ) : (
               announcements.map((ann) => (
                 <div key={ann.id} style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 14, padding: 20 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ flex: 1 }}>
-                      {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
-                      <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
-                        {new Date(ann.created_at).toLocaleString("zh-CN")}
-                      </div>
-                    </div>
-                    {currentUser?.id === league?.commissioner_id && (
-                      <button onClick={() => deleteAnnouncement(ann.id)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, marginLeft: 12, padding: 4 }}>×</button>
-                    )}
+                  {ann.title && <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 8 }}>{ann.title}</div>}
+                  <div style={{ fontSize: 14, color: "#374151", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{ann.content}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 10 }}>
+                    {new Date(ann.created_at).toLocaleString("zh-CN")}
                   </div>
                 </div>
               ))
@@ -1118,15 +1022,14 @@ export default function LeaguePage() {
             </div>
           </div>
 
-          {/* Commissioner: start draft shortcut */}
+          {/* Commissioner: start-draft shortcut — links to settings */}
           {canStartDraft && (
-            <button
-              onClick={handleStartDraft}
-              disabled={starting}
-              style={{ width: "100%", padding: "13px", background: "#15803d", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 700, cursor: starting ? "not-allowed" : "pointer", opacity: starting ? 0.6 : 1, fontFamily: FONT }}
+            <Link
+              href={`/league/${leagueId}/settings`}
+              style={{ width: "100%", padding: "13px", background: "#15803d", border: "none", borderRadius: 12, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT, textDecoration: "none", textAlign: "center", display: "block", boxSizing: "border-box" }}
             >
-              {starting ? t("⏳ 开始中...", "⏳ Starting...") : t("🎯 开始选秀", "🎯 Start Draft")}
-            </button>
+              {t("🎯 前往设置开始选秀", "🎯 Start Draft in Settings")}
+            </Link>
           )}
 
           {/* Invite */}

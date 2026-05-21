@@ -81,6 +81,23 @@ export default function SettingsPage() {
   const [savingDraftOrder, setSavingDraftOrder]     = useState(false);
   const [reshuffling, setReshuffling]               = useState(false);
 
+  // ── Draft control state (commissioner Start Draft action)
+  const [starting, setStarting] = useState(false);
+
+  // ── Announcements state
+  type Announcement = {
+    id: string;
+    league_id: string;
+    title?: string | null;
+    content: string;
+    created_at: string;
+  };
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [annTitle, setAnnTitle]           = useState("");
+  const [annContent, setAnnContent]       = useState("");
+  const [annPosting, setAnnPosting]       = useState(false);
+  const [showAnnForm, setShowAnnForm]     = useState(false);
+
   useEffect(() => {
     setUser(getSessionUser());
     loadData();
@@ -117,8 +134,69 @@ export default function SettingsPage() {
         for (const t of teams) inputs[t.id] = t.draft_position ?? 0;
         setDraftPositionInputs(inputs);
       }
+
+      // Load announcements for the Announcements section.
+      const { data: annRows } = await supabase
+        .from("league_announcements")
+        .select("*")
+        .eq("league_id", leagueData.id)
+        .order("created_at", { ascending: false });
+      if (annRows) setAnnouncements(annRows as Announcement[]);
     }
     setLoading(false);
+  }
+
+  // ── Start Draft (moved from public league page)
+  async function handleStartDraft() {
+    if (!league) return;
+    if (!confirm(t("确定开始选秀吗？", "Start draft now?"))) return;
+    setStarting(true);
+    try {
+      const { error } = await supabase
+        .from("leagues")
+        .update({ status: "drafting" })
+        .eq("id", league.id);
+      if (error) throw error;
+      router.push(`/league/${slug}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : t("开始选秀失败", "Failed to start draft"));
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  // ── Announcements (moved from public league page)
+  async function postAnnouncement() {
+    if (!annContent.trim() || !league) return;
+    setAnnPosting(true);
+    const { data, error } = await supabase
+      .from("league_announcements")
+      .insert({
+        league_id: league.id,
+        title: annTitle.trim() || null,
+        content: annContent.trim(),
+      })
+      .select()
+      .single();
+    if (!error && data) {
+      setAnnouncements((prev) => [data as Announcement, ...prev]);
+      setAnnTitle("");
+      setAnnContent("");
+      setShowAnnForm(false);
+    } else if (error) {
+      alert(t("发布失败：", "Failed to post: ") + error.message);
+    }
+    setAnnPosting(false);
+  }
+
+  async function deleteAnnouncement(id: string) {
+    if (!confirm(t("删除此公告？", "Delete this announcement?"))) return;
+    const { error } = await supabase.from("league_announcements").delete().eq("id", id);
+    if (error) {
+      alert(t("删除失败：", "Failed to delete: ") + error.message);
+      return;
+    }
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
   }
 
   // ── Logo file upload
@@ -344,7 +422,13 @@ export default function SettingsPage() {
 
       <main className="page-content">
         <div className="container">
-          <h1>{t("联赛设置", "League Settings")}</h1>
+          <h1>{t("Fantasy 联赛设置", "Fantasy League Settings")}</h1>
+          <p style={{ fontSize: 14, color: "#6b7280", margin: "-12px 0 24px 0", lineHeight: 1.6 }}>
+            {t(
+              "管理你的 Fantasy 联赛品牌、公告、规则、选秀顺序和 commissioner 控制项。",
+              "Manage your fantasy league branding, announcements, rules, draft order, and commissioner controls.",
+            )}
+          </p>
 
           {/* ── Section 1: League Branding ── */}
           <div className="settings-section">
@@ -678,6 +762,155 @@ export default function SettingsPage() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+
+          {/* ── Section 5: Draft Control (pre-draft only) ── */}
+          {league.status === "draft_pending" && (
+            <div className="settings-section">
+              <h2>{t("选秀控制", "Draft Control")}</h2>
+              <p className="section-hint">
+                {t(
+                  "队伍数量为偶数且至少 2 支后即可开始选秀。开始后联赛规则将被锁定。",
+                  "Start the draft once at least 2 teams have joined and the count is even. Rules lock after the draft starts.",
+                )}
+              </p>
+              <div style={{ fontSize: 14, color: "#374151", marginBottom: 14 }}>
+                {t("当前队伍数：", "Teams joined: ")}
+                <strong>{draftTeams.length}</strong>
+                {league.max_teams ? ` / ${league.max_teams}` : ""}
+              </div>
+              {draftTeams.length >= 2 && draftTeams.length % 2 === 0 ? (
+                <button
+                  onClick={handleStartDraft}
+                  disabled={starting}
+                  style={{
+                    padding: "10px 22px",
+                    background: "#15803d",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: starting ? "not-allowed" : "pointer",
+                    opacity: starting ? 0.6 : 1,
+                  }}
+                >
+                  {starting
+                    ? t("⏳ 开始中...", "⏳ Starting...")
+                    : t("🎯 开始选秀", "🎯 Start Draft")}
+                </button>
+              ) : (
+                <div style={{ fontSize: 13, color: "#92400e", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 8, padding: "10px 14px" }}>
+                  {t(
+                    "队伍数不足或为奇数，无法开始选秀。",
+                    "Cannot start: team count is below 2 or odd.",
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Section 6: Announcements ── */}
+          <div className="settings-section">
+            <h2>{t("联赛公告", "Announcements")}</h2>
+            <p className="section-hint">
+              {t(
+                "发布公告将显示在联赛公开页的“联赛公告”标签下，所有访客可见。",
+                "Announcements appear on the public league page under the Announcements tab and are visible to all visitors.",
+              )}
+            </p>
+
+            {!showAnnForm ? (
+              <button
+                onClick={() => setShowAnnForm(true)}
+                style={{
+                  padding: "9px 18px",
+                  background: "#1e3a8a",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  marginBottom: 16,
+                }}
+              >
+                + {t("发布公告", "Post Announcement")}
+              </button>
+            ) : (
+              <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                <input
+                  value={annTitle}
+                  onChange={(e) => setAnnTitle(e.target.value)}
+                  placeholder={t("标题（选填）", "Title (optional)")}
+                  style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, outline: "none" }}
+                />
+                <textarea
+                  value={annContent}
+                  onChange={(e) => setAnnContent(e.target.value)}
+                  placeholder={t("公告内容...", "Announcement content...")}
+                  rows={4}
+                  style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 12px", fontSize: 14, outline: "none", resize: "vertical" }}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={postAnnouncement}
+                    disabled={annPosting || !annContent.trim()}
+                    style={{
+                      background: "#1e3a8a",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "8px 18px",
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: annPosting || !annContent.trim() ? "not-allowed" : "pointer",
+                      opacity: annPosting || !annContent.trim() ? 0.5 : 1,
+                    }}
+                  >
+                    {annPosting ? t("发布中...", "Posting...") : t("发布", "Post")}
+                  </button>
+                  <button
+                    onClick={() => { setShowAnnForm(false); setAnnTitle(""); setAnnContent(""); }}
+                    style={{ background: "#f3f4f6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {t("取消", "Cancel")}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {announcements.length === 0 ? (
+              <p style={{ fontSize: 13, color: "#9ca3af", margin: 0 }}>
+                {t("暂无公告。", "No announcements yet.")}
+              </p>
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+                {announcements.map((ann) => (
+                  <li
+                    key={ann.id}
+                    style={{ background: "#fff", border: "1px solid #e5e7eb", borderLeft: "4px solid #1e3a8a", borderRadius: 10, padding: 14, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {ann.title && (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>{ann.title}</div>
+                      )}
+                      <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{ann.content}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>
+                        {new Date(ann.created_at).toLocaleString("zh-CN")}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => deleteAnnouncement(ann.id)}
+                      style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 18, padding: 4, lineHeight: 1 }}
+                      aria-label={t("删除", "Delete")}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

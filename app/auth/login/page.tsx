@@ -1,14 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLang } from "@/lib/lang";
 import { login } from "@/lib/shared/store";
+import { basketballFetch } from "@/lib/basketball/client";
+import {
+  EMPTY_ROLE_CONTEXT,
+  type RoleContext,
+} from "@/lib/auth/getCurrentUserRole";
+import { resetCurrentUserRoles } from "@/lib/auth/use-current-user-roles";
+import { getPostLoginRedirect } from "@/lib/auth/getPostLoginRedirect";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const { t } = useLang();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +52,23 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    // Invalidate any cached RoleContext from a prior anonymous/different
+    // session so subsequent UI reflects the new user.
+    resetCurrentUserRoles();
+
+    let roles: RoleContext = EMPTY_ROLE_CONTEXT;
+    try {
+      const rolesRes = await basketballFetch("/api/me/roles");
+      if (rolesRes.ok) {
+        const body = (await rolesRes.json()) as Partial<RoleContext>;
+        roles = { ...EMPTY_ROLE_CONTEXT, ...body };
+      }
+    } catch {
+      // Non-fatal — fall through to fallback redirect.
+    }
+
+    const dest = getPostLoginRedirect({ next, roles });
+    router.push(dest);
   };
 
   return (
