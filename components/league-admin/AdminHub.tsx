@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import LightHeader from "@/components/LightHeader";
 import AuthGate from "@/components/basketball/AuthGate";
@@ -90,11 +90,10 @@ type Member = {
 
 type Tab = "settings" | "teams" | "players" | "games" | "members" | "claims" | "boxscore";
 
-export default function LeagueAdminPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function AdminHub({ leagueId }: { leagueId: string }) {
   return (
     <AuthGate>
-      <LeagueAdminPageInner id={id} />
+      <LeagueAdminPageInner id={leagueId} />
     </AuthGate>
   );
 }
