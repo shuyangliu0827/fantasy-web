@@ -6,7 +6,10 @@ import { useLang } from "@/lib/lang";
 import { getSessionUser } from "@/lib/shared/store";
 import { LANGUAGE_LABELS } from "@/lib/shared/language-labels";
 import { supabase } from "@/lib/shared/supabase";
-import { basketballFetch } from "@/lib/basketball/client";
+import {
+  useCurrentUserRoles,
+  resetCurrentUserRoles,
+} from "@/lib/auth/use-current-user-roles";
 
 const NAV = [
   { href: "/",                  zh: "首页",     en: "Home" },
@@ -16,10 +19,10 @@ const NAV = [
   { href: "/community-leagues", zh: "社区联赛", en: "Community Leagues" },
 ];
 
-const ADMIN_LINK = {
-  href: "/admin/platform/basketball-leagues",
-  zh: "平台管理",
-  en: "Platform Admin",
+const MANAGEMENT_CENTER_LINK = {
+  href: "/league-admin",
+  zh: "管理中心",
+  en: "Management Center",
 };
 
 export default function LightHeader({ activeHref }: { activeHref: string }) {
@@ -30,7 +33,7 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
   });
   const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const { roles } = useCurrentUserRoles();
 
   useEffect(() => {
     const handleResize = () => {
@@ -61,31 +64,13 @@ export default function LightHeader({ activeHref }: { activeHref: string }) {
     };
   }, [user]);
 
-  useEffect(() => {
-    if (!user) {
-      setIsPlatformAdmin(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await basketballFetch("/api/me/basketball-access");
-        if (!res.ok) return;
-        const body = (await res.json()) as { is_platform_admin?: boolean };
-        if (!cancelled) setIsPlatformAdmin(!!body.is_platform_admin);
-      } catch {
-        // ignore — non-fatal
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  const navItems = isPlatformAdmin ? [...NAV, ADMIN_LINK] : NAV;
+  const navItems = user && roles.canAccessAnyAdmin
+    ? [...NAV, MANAGEMENT_CENTER_LINK]
+    : NAV;
 
   const handleLogout = () => {
     localStorage.removeItem("bp_session");
+    resetCurrentUserRoles();
     setUser(null);
     window.location.href = "/";
   };
