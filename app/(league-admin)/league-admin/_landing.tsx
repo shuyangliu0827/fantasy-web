@@ -35,12 +35,12 @@ export default function LeagueAdminLanding() {
     <main className="max-w-5xl mx-auto px-6 py-10">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">
-          {t("联盟管理中心", "League Management Center")}
+          {t("联赛管理中心", "League Management Center")}
         </h1>
         <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400 max-w-2xl">
           {t(
-            "管理真实联赛数据、球队、球员、比赛和计分。这些数据驱动公开联赛页面、球员档案、排名以及 Fantasy 体验。",
-            "Manage real league data, teams, players, games, and scoring. This data powers public league pages, player profiles, rankings, and fantasy experiences.",
+            "管理真实联赛的数据、球队、球员、赛程、记分与权限。这些数据将驱动公开联赛主页、球员档案、排行榜以及未来的 Fantasy 玩法。",
+            "Manage real league data, teams, players, games, scoring, and permissions. This data powers public league pages, player profiles, rankings, and future fantasy experiences.",
           )}
         </p>
       </header>

@@ -422,7 +422,13 @@ export default function SettingsPage() {
 
       <main className="page-content">
         <div className="container">
-          <h1>{t("联赛设置", "League Settings")}</h1>
+          <h1>{t("Fantasy 联赛设置", "Fantasy League Settings")}</h1>
+          <p style={{ fontSize: 14, color: "#6b7280", margin: "-12px 0 24px 0", lineHeight: 1.6 }}>
+            {t(
+              "管理你的 Fantasy 联赛品牌、公告、规则、选秀顺序和 commissioner 控制项。",
+              "Manage your fantasy league branding, announcements, rules, draft order, and commissioner controls.",
+            )}
+          </p>
 
           {/* ── Section 1: League Branding ── */}
           <div className="settings-section">

@@ -21,6 +21,8 @@ const NAV = [
 
 const MANAGEMENT_CENTER_LINK = {
   href: "/league-admin",
+  // Public nav: short label. The /league-admin landing uses the full
+  // "联赛管理中心 / League Management Center" headline.
   zh: "管理中心",
   en: "Management Center",
 };

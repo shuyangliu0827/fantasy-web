@@ -24,8 +24,8 @@ export default function AccessDenied({
         en: "Please sign in to access this page.",
       }
     : {
-        zh: "您没有访问此页面的权限。如需访问联盟管理中心，请联系您的联盟管理员。",
-        en: "You don't have permission to access this page. Contact your league administrator to request access to the Management Center.",
+        zh: "您没有访问此页面的权限。如需进入联赛管理中心，请联系平台管理员或联赛负责人申请权限。",
+        en: "You don't have permission to access this page. Contact a platform admin or league owner to request access to the League Management Center.",
       };
   const body = message ?? defaultMsg;
   const signInHref = nextHref

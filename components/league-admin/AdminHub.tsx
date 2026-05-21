@@ -208,8 +208,8 @@ function LeagueAdminPageInner({ id }: { id: string }) {
     { id: "teams", label: t("球队", "Teams") },
     { id: "players", label: t("球员", "Players") },
     { id: "games", label: t("比赛", "Games") },
-    { id: "boxscore", label: t("数据录入", "Box Score") },
-    { id: "members", label: t("成员", "Members") },
+    { id: "boxscore", label: t("数据录入", "Data Entry") },
+    { id: "members", label: t("权限", "Permissions") },
     { id: "claims", label: t("球员认领", "Claims") },
   ];
 
@@ -229,7 +229,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
           <Link
             href={`/basketball-leagues/${league.slug}`}
             style={{ textDecoration: "none", color: "inherit" }}
-            title={t("查看公开页面", "View public page")}
+            title={t("公开页面预览", "Public Page Preview")}
           >
             <h1
               style={{
@@ -249,7 +249,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
             href={`/basketball-leagues/${league.slug}`}
             style={{ fontSize: 13, color: "#1e3a8a", textDecoration: "none", fontWeight: 800 }}
           >
-            {t("查看公开页面 →", "View public page →")}
+            {t("公开页面预览 →", "Public Page Preview →")}
           </Link>
         </div>
 
