@@ -32,14 +32,19 @@ import { createClient } from "@supabase/supabase-js";
 
 const API_BASE = "https://api.balldontlie.io/v1";
 const API_KEY = process.env.BDL_API_KEY ?? "";
-import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { getCurrentBdlSeasonYear } from "@/lib/fantasy/shared/season";
 import { calcFantasyPoints } from "@/lib/fantasy/shared/scoring-config";
 import { parseMinutes } from "@/lib/nba/balldontlie";
 import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 // IMPORTANT: Do NOT compute season at module scope. The module may be loaded once and
 // kept alive across season boundaries on long-running edge function instances. Always
-// call getCurrentSeasonYear() at request/refresh time so it re-evaluates the date.
+// call getCurrentBdlSeasonYear() at request/refresh time so it re-evaluates the date.
+//
+// SEASON SEMANTICS: BDL's `seasons[]` / `season=` parameters take the season's
+// STARTING year (2025-26 season → 2025). The UI/business helper getCurrentSeasonYear()
+// returns the ENDING year (2026) and must NOT be used for BDL calls — doing so
+// silently returns 0 rows. See lib/fantasy/shared/season.ts for full notes.
 
 // ── Freshness policy ──────────────────────────────────────────
 //
@@ -176,7 +181,7 @@ async function refreshAndPersist(reason: "cache_miss" | "stale" | "manual") {
   }
   isRefreshing = true;
   lastFallbackAttemptAt = Date.now();
-  const CURRENT_SEASON = getCurrentSeasonYear();
+  const CURRENT_SEASON = getCurrentBdlSeasonYear();
   console.log("[nba-stats] BDL fallback refresh starting", { source: "api-nba-stats", reason, season: CURRENT_SEASON });
 
   try {

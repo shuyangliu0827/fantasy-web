@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { getCurrentBdlSeasonYear } from "@/lib/fantasy/shared/season";
 import { getPlayerStats, parseMinutes } from "@/lib/nba/balldontlie";
 import type { BDLGameStats } from "@/lib/nba/balldontlie";
 import { calcFantasyPoints, ESPN_DEFAULT_WEIGHTS } from "@/lib/fantasy/shared/scoring-config";
@@ -190,8 +190,9 @@ async function buildSeasonStats(playerIds: number[], timeframe: Timeframe): Prom
     throw new Error("player_stats_cache unavailable");
   }
 
-  // Resolve season at request time (never at module scope — avoids freeze on long-running instances)
-  const CURRENT_SEASON = getCurrentSeasonYear();
+  // Resolve season at request time (never at module scope — avoids freeze on long-running instances).
+  // BDL expects the season's STARTING year (2025-26 season → 2025), not the ending year.
+  const CURRENT_SEASON = getCurrentBdlSeasonYear();
   // Fetch game logs for stability (season games) — parallel for both players
   const logMap = await fetchGameLogs(playerIds, { seasons: [CURRENT_SEASON] }, "season_stability");
 

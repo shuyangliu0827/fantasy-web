@@ -7,7 +7,7 @@
 // caching decisions. This file only handles request construction and
 // response parsing.
 
-import { getCurrentSeasonYear } from "@/lib/fantasy/shared/season";
+import { getCurrentBdlSeasonYear } from "@/lib/fantasy/shared/season";
 import { getTodayStr } from "@/lib/fantasy/shared/week-utils";
 
 const API_BASE = "https://api.balldontlie.io/v1";
@@ -204,7 +204,7 @@ export async function getPlayerStats(options: {
 }
 
 // 获取球员赛季统计（计算平均值）
-export async function getPlayerSeasonStats(playerId: number, season: number = getCurrentSeasonYear()): Promise<{
+export async function getPlayerSeasonStats(playerId: number, season: number = getCurrentBdlSeasonYear()): Promise<{
   gp: number;
   ppg: number;
   rpg: number;
