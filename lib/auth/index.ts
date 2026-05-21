@@ -20,3 +20,9 @@ export {
   useCurrentUserRoles,
   resetCurrentUserRoles,
 } from "@/lib/auth/use-current-user-roles";
+
+export {
+  getPostLoginRedirect,
+  isSafeInternalPath,
+  type PostLoginArgs,
+} from "@/lib/auth/getPostLoginRedirect";
