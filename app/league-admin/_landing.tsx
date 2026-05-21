@@ -91,7 +91,7 @@ export default function LeagueAdminLanding() {
                   {id}
                 </div>
                 <Link
-                  href={`/admin/basketball-leagues/${id}`}
+                  href={`/league-admin/${id}`}
                   className="text-sm font-medium text-blue-700 dark:text-blue-400 hover:underline"
                 >
                   {t("打开联赛管理 →", "Open league management →")}

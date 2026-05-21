@@ -271,7 +271,7 @@ export default function GameDetailPage({
               />
               {leagueAccess.canInputStats && (
                 <Link
-                  href={`/admin/basketball-leagues/${league.id}`}
+                  href={`/league-admin/${league.id}`}
                   style={{
                     fontSize: 12,
                     color: "#1e3a8a",
