@@ -12,6 +12,9 @@ type Props = {
   nextHref?: string;
 };
 
+const FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
+
 export default function AccessDenied({
   message,
   requireSignIn = false,
@@ -33,31 +36,107 @@ export default function AccessDenied({
     : "/auth/login";
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-6 py-16">
-      <div className="max-w-md w-full text-center space-y-6">
-        <div className="mx-auto h-16 w-16 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-          <span className="text-3xl" aria-hidden="true">
-            🔒
-          </span>
+    <div
+      style={{
+        minHeight: "60vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "64px 24px",
+        background: "#f8fafc",
+        fontFamily: FONT,
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 480,
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 20,
+          padding: "32px 28px",
+          textAlign: "center",
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        }}
+      >
+        <div
+          style={{
+            margin: "0 auto 18px",
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            background: "#fef3c7",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 28,
+          }}
+          aria-hidden="true"
+        >
+          🔒
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1
+          style={{
+            margin: "0 0 10px",
+            fontSize: 22,
+            fontWeight: 800,
+            color: "#0f172a",
+            letterSpacing: "-0.3px",
+          }}
+        >
           {t("访问受限", "Access Denied")}
         </h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed">
+        <p
+          style={{
+            margin: 0,
+            fontSize: 14,
+            color: "#475569",
+            lineHeight: 1.7,
+          }}
+        >
           {t(body.zh, body.en)}
         </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <div
+          style={{
+            marginTop: 22,
+            display: "flex",
+            gap: 10,
+            justifyContent: "center",
+            flexWrap: "wrap",
+          }}
+        >
           {requireSignIn ? (
             <Link
               href={signInHref}
-              className="inline-flex justify-center px-5 py-2.5 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-sm font-medium hover:opacity-90 transition"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "10px 20px",
+                background: "#1e3a8a",
+                color: "#fff",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 700,
+                textDecoration: "none",
+              }}
             >
               {t("登录", "Sign in")}
             </Link>
           ) : null}
           <Link
             href="/"
-            className="inline-flex justify-center px-5 py-2.5 rounded-md border border-neutral-300 dark:border-neutral-700 text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-900 transition"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "10px 20px",
+              background: "#fff",
+              color: "#0f172a",
+              border: "1px solid #e2e8f0",
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
           >
             {t("返回首页", "Back to Home")}
           </Link>

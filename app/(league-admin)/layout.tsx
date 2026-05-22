@@ -14,20 +14,35 @@
 // which is the authoritative source. This layout is a UI fast-path that
 // prevents the admin shell from flashing for unauthorized users.
 
+import { useLang } from "@/lib/lang";
 import { useCurrentUserRoles } from "@/lib/auth/use-current-user-roles";
 import AccessDenied from "@/components/shared/AccessDenied";
+
+const FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Noto Sans SC', sans-serif";
 
 export default function LeagueAdminGroupLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { t } = useLang();
   const { roles, loading } = useCurrentUserRoles();
 
   if (loading) {
     return (
-      <div style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 14 }}>
-        Loading…
+      <div
+        style={{
+          minHeight: "50vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#64748b",
+          fontSize: 14,
+          fontFamily: FONT,
+        }}
+      >
+        {t("加载中…", "Loading…")}
       </div>
     );
   }
@@ -41,3 +56,4 @@ export default function LeagueAdminGroupLayout({
 
   return <>{children}</>;
 }
+
