@@ -51,7 +51,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getContestSnapshot } from "@/lib/fantasy/daily/contest-snapshot";
+import { getContestSnapshot, resolveSnapshotFallback } from "@/lib/fantasy/daily/contest-snapshot";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT     = 100;
@@ -138,20 +138,29 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const snapshotMap = snapshot.map;
 
+    // Display fallback for legacy rows with an empty snapshot block — resolves
+    // name / position / authoritative-current-roster team so no player renders
+    // as a raw player_id with a blank "?" avatar.
+    const lpPlayerIds = [...new Set((lpRes.data as any[] ?? []).map((lp) => String(lp.player_id)))];
+    const fallbackMap = await resolveSnapshotFallback(supabase, lpPlayerIds);
+
     for (const lp of (lpRes.data as any[] ?? [])) {
-      const snap = snapshotMap.get(String(lp.player_id));
+      const pid  = String(lp.player_id);
+      const snap = snapshotMap.get(pid);
+      const fb   = fallbackMap.get(pid);
       const slot_labels: Record<number, string> = { 1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C" };
       const row = {
         slot:                  lp.slot,
         slot_label:            slot_labels[lp.slot as number] ?? String(lp.slot),
         player_id:             lp.player_id,
-        name:                  snap?.display_name ?? "",
-        team:                  snap?.team         ?? "",
-        position:              snap?.position     ?? "",
+        name:                  snap?.display_name || fb?.name     || "",
+        team:                  snap?.team         || fb?.team     || "",
+        position:              snap?.position     || fb?.position || "",
         tier:                  snap?.tier         ?? null,
         salary:                snap?.salary       ?? 0,
         actual_fantasy_points: lp.actual_fantasy_points ?? null,
         invalid:               !snap,
+        missing_snapshot_display_name: !snap?.display_name,
       };
       if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
       playersByLineup.get(lp.lineup_id)!.push(row);

@@ -19,7 +19,7 @@ import { SLOT_LABEL } from "@/lib/fantasy/daily/positions";
 import { getWeekStart, toDateStr } from "@/lib/fantasy/daily/points";
 import { fetchStatsForDate, PlayerGameStats } from "@/lib/players/game-stats";
 import { fetchGamesForRange } from "@/lib/nba/games";
-import { getContestSnapshot, type ContestSnapshotPlayer } from "@/lib/fantasy/daily/contest-snapshot";
+import { getContestSnapshot, resolveSnapshotFallback, type ContestSnapshotPlayer, type SnapshotFallback } from "@/lib/fantasy/daily/contest-snapshot";
 
 function db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -128,6 +128,15 @@ export async function GET(req: Request) {
     }),
   );
 
+  // ── Display fallback for legacy rows with an empty snapshot block ──
+  // Resolves name / position / authoritative-current-roster team so a player
+  // never renders as a raw player_id with a blank "?" avatar. Only applied
+  // when the snapshot field itself is empty (snapshot stays authoritative).
+  const fallbackMap: Map<string, SnapshotFallback> = await resolveSnapshotFallback(
+    supabase,
+    allPlayerIds,
+  );
+
   // ── Fetch box-score stats for all contest dates ───────────────
   // Keyed "date:player_id" → PlayerGameStats
   const statsMap = new Map<string, PlayerGameStats>();
@@ -172,19 +181,25 @@ export async function GET(req: Request) {
   const playersByLineup = new Map<string, any[]>();
   for (const lp of (lineupPlayers as any[] ?? [])) {
     const cid  = lineupContest.get(lp.lineup_id) ?? "";
-    const snap = snapByKey.get(`${cid}:${String(lp.player_id)}`);
+    const pid  = String(lp.player_id);
+    const snap = snapByKey.get(`${cid}:${pid}`);
+    const fb   = fallbackMap.get(pid);
+    const name = snap?.display_name || fb?.name     || "";
+    const team = snap?.team         || fb?.team     || "";
+    const position = snap?.position || fb?.position || "";
     if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
     playersByLineup.get(lp.lineup_id)!.push({
       slot:                  lp.slot,
       slot_label:            SLOT_LABEL[lp.slot as number] ?? String(lp.slot),
       player_id:             lp.player_id,
-      name:                  snap?.display_name ?? "",
-      position:              snap?.position     ?? "",
-      team:                  snap?.team         ?? "",
+      name,
+      position,
+      team,
       tier:                  snap?.tier         ?? null,
       salary:                snap?.salary       ?? 0,
       actual_fantasy_points: lp.actual_fantasy_points ?? null,
       invalid:               !snap,
+      missing_snapshot_display_name: !snap?.display_name,
     });
   }
 

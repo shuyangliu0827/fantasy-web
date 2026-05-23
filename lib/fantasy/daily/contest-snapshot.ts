@@ -24,6 +24,8 @@
 // to force-rebuild.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
 
 export type ContestSnapshotPlayer = {
   player_id:           string;
@@ -139,6 +141,98 @@ export async function getContestSnapshot(
   const map  = new Map<string, ContestSnapshotPlayer>();
   for (const r of rows) map.set(r.player_id, r);
   return { rows, map, snapshot_available, error: null };
+}
+
+// ── Read-time display fallback ────────────────────────────────────
+// Legacy contest_players rows (created before migration 043, or before the
+// repair/backfill ran) have an empty snapshot display block — display_name /
+// team / position are null even though tier / salary / projection are present.
+// Those rows would otherwise render as a raw player_id + a blank "?" avatar.
+//
+// To keep the UI usable until the snapshot is backfilled, read endpoints
+// resolve a *display* fallback from canonical sources — WITHOUT re-introducing
+// the stale-team bug:
+//   - name:     player_stats_cache.name (names never go stale)
+//   - position: canonical position from player_stats_cache
+//   - team:     authoritative current-roster team (nba_player_current_team)
+//               first; player_stats_cache.team only as a flagged last resort.
+//
+// This is a *display* aid only. The authoritative fix is to backfill/rebuild
+// the snapshot so contest_players itself carries these fields.
+
+export type SnapshotFallback = {
+  name:        string;
+  team:        string;
+  position:    string;
+  team_source: "current_roster" | "stats_cache" | "none";
+  resolved:    boolean; // true when at least a name was found
+};
+
+export async function resolveSnapshotFallback(
+  supabase: SupabaseClient,
+  playerIds: string[],
+): Promise<Map<string, SnapshotFallback>> {
+  const out = new Map<string, SnapshotFallback>();
+  const ids = [...new Set(playerIds.map(String))];
+  if (ids.length === 0) return out;
+
+  const intIds = ids.map((p) => parseInt(p, 10)).filter(Number.isFinite);
+  const inList = intIds.length > 0 ? intIds : [-1];
+
+  const [pscRes, nctRes] = await Promise.all([
+    supabase
+      .from("player_stats_cache")
+      .select("player_id, name, team, position")
+      .in("player_id", inList),
+    supabase
+      .from("nba_player_current_team")
+      .select("player_id, player_name, team")
+      .in("player_id", inList),
+  ]);
+
+  type NctRow = { player_id: string | number; player_name: string | null; team: string | null };
+  type PscRow = { player_id: string | number; name: string | null; team: string | null; position: string | null };
+
+  const nctByPid = new Map<string, { name: string; team: string }>();
+  for (const r of (nctRes.data as NctRow[] | null) ?? []) {
+    nctByPid.set(String(r.player_id), {
+      name: r.player_name ?? "",
+      team: r.team ? normalizeTeamCode(r.team) : "",
+    });
+  }
+
+  const seen = new Set<string>();
+  for (const r of (pscRes.data as PscRow[] | null) ?? []) {
+    const pid = String(r.player_id);
+    seen.add(pid);
+    const nct  = nctByPid.get(pid);
+    const name = r.name || nct?.name || "";
+    const cacheTeam = r.team ? normalizeTeamCode(r.team) : "";
+    const team = nct?.team || cacheTeam || "";
+    const team_source: SnapshotFallback["team_source"] =
+      nct?.team ? "current_roster" : (cacheTeam ? "stats_cache" : "none");
+    out.set(pid, {
+      name,
+      team,
+      position: getCanonicalPlayerPosition(name, r.position ?? "N/A"),
+      team_source,
+      resolved: !!name,
+    });
+  }
+
+  // Players present only in the current-roster table (not in the stats cache).
+  for (const [pid, nct] of nctByPid) {
+    if (seen.has(pid)) continue;
+    out.set(pid, {
+      name:        nct.name,
+      team:        nct.team,
+      position:    "N/A",
+      team_source: nct.team ? "current_roster" : "none",
+      resolved:    !!nct.name,
+    });
+  }
+
+  return out;
 }
 
 // ── Debug source comparison ──────────────────────────────────────

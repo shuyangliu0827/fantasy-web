@@ -12,7 +12,8 @@
     "test": "node --experimental-strip-types --test tests/**/*.test.ts",
     "test:smoke": "node --experimental-strip-types --test tests/canonical-pipeline.test.ts tests/fantasy-scoring.test.ts tests/lineup.test.ts tests/player-metadata.test.ts",
     "validate:contest-roster": "node --experimental-strip-types scripts/validate-daily-contest-roster.ts",
-    "validate:contest-snapshot": "node --experimental-strip-types scripts/validate-daily-contest-snapshot.ts"
+    "validate:contest-snapshot": "node --experimental-strip-types scripts/validate-daily-contest-snapshot.ts",
+    "repair:contest-snapshots": "node --experimental-strip-types scripts/repair-daily-contest-snapshots.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

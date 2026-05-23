@@ -80,7 +80,7 @@ import { getAuthUserId } from "@/lib/fantasy/daily/auth";
 import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/fantasy/daily/positions";
 import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 import { SALARY_CAP, ROSTER_SIZE } from "@/lib/fantasy/daily/salary";
-import { getContestSnapshot, buildSnapshotDebugRow } from "@/lib/fantasy/daily/contest-snapshot";
+import { getContestSnapshot, resolveSnapshotFallback, buildSnapshotDebugRow } from "@/lib/fantasy/daily/contest-snapshot";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 
 function db() {
@@ -164,6 +164,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // these (its team is the season-stats team and can be stale post-trade).
   const { map: snapshotMap, snapshot_available } = await getContestSnapshot(supabase, id);
 
+  // Display fallback for legacy rows with an empty snapshot block — resolves
+  // name / position / authoritative-current-roster team so no lineup player
+  // renders as a raw player_id with a blank "?" avatar.
+  const fallbackMap = await resolveSnapshotFallback(supabase, playerIds);
+
   // stats_cache_team is fetched only for the debug comparison view so an
   // operator can confirm the snapshot diverges from the stale source.
   const statsCacheTeamMap = new Map<string, string>();
@@ -179,7 +184,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   let anyInvalid = false;
   const enrichedPlayers = (lineupPlayers ?? []).map((p: any) => {
-    const snap = snapshotMap.get(String(p.player_id));
+    const pid  = String(p.player_id);
+    const snap = snapshotMap.get(pid);
+    const fb   = fallbackMap.get(pid);
     // A lineup player missing from contest_players is invalid for this
     // contest — the pool was rebuilt and no longer contains them.
     const invalid = !snap;
@@ -188,14 +195,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       slot:                   p.slot,
       slot_label:             SLOT_LABEL[p.slot as number] ?? String(p.slot),
       player_id:              p.player_id,
-      name:                   snap?.display_name ?? "",
-      team:                   snap?.team         ?? "",
-      position:               snap?.position     ?? "",
+      name:                   snap?.display_name || fb?.name     || "",
+      team:                   snap?.team         || fb?.team     || "",
+      position:               snap?.position     || fb?.position || "",
       tier:                   snap?.tier         ?? null,
       salary:                 snap?.salary       ?? 0,
       projected_points:       snap?.projected_points ?? 0,
       actual_fantasy_points:  p.actual_fantasy_points ?? null,
       invalid,
+      missing_snapshot_display_name: !snap?.display_name,
     };
   });
 

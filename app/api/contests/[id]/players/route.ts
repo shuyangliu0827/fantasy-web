@@ -53,7 +53,7 @@ import { calcProjectedPoints, calcSalary, calcValue } from "@/lib/fantasy/daily/
 import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 import { getCurrentRosterForTeams } from "@/lib/nba/current-roster";
-import { isOutOrInactive } from "@/lib/fantasy/daily/pool-builder";
+import { isOutOrInactive, assignTiersByProjection } from "@/lib/fantasy/daily/pool-builder";
 import { getContestSnapshot } from "@/lib/fantasy/daily/contest-snapshot";
 
 function db() {
@@ -237,47 +237,21 @@ export async function GET(
           });
 
           if (missing.length > 0) {
-            const newRows = missing.map((r) => {
-              const fpts      = Number(r.fpts_avg) || 0;
-              const projected = calcProjectedPoints(fpts, fpts);
-              const salary    = calcSalary(projected);
-              const rosterEntry = rosterResult.map.get(String(r.player_id));
-              return {
-                contest_id:       id,
-                player_id:        String(r.player_id),
-                tier:             4,
-                salary,
-                projected_points: Math.round(projected * 100) / 100,
-                last_5_avg_fp:    Math.round(fpts * 100) / 100,
-                season_avg_fp:    Math.round(fpts * 100) / 100,
-                injury_status:    null,
-                is_available:     true,
-                // Persist the snapshot so other endpoints read the same team —
-                // team is the authoritative current-roster team, never psc.team.
-                display_name:        r.name || rosterEntry?.player_name || "",
-                team:                rosterEntry?.current_team ?? "",
-                position:            getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
-                roster_source:       rosterResult.roster_source_used,
-                roster_validated_at: rosterResult.source_updated_at,
-              };
-            });
-
-            await supabase
-              .from("contest_players")
-              .upsert(newRows, { onConflict: "contest_id,player_id" });
-
+            // Push gap-fill players into the in-memory pool with a PROVISIONAL
+            // tier. The real tier is assigned below by re-ranking the FINAL
+            // full pool (original + gap-fill) by projection — never a hard 4.
             for (const r of missing) {
+              const rosterEntry = rosterResult.map.get(String(r.player_id));
+              // Strict: gap-fill candidates without a current_roster entry
+              // were already filtered out above. Keep the guard here too so
+              // the stats-cache team can never sneak in.
+              if (!rosterEntry) continue;
               const fpts        = Number(r.fpts_avg) || 0;
               const projected   = calcProjectedPoints(fpts, fpts);
               const salary      = calcSalary(projected);
-              const rosterEntry = rosterResult.map.get(String(r.player_id));
-              // Strict: gap-fill candidates without a current_roster entry
-              // were already filtered out above (line 230). Keep the guard
-              // here too so the stats-cache team can never sneak in.
-              if (!rosterEntry) continue;
               players.push({
                 player_id:        String(r.player_id),
-                tier:             4,
+                tier:             4, // provisional — overwritten by re-tier below
                 fpts_scored:      null,
                 name:             rosterEntry.player_name ?? r.name ?? "",
                 team:             rosterEntry.current_team,
@@ -309,6 +283,35 @@ export async function GET(
               });
               stalePlayersByPid.set(String(r.player_id), normalizeTeamCode(r.team));
             }
+
+            // ── Re-tier the FINAL full pool by projection ───────────────
+            // Quartile buckets over (original pool + gap-fill) so a strong
+            // gap-filled player lands in the tier their projection earns —
+            // not a hard-coded T4.
+            assignTiersByProjection(players);
+
+            // Persist the final snapshot (tier + display block) for every
+            // player so my-lineup / leaderboard / my-lineups / settler read
+            // the same tiers the build page validates against. This both
+            // inserts the new gap rows and corrects any shifted tiers /
+            // missing display fields on existing rows in one idempotent write.
+            const persistRows = players.map((p) => ({
+              contest_id:          id,
+              player_id:           p.player_id,
+              tier:                p.tier,
+              salary:              p.salary,
+              projected_points:    p.projected_points,
+              last_5_avg_fp:       p.last_5_avg_fp,
+              season_avg_fp:       p.season_avg_fp,
+              display_name:        p.name,
+              team:                p.team,
+              position:            p.position,
+              roster_source:       (p as any).roster_source ?? rosterResult.roster_source_used,
+              roster_validated_at: (p as any).roster_validated_at ?? rosterResult.source_updated_at,
+            }));
+            await supabase
+              .from("contest_players")
+              .upsert(persistRows, { onConflict: "contest_id,player_id" });
           }
         }
       }

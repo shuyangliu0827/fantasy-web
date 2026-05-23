@@ -147,12 +147,37 @@ export function isOutOrInactive(injury: string | null | undefined): boolean {
   return lc.startsWith("out") || lc.startsWith("inactive");
 }
 
-function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
+/**
+ * Quartile tier from a 1-based projection rank within a pool of `total`.
+ * Exported so read paths that mutate the pool after build (e.g. the
+ * gap-fill in /api/contests/[id]/players) can re-tier the FINAL full pool
+ * with the same bucketing — never defaulting late additions to T4.
+ */
+export function tierFor(rank: number, total: number): 1 | 2 | 3 | 4 {
   const q = total / 4;
   if (rank <= q)     return 1;
   if (rank <= q * 2) return 2;
   if (rank <= q * 3) return 3;
   return 4;
+}
+
+/**
+ * Re-assign tiers across a full pool by projected_points DESC. Mutates each
+ * row's `tier` in place and returns the same array. Used after gap-fill so
+ * every player — including late additions — is tiered by its real projection
+ * rank in the final pool instead of a hard-coded default.
+ */
+export function assignTiersByProjection<T extends { projected_points?: number | null; tier?: unknown }>(
+  players: T[],
+): T[] {
+  const ranked = [...players].sort(
+    (a, b) => (Number(b.projected_points) || 0) - (Number(a.projected_points) || 0),
+  );
+  const total = ranked.length;
+  ranked.forEach((p, idx) => {
+    (p as { tier: number }).tier = tierFor(idx + 1, total);
+  });
+  return players;
 }
 
 async function computeLastNAverages(
