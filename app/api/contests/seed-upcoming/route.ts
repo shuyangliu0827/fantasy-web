@@ -55,6 +55,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 import { buildContestPool } from "@/lib/fantasy/daily/pool-builder";
+import { getCurrentRosterForTeams } from "@/lib/nba/current-roster";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const DEFAULT_DAYS = 7;
@@ -188,8 +189,26 @@ export async function GET(req: Request) {
     }
 
     // 4. Build a fully-priced provisional player pool via the shared builder.
-    //    Computes last-5 fpts averages → projected_points → salary + tier.
-    const { rows: poolRows } = await buildContestPool(supabase, dateStr, playingTeams);
+    //    Computes last-5 fpts averages → projected_points → salary + tier,
+    //    gated by the authoritative current-roster source.
+    const rosterResult = await getCurrentRosterForTeams(supabase, playingTeams);
+    if (rosterResult.roster_source_used === "unavailable") {
+      // Skip this date — better to leave the existing pool than to overwrite
+      // it with one that bypassed the current-roster gate.
+      results.push({ date: dateStr, action: "roster_source_unavailable", id: contestId });
+      continue;
+    }
+
+    const { rows: poolRows } = await buildContestPool(supabase, dateStr, playingTeams, {
+      currentRosterMap: rosterResult.map,
+      rosterMeta: {
+        roster_source_used: rosterResult.roster_source_used,
+        source_updated_at:  rosterResult.source_updated_at,
+        sync_attempted:     rosterResult.sync_attempted,
+        sync_error:         rosterResult.sync_error,
+        rows_by_team:       rosterResult.rows_by_team,
+      },
+    });
     if (poolRows.length > 0) {
       const { error: cpErr } = await supabase
         .from("contest_players")

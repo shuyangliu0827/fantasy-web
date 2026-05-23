@@ -62,9 +62,19 @@ import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 import { buildContestPool } from "@/lib/fantasy/daily/pool-builder";
+import { getCurrentRosterForTeams } from "@/lib/nba/current-roster";
 
 // Fallback lock: 23:00 UTC = 7 PM EDT (UTC-4), typical prime-time slate.
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
+
+// per_player_trace is large (1 row per player considered) — only include
+// when ?debug=1 is set to keep the normal response compact.
+function stripTrace<T extends { per_player_trace?: unknown }>(diagnostics: T, debug: boolean): T {
+  if (debug) return diagnostics;
+  const { per_player_trace, ...rest } = diagnostics;
+  void per_player_trace;
+  return rest as T;
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -162,6 +172,7 @@ async function handler(req: Request) {
 
   const url    = new URL(req.url);
   const force  = url.searchParams.get("force") === "true";
+  const debug  = url.searchParams.get("debug") === "1";
   const supabase = db();
   const today  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
 
@@ -188,11 +199,40 @@ async function handler(req: Request) {
     return NextResponse.json({ created: false, reason: "no_games_today" });
   }
 
-  // ── 3. Build a fully-priced pool via the shared builder ──────
-  const { rows: poolRows, diagnostics } = await buildContestPool(supabase, today, playingTeams);
+  // ── 3. Resolve authoritative current rosters for today's teams ──
+  // This is the hard validation gate: a player is eligible only when they
+  // appear on the BDL /players/active roster for one of today's teams.
+  // player_stats_cache.team is NEVER consulted for eligibility.
+  const rosterResult = await getCurrentRosterForTeams(supabase, playingTeams);
+
+  if (rosterResult.roster_source_used === "unavailable") {
+    // No roster source available and the sync failed — fail loudly.
+    return NextResponse.json(
+      {
+        error:        "Current roster validation failed; contest pool not rebuilt.",
+        contest_date: today,
+        roster_source_used: rosterResult.roster_source_used,
+        sync_error:   rosterResult.sync_error,
+      },
+      { status: 503 },
+    );
+  }
+
+  // ── 4. Build a fully-priced pool via the shared builder ──────
+  const { rows: poolRows, diagnostics } = await buildContestPool(supabase, today, playingTeams, {
+    currentRosterMap: rosterResult.map,
+    rosterMeta: {
+      roster_source_used: rosterResult.roster_source_used,
+      source_updated_at:  rosterResult.source_updated_at,
+      sync_attempted:     rosterResult.sync_attempted,
+      sync_error:         rosterResult.sync_error,
+      rows_by_team:       rosterResult.rows_by_team,
+    },
+  });
+
   if (diagnostics.cache_query_error) {
     return NextResponse.json(
-      { error: "failed to read player_stats_cache", details: diagnostics.cache_query_error, diagnostics },
+      { error: "failed to read player_stats_cache", details: diagnostics.cache_query_error, diagnostics: stripTrace(diagnostics, debug) },
       { status: 500 },
     );
   }
@@ -201,7 +241,7 @@ async function handler(req: Request) {
       {
         error:       "player pool is empty — no eligible players for today's slate",
         contest_date: today,
-        diagnostics,
+        diagnostics: stripTrace(diagnostics, debug),
       },
       { status: 422 },
     );
@@ -215,15 +255,22 @@ async function handler(req: Request) {
     : null;
 
   const baseResponse = {
-    contest_date: today,
-    games_found:  playingTeams.size,
-    teams_playing_today: [...playingTeams].sort(),
-    eligible_players_before_filter: diagnostics.cache_rows_total,
-    eligible_players_after_team_filter:   diagnostics.eligible_after_team_filter,
-    eligible_players_after_injury_filter: diagnostics.eligible_after_injury_filter,
-    contest_players_inserted: poolRows.length,
-    lock_source:  lockSource,
-    diagnostics,
+    contest_date:                          today,
+    games_found:                           playingTeams.size,
+    teams_playing_today:                   [...playingTeams].sort(),
+    roster_source_used:                    diagnostics.roster_source_used,
+    roster_players_loaded_total:           diagnostics.roster_players_loaded_total,
+    roster_players_loaded_by_team:         diagnostics.roster_players_loaded_by_team,
+    cache_players_loaded:                  diagnostics.cache_players_loaded,
+    included_players_count:                diagnostics.included_players_count,
+    excluded_stale_team_count:             diagnostics.excluded_stale_team_count,
+    excluded_no_current_roster_count:      diagnostics.excluded_no_current_roster_count,
+    excluded_team_not_playing_count:       diagnostics.excluded_team_not_playing_count,
+    excluded_out_or_inactive_count:        diagnostics.excluded_out_or_inactive_count,
+    excluded_missing_projection_count:     diagnostics.excluded_missing_projection_count,
+    contest_players_inserted:              poolRows.length,
+    lock_source:                           lockSource,
+    diagnostics:                           stripTrace(diagnostics, debug),
     warning,
   };
 
