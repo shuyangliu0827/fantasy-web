@@ -19,6 +19,7 @@ import { SLOT_LABEL } from "@/lib/fantasy/daily/positions";
 import { getWeekStart, toDateStr } from "@/lib/fantasy/daily/points";
 import { fetchStatsForDate, PlayerGameStats } from "@/lib/players/game-stats";
 import { fetchGamesForRange } from "@/lib/nba/games";
+import { getContestSnapshot, resolveSnapshotFallback, type ContestSnapshotPlayer, type SnapshotFallback } from "@/lib/fantasy/daily/contest-snapshot";
 
 function db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -97,9 +98,14 @@ export async function GET(req: Request) {
 
   // ── 3. Fetch player metadata, salaries, box scores, and games ─
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
-  const intIds = allPlayerIds.map((id) => parseInt(id, 10)).filter((n) => !isNaN(n));
 
-  const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))];
+  const contestIds = [...new Set(weekLineups.map((l: any) => l.contest_id))] as string[];
+
+  // Map lineup_id → contest_id so each lineup player resolves against the
+  // correct per-contest snapshot.
+  const lineupContest = new Map<string, string>(
+    weekLineups.map((l: any) => [l.id, l.contest_id]),
+  );
 
   // All unique contest dates — fetch box scores for every date (scored or not).
   const allDates = [
@@ -110,15 +116,26 @@ export async function GET(req: Request) {
     ),
   ] as string[];
 
-  // ── Fetch player metadata + salaries (parallel) ──────────────
-  const [pscRes, cpRes] = await Promise.all([
-    intIds.length
-      ? supabase.from("player_stats_cache").select("player_id, name, position, team").in("player_id", intIds)
-      : Promise.resolve({ data: [], error: null }),
-    contestIds.length && allPlayerIds.length
-      ? supabase.from("contest_players").select("contest_id, player_id, salary").in("contest_id", contestIds).in("player_id", allPlayerIds)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  // ── Fetch contest snapshots (one per contest) ────────────────
+  // team / name / position / tier / salary all come from the contest
+  // snapshot (contest_players) — never player_stats_cache, whose team is the
+  // stale season-stats team. Keyed "contestId:playerId".
+  const snapByKey = new Map<string, ContestSnapshotPlayer>();
+  await Promise.all(
+    contestIds.map(async (cid) => {
+      const { map } = await getContestSnapshot(supabase, cid);
+      for (const [pid, row] of map) snapByKey.set(`${cid}:${pid}`, row);
+    }),
+  );
+
+  // ── Display fallback for legacy rows with an empty snapshot block ──
+  // Resolves name / position / authoritative-current-roster team so a player
+  // never renders as a raw player_id with a blank "?" avatar. Only applied
+  // when the snapshot field itself is empty (snapshot stays authoritative).
+  const fallbackMap: Map<string, SnapshotFallback> = await resolveSnapshotFallback(
+    supabase,
+    allPlayerIds,
+  );
 
   // ── Fetch box-score stats for all contest dates ───────────────
   // Keyed "date:player_id" → PlayerGameStats
@@ -160,28 +177,29 @@ export async function GET(req: Request) {
     }
   }
 
-  const metaMap = new Map<string, { name: string; position: string; team: string }>(
-    ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
-  );
-
-  // Salary keyed by "contestId:playerId"
-  const salaryMap = new Map<string, number>(
-    ((cpRes.data as any[]) ?? []).map((r) => [`${r.contest_id}:${String(r.player_id)}`, r.salary]),
-  );
-
   // ── 4. Group players by lineup ───────────────────────────────
   const playersByLineup = new Map<string, any[]>();
   for (const lp of (lineupPlayers as any[] ?? [])) {
-    const meta = metaMap.get(String(lp.player_id));
+    const cid  = lineupContest.get(lp.lineup_id) ?? "";
+    const pid  = String(lp.player_id);
+    const snap = snapByKey.get(`${cid}:${pid}`);
+    const fb   = fallbackMap.get(pid);
+    const name = snap?.display_name || fb?.name     || "";
+    const team = snap?.team         || fb?.team     || "";
+    const position = snap?.position || fb?.position || "";
     if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
     playersByLineup.get(lp.lineup_id)!.push({
       slot:                  lp.slot,
       slot_label:            SLOT_LABEL[lp.slot as number] ?? String(lp.slot),
       player_id:             lp.player_id,
-      name:                  meta?.name     ?? "",
-      position:              meta?.position ?? "",
-      team:                  meta?.team     ?? "",
+      name,
+      position,
+      team,
+      tier:                  snap?.tier         ?? null,
+      salary:                snap?.salary       ?? 0,
       actual_fantasy_points: lp.actual_fantasy_points ?? null,
+      invalid:               !snap,
+      missing_snapshot_display_name: !snap?.display_name,
     });
   }
 
@@ -196,7 +214,7 @@ export async function GET(req: Request) {
 
       const players = (playersByLineup.get(l.id) ?? [])
         .map((p) => {
-          const salary    = salaryMap.get(`${l.contest_id}:${String(p.player_id)}`) ?? 0;
+          // salary comes from the contest snapshot (already on p).
           const statsKey  = contestDate ? `${contestDate}:${String(p.player_id)}` : null;
           const box_score = statsKey ? (statsMap.get(statsKey) ?? null) : null;
           const oppKey    = p.team && contestDate ? `${p.team}:${contestDate}` : null;
@@ -206,7 +224,7 @@ export async function GET(req: Request) {
           // live_fpts: for unscored lineups, real-time fpts from BDL box score.
           const live_fpts = !isScored && box_score ? box_score.fpts : null;
 
-          return { ...p, salary, box_score, opponent, game_status, live_fpts };
+          return { ...p, box_score, opponent, game_status, live_fpts };
         })
         .sort((a: any, b: any) => a.slot - b.slot);
 

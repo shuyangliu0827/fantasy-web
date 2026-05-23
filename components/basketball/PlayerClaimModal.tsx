@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useLang } from "@/lib/lang";
+import { positionLabel } from "@/lib/i18n/labels";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 
 type Player = {
@@ -43,7 +44,7 @@ export default function PlayerClaimModal({
   onClose,
   onSubmitted,
 }: Props) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -437,7 +438,7 @@ export default function PlayerClaimModal({
                             )}
                           </div>
                           <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                            {[p.position, teamName(p.team_id)]
+                            {[p.position ? positionLabel(p.position, lang) : null, teamName(p.team_id)]
                               .filter(Boolean)
                               .join(" · ") || "—"}
                           </div>

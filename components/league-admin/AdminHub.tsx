@@ -18,6 +18,12 @@ import {
 import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
 import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
+import {
+  visibilityLabel,
+  claimStatusLabel,
+  positionLabel,
+  contestStatusLabel,
+} from "@/lib/i18n/labels";
 
 type League = {
   id: string;
@@ -81,11 +87,19 @@ type MemberRole =
   | "referee"
   | "scorekeeper"
   | "viewer";
+type UserProfile = {
+  id: string;
+  username: string | null;
+  name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+};
 type Member = {
   user_id: string;
   role: MemberRole;
   status: "pending" | "approved" | "rejected" | "removed";
   team_id: string | null;
+  profile?: UserProfile | null;
 };
 
 type Tab = "settings" | "teams" | "players" | "games" | "members" | "claims" | "boxscore";
@@ -304,7 +318,14 @@ function LeagueAdminPageInner({ id }: { id: string }) {
         )}
         {tab === "games" &&
           (isAdminLike ? (
-            <GamesTab leagueId={id} leagueSlug={league.slug} teams={teams} games={games} onChanged={refresh} />
+            <GamesTab
+              leagueId={id}
+              leagueSlug={league.slug}
+              teams={teams}
+              games={games}
+              onChanged={refresh}
+              isPlatformAdmin={access.isPlatformAdmin}
+            />
           ) : (
             restrictedNotice
           ))}
@@ -347,7 +368,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
 // ─────────── Settings (incl. visibility) ───────────
 
 function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [visibility, setVisibility] = useState(league.visibility);
   const [name, setName] = useState(league.name);
   const [description, setDescription] = useState(league.description ?? "");
@@ -418,7 +439,7 @@ function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void 
                 cursor: "pointer",
               }}
             >
-              {v}
+              {visibilityLabel(v, lang)}
             </button>
           ))}
         </div>
@@ -874,7 +895,7 @@ function PlayersTab({
   isAdminLike: boolean;
   managerTeamId: string | null;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
   const [teamId, setTeamId] = useState<string>(isAdminLike ? "" : managerTeamId ?? "");
@@ -978,7 +999,7 @@ function PlayersTab({
         >
           <option value="">{t("位置", "Position")}</option>
           {POSITION_OPTIONS.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{positionLabel(p, lang)}</option>
           ))}
         </select>
         <select
@@ -1081,12 +1102,12 @@ function PlayersTab({
                   <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
                 )}
                 <span style={{ color: "#64748b", fontSize: 12 }}>
-                  {[p.position, teams.find((tm) => tm.id === p.team_id)?.name]
+                  {[p.position ? positionLabel(p.position, lang) : null, teams.find((tm) => tm.id === p.team_id)?.name]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
                 <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>
-                  {p.claim_status}
+                  {claimStatusLabel(p.claim_status, lang)}
                 </span>
                 {!p.is_active && (
                   <span style={{ color: "#b45309", fontSize: 11, fontWeight: 700 }}>
@@ -1148,7 +1169,7 @@ function PlayerEditForm({
   onSaved: () => void;
   onDeleted: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [name, setName] = useState(player.display_name);
   const [position, setPosition] = useState(player.position ?? "");
   const [teamId, setTeamId] = useState<string>(player.team_id ?? "");
@@ -1299,7 +1320,7 @@ function PlayerEditForm({
         >
           <option value="">{t("位置", "Position")}</option>
           {POSITION_OPTIONS.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{positionLabel(p, lang)}</option>
           ))}
         </select>
         {isAdminLike && (
@@ -1687,12 +1708,14 @@ function GamesTab({
   teams,
   games,
   onChanged,
+  isPlatformAdmin,
 }: {
   leagueId: string;
   leagueSlug: string;
   teams: Team[];
   games: Game[];
   onChanged: () => void;
+  isPlatformAdmin: boolean;
 }) {
   const { t, lang } = useLang();
   const [home, setHome] = useState<string>("");
@@ -1855,22 +1878,42 @@ function GamesTab({
         </ul>
       )}
 
-      <ContestDiagnosticsPanel leagueId={leagueId} />
+      <ContestDiagnosticsPanel leagueId={leagueId} isPlatformAdmin={isPlatformAdmin} />
     </div>
   );
 }
 
-function ContestDiagnosticsPanel({ leagueId }: { leagueId: string }) {
-  const { t } = useLang();
+type DiagnosticsData = {
+  league_id: string;
+  slug: string;
+  timezone: string;
+  date: string;
+  league: { status: string; visibility: string; is_contest_enabled: boolean };
+  games: { today: number; yesterday: number; tomorrow: number };
+  teams_playing_today: string[];
+  players: { total: number; with_team: number; playing_today: number };
+  teams: { total: number };
+  contest: { id: string; status: string; lineup_lock_at: string | null } | null;
+};
+
+function ContestDiagnosticsPanel({
+  leagueId,
+  isPlatformAdmin,
+}: {
+  leagueId: string;
+  isPlatformAdmin: boolean;
+}) {
+  const { t, lang } = useLang();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [data, setData] = useState<DiagnosticsData | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [rawOpen, setRawOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setErr(null);
-    const res = await basketballJson<Record<string, unknown>>(
+    const res = await basketballJson<DiagnosticsData>(
       `/api/basketball-leagues/${leagueId}/contest-diagnostics`,
     );
     setLoading(false);
@@ -1879,38 +1922,358 @@ function ContestDiagnosticsPanel({ leagueId }: { leagueId: string }) {
   };
 
   return (
-    <div style={{ marginTop: 24, border: "1px solid #e2e8f0", borderRadius: 12, padding: 14, background: "#fafafa" }}>
+    <div
+      style={{
+        marginTop: 24,
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        padding: 16,
+        background: "#fff",
+      }}
+    >
       <button
         onClick={() => { setOpen((v) => !v); if (!open && !data) load(); }}
         style={{
-          background: "transparent", border: "none", cursor: "pointer",
-          fontSize: 13, fontWeight: 700, color: "#0f172a",
+          background: "transparent",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 14,
+          fontWeight: 800,
+          color: "#0f172a",
+          padding: 0,
         }}
       >
         {open ? "▾" : "▸"} {t("竞赛诊断", "Contest diagnostics")}
       </button>
       {open && (
-        <div style={{ marginTop: 10, fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-          {loading && <div style={{ color: "#64748b" }}>{t("加载中…", "Loading…")}</div>}
-          {err && <div style={{ color: "#991b1b" }}>{err}</div>}
+        <div style={{ marginTop: 14 }}>
+          {loading && (
+            <div style={{ color: "#64748b", fontSize: 13 }}>
+              {t("加载中…", "Loading…")}
+            </div>
+          )}
+          {err && (
+            <div style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>
+              {err}
+            </div>
+          )}
           {data && (
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-              {JSON.stringify(data, null, 2)}
-            </pre>
+            <ContestDiagnosticsCard
+              data={data}
+              isPlatformAdmin={isPlatformAdmin}
+              rawOpen={rawOpen}
+              onToggleRaw={() => setRawOpen((v) => !v)}
+              lang={lang}
+              t={t}
+            />
           )}
           <button
             onClick={load}
+            disabled={loading}
             style={{
-              marginTop: 8,
-              background: "#1e3a8a", color: "#fff",
-              border: "none", borderRadius: 6,
-              padding: "4px 10px", fontSize: 12, fontWeight: 700, cursor: "pointer",
+              marginTop: 12,
+              background: loading ? "#94a3b8" : "#1e3a8a",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: loading ? "default" : "pointer",
             }}
           >
             {t("刷新", "Refresh")}
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function ContestDiagnosticsCard({
+  data,
+  isPlatformAdmin,
+  rawOpen,
+  onToggleRaw,
+  lang,
+  t,
+}: {
+  data: DiagnosticsData;
+  isPlatformAdmin: boolean;
+  rawOpen: boolean;
+  onToggleRaw: () => void;
+  lang: "zh" | "en";
+  t: (zh: string, en: string) => string;
+}) {
+  const leagueStatus = data.league.status;
+  const visibility = data.league.visibility;
+  const contestEnabled = data.league.is_contest_enabled;
+  const todayGames = data.games.today;
+  const teamsPlayingToday = data.teams_playing_today.length;
+  const playersTotal = data.players.total;
+  const playersWithTeam = data.players.with_team;
+  const playersPlayingToday = data.players.playing_today;
+  const contestStatus = data.contest?.status ?? null;
+
+  const explanations: string[] = [];
+  if (!contestEnabled) {
+    explanations.push(
+      t(
+        "该联赛尚未开启每日竞赛功能。",
+        "This league has not enabled the daily contest feature yet.",
+      ),
+    );
+  }
+  if (todayGames === 0) {
+    explanations.push(
+      t(
+        "今天没有已录入比赛，因此不会自动生成今日竞赛。",
+        "No games are scheduled for today, so today's contest will not be auto-generated.",
+      ),
+    );
+  }
+  if (playersPlayingToday === 0 && todayGames > 0) {
+    explanations.push(
+      t(
+        "今天没有可参赛球员。请确认比赛双方球队和球员所属球队是否正确。",
+        "No eligible players for today. Verify the teams in today's games and the team assignments of players.",
+      ),
+    );
+  }
+  if (!data.contest) {
+    explanations.push(
+      t(
+        "今日还没有生成竞赛。可能原因：今天没有比赛、没有可参赛球员，或竞赛生成任务还未运行。",
+        "Today's contest has not been generated yet. Possible reasons: no games today, no eligible players, or the generation job has not run yet.",
+      ),
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
+        {t("诊断日期", "Diagnostic date")}: {data.date} · {data.timezone}
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+          gap: 10,
+        }}
+      >
+        <StatusRow
+          label={t("联赛状态", "League status")}
+          pill={leagueStatusLabel(leagueStatus, lang)}
+          tone={
+            leagueStatus === "approved"
+              ? "green"
+              : leagueStatus === "rejected" || leagueStatus === "archived"
+                ? "red"
+                : "yellow"
+          }
+        />
+        <StatusRow
+          label={t("公开状态", "Visibility")}
+          pill={visibilityLabel(visibility, lang)}
+          tone={
+            visibility === "public"
+              ? "green"
+              : visibility === "private"
+                ? "red"
+                : "yellow"
+          }
+        />
+        <StatusRow
+          label={t("每日竞赛功能", "Daily contest enabled")}
+          pill={contestEnabled ? t("已开启", "Enabled") : t("未开启", "Disabled")}
+          tone={contestEnabled ? "green" : "red"}
+        />
+        <StatusRow
+          label={t("今日竞赛状态", "Today's contest")}
+          pill={
+            contestStatus
+              ? contestStatusLabel(contestStatus, lang)
+              : t("未创建", "Not created")
+          }
+          tone={
+            !contestStatus
+              ? "red"
+              : contestStatus === "settled" || contestStatus === "scored"
+                ? "green"
+                : contestStatus === "locked"
+                  ? "blue"
+                  : "yellow"
+          }
+        />
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 10,
+        }}
+      >
+        <CountTile label={t("今日比赛数", "Games today")} value={todayGames} />
+        <CountTile
+          label={t("今日参赛球队", "Teams playing today")}
+          value={teamsPlayingToday}
+        />
+        <CountTile label={t("已录入球员", "Total players")} value={playersTotal} />
+        <CountTile
+          label={t("已分配球队球员", "Players assigned to a team")}
+          value={playersWithTeam}
+        />
+        <CountTile
+          label={t("今日可参赛球员", "Eligible players today")}
+          value={playersPlayingToday}
+        />
+      </div>
+
+      {explanations.length > 0 && (
+        <ul
+          style={{
+            margin: 0,
+            padding: "10px 14px",
+            background: "#fef3c7",
+            border: "1px solid #fcd34d",
+            borderRadius: 10,
+            listStyle: "disc",
+            paddingLeft: 32,
+            color: "#92400e",
+            fontSize: 13,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {explanations.map((line, i) => (
+            <li key={i}>{line}</li>
+          ))}
+        </ul>
+      )}
+
+      <div
+        style={{
+          borderTop: "1px solid #f1f5f9",
+          paddingTop: 10,
+          marginTop: 4,
+        }}
+      >
+        <button
+          onClick={onToggleRaw}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#64748b",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          {rawOpen ? "▾" : "▸"} {t("开发调试信息", "Developer diagnostics")}
+        </button>
+        {!isPlatformAdmin && (
+          <span style={{ marginLeft: 8, color: "#94a3b8", fontSize: 11 }}>
+            {t("仅用于开发排错", "For debugging only")}
+          </span>
+        )}
+        {rawOpen && (
+          <pre
+            style={{
+              marginTop: 8,
+              padding: 12,
+              background: "#0f172a",
+              color: "#e2e8f0",
+              borderRadius: 8,
+              fontSize: 11,
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              overflowX: "auto",
+            }}
+          >
+            {isPlatformAdmin
+              ? JSON.stringify(data, null, 2)
+              : t(
+                  "原始诊断 JSON 仅对平台管理员可见。",
+                  "Raw diagnostic JSON is restricted to platform admins.",
+                )}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusRow({
+  label,
+  pill,
+  tone,
+}: {
+  label: string;
+  pill: string;
+  tone: "green" | "red" | "yellow" | "blue";
+}) {
+  const palette: Record<typeof tone, { bg: string; fg: string }> = {
+    green: { bg: "#dcfce7", fg: "#166534" },
+    red: { bg: "#fee2e2", fg: "#991b1b" },
+    yellow: { bg: "#fef3c7", fg: "#92400e" },
+    blue: { bg: "#e0e7ff", fg: "#3730a3" },
+  };
+  const c = palette[tone];
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        padding: "10px 12px",
+        border: "1px solid #e2e8f0",
+        borderRadius: 10,
+      }}
+    >
+      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
+        {label}
+      </span>
+      <span
+        style={{
+          alignSelf: "flex-start",
+          padding: "3px 10px",
+          borderRadius: 999,
+          background: c.bg,
+          color: c.fg,
+          fontSize: 12,
+          fontWeight: 800,
+        }}
+      >
+        {pill}
+      </span>
+    </div>
+  );
+}
+
+function CountTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        border: "1px solid #e2e8f0",
+        borderRadius: 10,
+        background: "#f8fafc",
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+      }}
+    >
+      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 20, fontWeight: 900, color: "#0f172a" }}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -2067,15 +2430,21 @@ function MembersTab({
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         if (res.status === 404) {
-          setErr(t(`未找到用户名 "${q}"`, `Username "${q}" not found`));
+          setErr(t(`未找到 "${q}"`, `No user found for "${q}"`));
         } else {
           setErr(body.error ?? `HTTP ${res.status}`);
         }
         return;
       }
-      const body = (await res.json()) as { user_id: string; username: string; name: string | null };
+      const body = (await res.json()) as {
+        user_id: string;
+        username: string | null;
+        name: string | null;
+        email: string | null;
+      };
       setUserId(body.user_id);
-      setInfo(t(`已找到：${body.name ?? body.username}`, `Found: ${body.name ?? body.username}`));
+      const label = body.name ?? body.username ?? body.email ?? body.user_id;
+      setInfo(t(`已找到：${label}`, `Found: ${label}`));
     } finally {
       setLookupBusy(false);
     }
@@ -2129,7 +2498,10 @@ function MembersTab({
         <input
           value={usernameQuery}
           onChange={(e) => setUsernameQuery(e.target.value)}
-          placeholder={t("用户名 (查找)", "Username (lookup)")}
+          placeholder={t(
+            "用户名 / 邮箱 / 姓名 / UUID",
+            "Username / email / name / UUID",
+          )}
           onKeyDown={(e) => {
             if (e.key === "Enter") lookupByUsername();
           }}

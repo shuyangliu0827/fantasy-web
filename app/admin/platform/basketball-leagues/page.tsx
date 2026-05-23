@@ -9,6 +9,7 @@ import LeagueLogo from "@/components/basketball/LeagueLogo";
 import PlatformGrantLeagueAdminForm from "@/components/basketball/PlatformGrantLeagueAdminForm";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
+import { leagueStatusLabel } from "@/lib/basketball/status-labels";
 
 type League = {
   id: string;
@@ -42,7 +43,7 @@ export default function PlatformBasketballLeaguesPage() {
 }
 
 function PlatformBasketballLeaguesPageInner() {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [me, setMe] = useState<MeAccess | null>(null);
   const [leagues, setLeagues] = useState<League[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -235,17 +236,16 @@ function PlatformBasketballLeaguesPageInner() {
                       fontSize: 11,
                       fontWeight: 800,
                       letterSpacing: "0.06em",
-                      textTransform: "uppercase",
                     }}
                   >
-                    {l.status}
+                    {leagueStatusLabel(l.status, lang)}
                   </span>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button
                       onClick={() => setStatus(l.id, STATUS_NEXT[l.status])}
                       style={smallBtn("primary")}
                     >
-                      → {STATUS_NEXT[l.status]}
+                      → {leagueStatusLabel(STATUS_NEXT[l.status], lang)}
                     </button>
                     {l.status !== "rejected" && (
                       <button

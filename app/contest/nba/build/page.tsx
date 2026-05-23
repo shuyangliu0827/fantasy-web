@@ -10,6 +10,7 @@ import LineupShareCard, { type SharePlayer } from "@/components/LineupShareCard"
 import SharePosterModal from "@/components/daily-fantasy/SharePosterModal";
 import { type LineupPosterProps } from "@/components/daily-fantasy/posters/LineupPoster";
 import { translateTeam } from "@/lib/shared/i18n";
+import { positionLabel } from "@/lib/i18n/labels";
 import { useLang } from "@/lib/lang";
 import { getPlayerDisplayName } from "@/lib/players/player-name-zh";
 import { getMyLineup, saveLineup, submitLineup, contestFetch } from "@/lib/fantasy/daily/fetch";
@@ -1059,7 +1060,7 @@ export default function ContestPage() {
                             {getPlayerDisplayName(p, lang)}
                           </div>
                           <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>
-                            {translateTeam(p.team, lang)} · {p.position}
+                            {translateTeam(p.team, lang)} · {positionLabel(p.position, lang)}
                           </div>
                         </div>
 
@@ -1997,7 +1998,7 @@ function PlayerCard({
         <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
           <span>{translateTeam(p.team, lang as "en" | "zh")}</span>
           <span>·</span>
-          <span>{p.position}</span>
+          <span>{positionLabel(p.position, lang as "en" | "zh")}</span>
           {/* Tier — display/filter only, no longer enforced. */}
           <span style={{
             padding: "1px 5px", borderRadius: 4, fontSize: 10, fontWeight: 700,

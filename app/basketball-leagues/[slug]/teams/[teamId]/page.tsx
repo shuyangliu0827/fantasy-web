@@ -11,6 +11,7 @@ import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { uploadBasketballTeamLogo } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
 import { gameStatusLabel } from "@/lib/basketball/status-labels";
+import { positionLabel } from "@/lib/i18n/labels";
 
 type LeagueLite = {
   id: string;
@@ -342,7 +343,7 @@ export default function TeamDetailPage({
                     {p.display_name}
                   </div>
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                    {[p.position, p.jersey_number ? `#${p.jersey_number}` : null]
+                    {[p.position ? positionLabel(p.position, lang) : null, p.jersey_number ? `#${p.jersey_number}` : null]
                       .filter(Boolean)
                       .join(" · ") || "—"}
                   </div>
