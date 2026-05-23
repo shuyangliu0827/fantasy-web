@@ -10,6 +10,7 @@ import ShareButton from "@/components/basketball/ShareButton";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { uploadBasketballPlayerAvatar } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
+import { positionLabel } from "@/lib/i18n/labels";
 import { statLabel } from "@/lib/basketball/stat-labels";
 
 type LeagueLite = {
@@ -261,7 +262,7 @@ export default function PlayerDetailPage({
             </h1>
             <div style={{ color: "#64748b", fontSize: 14, marginTop: 4 }}>
               {[
-                player.position,
+                player.position ? positionLabel(player.position, lang) : null,
                 player.jersey_number ? `#${player.jersey_number}` : null,
                 team ? (
                   <Link
@@ -658,7 +659,7 @@ function SelfEditProfileForm({
   onCancel: () => void;
   onSaved: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [displayName, setDisplayName] = useState(player.display_name);
   const [position, setPosition] = useState(player.position ?? "");
   const [jersey, setJersey] = useState(player.jersey_number ?? "");
@@ -779,7 +780,7 @@ function SelfEditProfileForm({
         >
           <option value="">{t("位置", "Position")}</option>
           {positions.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{positionLabel(p, lang)}</option>
           ))}
         </select>
         <input

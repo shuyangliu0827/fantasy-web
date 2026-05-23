@@ -4,10 +4,11 @@
 // Reusable across /contest/[leagueSlug]/leaderboard and any embedded view.
 
 import { useLang } from "@/lib/lang";
+import { contestStatusLabel } from "@/lib/i18n/labels";
 import type { LeaderEntry } from "./types";
 
 export default function LeaderboardView({ entries }: { entries: LeaderEntry[] }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   if (entries.length === 0) {
     return (
       <div style={{ color: "#94a3b8", fontSize: 14 }}>
@@ -68,10 +69,9 @@ export default function LeaderboardView({ entries }: { entries: LeaderEntry[] })
                 fontSize: 10,
                 fontWeight: 800,
                 letterSpacing: "0.04em",
-                textTransform: "uppercase",
               }}
             >
-              {e.status}
+              {contestStatusLabel(e.status, lang)}
             </span>
           </div>
           <div style={{ fontWeight: 900, color: "#1e3a8a" }}>

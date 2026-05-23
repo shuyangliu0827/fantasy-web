@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLang } from "@/lib/lang";
 import { basketballFetch } from "@/lib/basketball/client";
 import { memberRoleLabel } from "@/lib/basketball/role-labels";
+import { memberStatusLabel } from "@/lib/i18n/labels";
 
 type MemberRole =
   | "league_admin"
@@ -167,10 +168,9 @@ export default function LeagueMemberApprovalList({ leagueId, members, teams, onC
               fontSize: 11,
               fontWeight: 800,
               letterSpacing: "0.05em",
-              textTransform: "uppercase",
             }}
           >
-            {m.status}
+            {memberStatusLabel(m.status, lang)}
           </span>
           <div style={{ display: "flex", gap: 6 }}>
             {m.status !== "approved" && (

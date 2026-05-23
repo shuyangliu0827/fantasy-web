@@ -16,6 +16,7 @@ import { memberRoleLabel } from "@/lib/basketball/role-labels";
 import type { MemberRole } from "@/lib/basketball/access";
 import { useLang } from "@/lib/lang";
 import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
+import { positionLabel } from "@/lib/i18n/labels";
 
 type League = {
   id: string;
@@ -632,7 +633,7 @@ export default function BasketballLeaguePage({
                       )}
                     </div>
                     <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                      {[p.position, teamName(p.team_id)].filter(Boolean).join(" · ") || "—"}
+                      {[p.position ? positionLabel(p.position, lang) : null, teamName(p.team_id)].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </div>
                 </Link>

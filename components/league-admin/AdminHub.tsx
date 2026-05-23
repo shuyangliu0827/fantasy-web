@@ -18,6 +18,11 @@ import {
 import { memberRoleLabel, MEMBER_ROLE_VALUES } from "@/lib/basketball/role-labels";
 import { useLang } from "@/lib/lang";
 import { leagueStatusLabel, gameStatusLabel } from "@/lib/basketball/status-labels";
+import {
+  visibilityLabel,
+  claimStatusLabel,
+  positionLabel,
+} from "@/lib/i18n/labels";
 
 type League = {
   id: string;
@@ -347,7 +352,7 @@ function LeagueAdminPageInner({ id }: { id: string }) {
 // ─────────── Settings (incl. visibility) ───────────
 
 function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [visibility, setVisibility] = useState(league.visibility);
   const [name, setName] = useState(league.name);
   const [description, setDescription] = useState(league.description ?? "");
@@ -418,7 +423,7 @@ function SettingsTab({ league, onSaved }: { league: League; onSaved: () => void 
                 cursor: "pointer",
               }}
             >
-              {v}
+              {visibilityLabel(v, lang)}
             </button>
           ))}
         </div>
@@ -874,7 +879,7 @@ function PlayersTab({
   isAdminLike: boolean;
   managerTeamId: string | null;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [name, setName] = useState("");
   const [position, setPosition] = useState("");
   const [teamId, setTeamId] = useState<string>(isAdminLike ? "" : managerTeamId ?? "");
@@ -978,7 +983,7 @@ function PlayersTab({
         >
           <option value="">{t("位置", "Position")}</option>
           {POSITION_OPTIONS.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{positionLabel(p, lang)}</option>
           ))}
         </select>
         <select
@@ -1081,12 +1086,12 @@ function PlayersTab({
                   <span style={{ color: "#1e3a8a", fontSize: 12, fontWeight: 700 }}>#{p.jersey_number}</span>
                 )}
                 <span style={{ color: "#64748b", fontSize: 12 }}>
-                  {[p.position, teams.find((tm) => tm.id === p.team_id)?.name]
+                  {[p.position ? positionLabel(p.position, lang) : null, teams.find((tm) => tm.id === p.team_id)?.name]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
                 <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700 }}>
-                  {p.claim_status}
+                  {claimStatusLabel(p.claim_status, lang)}
                 </span>
                 {!p.is_active && (
                   <span style={{ color: "#b45309", fontSize: 11, fontWeight: 700 }}>
@@ -1148,7 +1153,7 @@ function PlayerEditForm({
   onSaved: () => void;
   onDeleted: () => void;
 }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [name, setName] = useState(player.display_name);
   const [position, setPosition] = useState(player.position ?? "");
   const [teamId, setTeamId] = useState<string>(player.team_id ?? "");
@@ -1299,7 +1304,7 @@ function PlayerEditForm({
         >
           <option value="">{t("位置", "Position")}</option>
           {POSITION_OPTIONS.map((p) => (
-            <option key={p} value={p}>{p}</option>
+            <option key={p} value={p}>{positionLabel(p, lang)}</option>
           ))}
         </select>
         {isAdminLike && (

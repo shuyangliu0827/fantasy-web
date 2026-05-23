@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { useLang } from "@/lib/lang";
+import { contestStatusLabel } from "@/lib/i18n/labels";
 import {
   getEligibleSlots,
   SLOT_LABELS as POSITION_SLOT_LABELS,
@@ -296,7 +297,7 @@ export default function ContestBuilder({ contest }: { contest: Contest }) {
 }
 
 export function ContestStatusHeader({ contest }: { contest: Contest }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   return (
     <div
       style={{
@@ -358,10 +359,9 @@ export function ContestStatusHeader({ contest }: { contest: Contest }) {
           fontSize: 12,
           fontWeight: 900,
           letterSpacing: "0.06em",
-          textTransform: "uppercase",
         }}
       >
-        {contest.status}
+        {contestStatusLabel(contest.status, lang)}
       </span>
     </div>
   );
