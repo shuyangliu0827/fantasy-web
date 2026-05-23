@@ -85,10 +85,47 @@ export async function GET(
         .eq("basketball_league_id", id),
     ]);
 
+    // Batch-fetch user identity rows from public.users so the admin UI
+    // can show real names instead of just UUIDs. Best-effort: a missing
+    // row leaves the member with profile=null.
+    const userIds = Array.from(
+      new Set(
+        [
+          ...(admins ?? []).map((a) => a.user_id),
+          ...(members ?? []).map((m) => m.user_id),
+        ].filter((x): x is string => typeof x === "string" && x.length > 0),
+      ),
+    );
+    type UserProfile = {
+      id: string;
+      username: string | null;
+      name: string | null;
+      email: string | null;
+      avatar_url: string | null;
+    };
+    const profileById = new Map<string, UserProfile>();
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("users")
+        .select("id, username, name, email, avatar_url")
+        .in("id", userIds);
+      for (const p of (profiles ?? []) as UserProfile[]) {
+        profileById.set(p.id, p);
+      }
+    }
+    const withProfile = <T extends { user_id: string }>(row: T) => ({
+      ...row,
+      profile: profileById.get(row.user_id) ?? null,
+    });
+
     return NextResponse.json({
-      admins: admins ?? [],
-      members: (members ?? []).filter((m) => m.status !== "pending"),
-      pending: (members ?? []).filter((m) => m.status === "pending"),
+      admins: (admins ?? []).map(withProfile),
+      members: (members ?? [])
+        .filter((m) => m.status !== "pending")
+        .map(withProfile),
+      pending: (members ?? [])
+        .filter((m) => m.status === "pending")
+        .map(withProfile),
     });
   } catch (e) {
     if (e instanceof AccessError) {

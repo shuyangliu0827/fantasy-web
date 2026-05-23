@@ -14,11 +14,19 @@ type MemberRole =
   | "scorekeeper"
   | "viewer";
 
+type UserProfile = {
+  id: string;
+  username: string | null;
+  name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+};
 type Member = {
   user_id: string;
   role: MemberRole;
   status: "pending" | "approved" | "rejected" | "removed";
   team_id?: string | null;
+  profile?: UserProfile | null;
 };
 
 type TeamRef = { id: string; name: string };
@@ -94,20 +102,7 @@ export default function LeagueMemberApprovalList({ leagueId, members, teams, onC
             flexWrap: "wrap",
           }}
         >
-          <code
-            style={{
-              fontSize: 12,
-              color: "#475569",
-              flex: "1 1 220px",
-              minWidth: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={m.user_id}
-          >
-            {m.user_id}
-          </code>
+          <MemberIdentity profile={m.profile ?? null} userId={m.user_id} />
           <select
             value={m.role}
             disabled={busyId === m.user_id}
@@ -214,4 +209,64 @@ function btnStyle(bg: string): React.CSSProperties {
     fontWeight: 700,
     cursor: "pointer",
   };
+}
+
+function MemberIdentity({
+  profile,
+  userId,
+}: {
+  profile: UserProfile | null;
+  userId: string;
+}) {
+  // Priority: name → username → email → shortened UUID.
+  const primary =
+    profile?.name?.trim() ||
+    profile?.username?.trim() ||
+    profile?.email?.trim() ||
+    `${userId.slice(0, 8)}…`;
+  const secondaryParts: string[] = [];
+  if (profile?.email && profile.email.trim() !== primary) {
+    secondaryParts.push(profile.email.trim());
+  }
+  secondaryParts.push(`user_id: ${userId}`);
+
+  return (
+    <div
+      style={{
+        flex: "1 1 220px",
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#0f172a",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={primary}
+      >
+        {primary}
+      </span>
+      <span
+        style={{
+          fontSize: 11,
+          color: "#94a3b8",
+          fontFamily:
+            "ui-monospace, SFMono-Regular, Menlo, monospace",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        title={userId}
+      >
+        {secondaryParts.join(" · ")}
+      </span>
+    </div>
+  );
 }
