@@ -279,6 +279,16 @@ async function handler(req: Request) {
   // and any user lineups are preserved (they reference contest.id which
   // stays the same).
   if (existing && (force || existing.status === "pending")) {
+    // Count the rows we're about to drop so force-rebuild responses can
+    // prove the stale pool was fully cleared before the new pool was
+    // inserted. Counting before delete is cheap and avoids relying on the
+    // delete RPC's row-count semantics across Postgres clients.
+    const { count: priorRowCount } = await supabase
+      .from("contest_players")
+      .select("player_id", { count: "exact", head: true })
+      .eq("contest_id", existing.id);
+    const deletedContestPlayers = priorRowCount ?? 0;
+
     const { error: delErr } = await supabase
       .from("contest_players")
       .delete()
@@ -308,10 +318,12 @@ async function handler(req: Request) {
 
     return NextResponse.json({
       ...baseResponse,
-      rebuilt:       true,
-      contest:       { ...existing, lineup_lock_at: lineupLockAt },
-      pool_size:     poolRows.length,
-      playing_teams: playingTeams.size,
+      rebuilt:                   true,
+      contest:                   { ...existing, lineup_lock_at: lineupLockAt },
+      pool_size:                 poolRows.length,
+      playing_teams:             playingTeams.size,
+      deleted_contest_players:   deletedContestPlayers,
+      inserted_contest_players:  poolRows.length,
     });
   }
 

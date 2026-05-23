@@ -61,7 +61,7 @@ async function main() {
   // 3. Load contest_players for that contest, enriched with stats-cache team.
   const { data: cp, error: cpErr } = await supabase
     .from("contest_players")
-    .select("player_id")
+    .select("player_id, tier, salary, projected_points")
     .eq("contest_id", contest.id);
   if (cpErr) die(2, `contest_players lookup failed: ${cpErr.message}`);
   if (!cp || cp.length === 0) die(2, `Contest ${contest.id} has no contest_players`);
@@ -83,6 +83,7 @@ async function main() {
   }
 
   // 5. Cross-check every contest player.
+  type CpRow = { player_id: string; tier: number | null; salary: number | null; projected_points: number | null };
   const invalid: {
     player_id: string;
     name:      string;
@@ -91,12 +92,16 @@ async function main() {
     reason:    string;
   }[] = [];
 
-  for (const row of cp) {
+  let staleTeamCount = 0;
+  let noRosterCount  = 0;
+
+  for (const row of cp as CpRow[]) {
     const stats    = statsByPid.get(row.player_id);
     const cacheTeam= stats?.team ? normalizeTeamCode(stats.team) : null;
     const rosterEntry = rosterResult.map.get(row.player_id);
 
     if (!rosterEntry) {
+      noRosterCount++;
       invalid.push({
         player_id: row.player_id,
         name:      stats?.name ?? "(unknown)",
@@ -116,27 +121,63 @@ async function main() {
       });
       continue;
     }
-    // Note: stale stats-cache team is NOT an invalid case — current roster
-    // wins. We just report it as informational.
+    if (cacheTeam && cacheTeam !== "N/A" && cacheTeam !== rosterEntry.current_team) {
+      // Informational — current roster overrides cache for display. Operators
+      // can track how often the cache lags reality.
+      staleTeamCount++;
+    }
   }
 
+  // 6. Tier-violation check: the top-projected players should sit in T1, not T4.
+  // We sort contest_players by projected_points DESC and assert no entry in the
+  // top quartile carries tier=4. Identifies bad/legacy tier assignments that
+  // pre-date the projection-ranked tiering fix.
+  const ranked = [...(cp as CpRow[])]
+    .map((r) => ({ ...r, projected_points: Number(r.projected_points) || 0 }))
+    .sort((a, b) => b.projected_points - a.projected_points);
+  const topQuartileCount = Math.max(1, Math.ceil(ranked.length / 4));
+  const tierViolations = ranked
+    .slice(0, topQuartileCount)
+    .filter((r) => r.tier === 4)
+    .map((r) => ({
+      player_id:        r.player_id,
+      name:             rosterResult.map.get(r.player_id)?.player_name
+                          ?? statsByPid.get(r.player_id)?.name
+                          ?? "(unknown)",
+      projected_points: r.projected_points,
+      tier:             r.tier,
+    }));
+
   const teamsPlayingList = [...playingTeams].sort().join(", ");
-  if (invalid.length === 0) {
-    console.log(`PASS:`);
-    console.log(`${cp.length} contest players checked.`);
-    console.log(`${cp.length}/${cp.length} are on current rosters for ${teamsPlayingList}.`);
-    console.log(`Roster source: ${rosterResult.roster_source_used} (updated_at=${rosterResult.source_updated_at})`);
-    process.exit(0);
-  } else {
-    console.log(`FAIL:`);
-    console.log(`${invalid.length} invalid players found:`);
-    for (const p of invalid) {
-      console.log(`- ${p.name}: contest_team=${p.contest_team}, current_roster_team=${p.current_roster_team}, reason=${p.reason}`);
+  const passed = invalid.length === 0 && tierViolations.length === 0;
+
+  console.log(`Today's teams: ${teamsPlayingList}`);
+  console.log(`Roster source: ${rosterResult.roster_source_used} (updated_at=${rosterResult.source_updated_at})`);
+  console.log(`Contest players checked: ${cp.length}`);
+  console.log(`Invalid roster players: ${invalid.length}`);
+  console.log(`Tier violations: ${tierViolations.length}`);
+  console.log(`Stale team exclusions: ${staleTeamCount}`);
+  console.log(`No-current-roster exclusions: ${noRosterCount}`);
+
+  if (!passed) {
+    console.log("");
+    if (invalid.length > 0) {
+      console.log(`FAIL: ${invalid.length} invalid players:`);
+      for (const p of invalid) {
+        console.log(`- ${p.name}: contest_team=${p.contest_team}, current_roster_team=${p.current_roster_team}, reason=${p.reason}`);
+      }
     }
-    console.log(`Roster source: ${rosterResult.roster_source_used} (updated_at=${rosterResult.source_updated_at})`);
-    console.log(`Today's teams: ${teamsPlayingList}`);
+    if (tierViolations.length > 0) {
+      console.log(`FAIL: ${tierViolations.length} top-quartile players assigned to T4:`);
+      for (const v of tierViolations) {
+        console.log(`- ${v.name}: projected_points=${v.projected_points}, tier=${v.tier}`);
+      }
+    }
     process.exit(1);
   }
+
+  console.log(`PASS`);
+  process.exit(0);
 }
 
 main().catch((err) => die(2, `Unexpected: ${err instanceof Error ? err.stack : String(err)}`));

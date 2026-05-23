@@ -257,12 +257,16 @@ export async function GET(
               const projected   = calcProjectedPoints(fpts, fpts);
               const salary      = calcSalary(projected);
               const rosterEntry = rosterResult.map.get(String(r.player_id));
+              // Strict: gap-fill candidates without a current_roster entry
+              // were already filtered out above (line 230). Keep the guard
+              // here too so the stats-cache team can never sneak in.
+              if (!rosterEntry) continue;
               players.push({
                 player_id:        String(r.player_id),
                 tier:             4,
                 fpts_scored:      null,
-                name:             rosterEntry?.player_name ?? r.name ?? "",
-                team:             rosterEntry?.current_team ?? normalizeTeamCode(r.team),
+                name:             rosterEntry.player_name ?? r.name ?? "",
+                team:             rosterEntry.current_team,
                 position:         getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
                 fpts_avg: Math.round(calcFantasyPoints({
                   pts:  r.pts_avg  || 0,
@@ -301,24 +305,23 @@ export async function GET(
       //   2. team must be in latestActiveTeams (game today)
       //   3. injury must not be "Out"/"Inactive"
       //
-      // If the current-roster source is unavailable, we fall back to
-      // the BDL-games filter (better than blocking the user entirely
-      // on a transient sync failure) but mark the response as degraded.
+      // If the current-roster source is unavailable we do NOT fall back to
+      // player_stats_cache.team — that's exactly the stale source this
+      // gate exists to replace. Instead, return the seeded pool as-is
+      // (which was built under the strict gate at seed time) and flag
+      // `roster_validation_skipped` in the response.
+      const rosterValidationSkipped = !rosterAvailable;
       const filteredPlayers = noConfirmedGames
         ? []
-        : players.filter((p) => {
-            if (rosterAvailable) {
+        : !rosterAvailable
+          ? players.filter((p) => !isOutOrInactive(p.injury_status ?? p.injury))
+          : players.filter((p) => {
               const rosterEntry = rosterResult.map.get(p.player_id);
-              if (!rosterEntry) return false;                          // no_current_roster
+              if (!rosterEntry) return false;                                      // no_current_roster
               if (!latestActiveTeams!.has(rosterEntry.current_team)) return false; // team_not_playing_today
-            } else {
-              const norm = normalizeTeamCode(p.team);
-              if (!norm || norm === "N/A") return false;
-              if (!latestActiveTeams!.has(norm)) return false;
-            }
-            if (isOutOrInactive(p.injury_status ?? p.injury)) return false;
-            return true;
-          });
+              if (isOutOrInactive(p.injury_status ?? p.injury)) return false;
+              return true;
+            });
 
       const removedStaleTeams = seededTeams.filter(
         (t) => t && !latestActiveTeams!.has(normalizeTeamCode(t)),
@@ -334,31 +337,48 @@ export async function GET(
         stats_cache_team:          string | null;
         current_roster_team:       string | null;
         team_used_for_eligibility: string | null;
+        display_team:              string | null;
+        position:                  string | null;
         team_normalized:           string | null;
         game_today:                boolean;
         injury_status:             string | null;
         fpts_avg:                  number;
+        projected_fpts:            number;
+        salary:                    number;
+        rank_overall:              number;
         tier:                      number | null;
+        assigned_tier:             number | null;
         reason_included:           string | null;
         reason_excluded:           string | null;
       };
+
+      // Rank players by projected_points DESC so each trace row carries
+      // the same rank the tier was computed from.
+      const rankedIds = [...players]
+        .sort((a, b) => (b.projected_points ?? 0) - (a.projected_points ?? 0))
+        .map((p) => p.player_id);
+      const rankByPid = new Map<string, number>();
+      rankedIds.forEach((pid, idx) => rankByPid.set(pid, idx + 1));
 
       const trace: Trace[] | undefined = verbose
         ? players.map((p) => {
             const stalePid    = stalePlayersByPid.get(p.player_id) ?? null;
             const rosterEntry = rosterResult.map.get(p.player_id);
             const currentTeam = rosterEntry?.current_team ?? null;
-            const teamUsed    = rosterAvailable ? currentTeam : normalizeTeamCode(p.team);
+            // When current-roster source is unavailable we explicitly do
+            // NOT fall back to stats_cache.team for eligibility — surface
+            // null so debug consumers can see the gap.
+            const teamUsed    = rosterAvailable ? currentTeam : null;
             const out         = isOutOrInactive(p.injury_status ?? p.injury);
             const inActive    = !!(teamUsed && latestActiveTeams!.has(teamUsed));
 
             let reason_excluded: string | null = null;
             let reason_included: string | null = null;
-            if (rosterAvailable && !rosterEntry) reason_excluded = "no_current_roster";
-            else if (!inActive)                  reason_excluded = "team_not_playing_today";
-            else if (out)                        reason_excluded = "out_or_inactive";
+            if (rosterAvailable && !rosterEntry)               reason_excluded = "no_current_roster";
+            else if (rosterAvailable && !inActive)             reason_excluded = "team_not_playing_today";
+            else if (out)                                      reason_excluded = "out_or_inactive";
             else if (stalePid && currentTeam && stalePid !== currentTeam) reason_included = "current_roster_overrides_stale_stats_cache_team";
-            else                                 reason_included = "current_roster_match";
+            else                                               reason_included = "current_roster_match";
 
             return {
               player_id:                 p.player_id,
@@ -366,11 +386,17 @@ export async function GET(
               stats_cache_team:          stalePid,
               current_roster_team:       currentTeam,
               team_used_for_eligibility: teamUsed,
+              display_team:              p.team,
+              position:                  p.position,
               team_normalized:           teamUsed,
               game_today:                inActive,
               injury_status:             p.injury_status ?? p.injury ?? null,
               fpts_avg:                  p.fpts_avg,
+              projected_fpts:            p.projected_points ?? 0,
+              salary:                    p.salary ?? 0,
+              rank_overall:              rankByPid.get(p.player_id) ?? -1,
               tier:                      p.tier ?? null,
+              assigned_tier:             p.tier ?? null,
               reason_included,
               reason_excluded,
             };
@@ -403,6 +429,7 @@ export async function GET(
         players:    filteredPlayers,
         noConfirmedGames,
         roster_source_used: rosterResult.roster_source_used,
+        roster_validation_skipped: rosterValidationSkipped,
         debug,
       });
     }

@@ -407,25 +407,41 @@ export async function buildContestPool(
   const playerIdStrs = eligible.map((r) => String(r.player_id));
   const last5Map     = await computeLastNAverages(supabase, playerIdStrs, contestDate);
 
-  const rows: PoolRow[] = eligible.map((row, idx) => {
+  // Price each eligible player by projected_points (0.6*last5 + 0.4*season).
+  const priced = eligible.map((row) => {
     const seasonAvg = row.fpts_avg;
     const last5     = last5Map.get(String(row.player_id)) ?? seasonAvg;
     const projected = calcProjectedPoints(last5, seasonAvg);
-    const salary    = calcSalary(projected);
-    const tier      = tierFor(idx + 1, eligible.length);
+    return {
+      player_id:        String(row.player_id),
+      seasonAvg,
+      last5,
+      projected,
+      salary:           calcSalary(projected),
+      injury_status:    row.injury,
+    };
+  });
+
+  // Rank by projected_points DESC so tier reflects the projection used
+  // for salary, not the raw season fpts_avg the cache query was sorted by.
+  // Guarantees the top-projected player is T1, not T4.
+  priced.sort((a, b) => b.projected - a.projected);
+
+  const rows: PoolRow[] = priced.map((row, idx) => {
+    const tier = tierFor(idx + 1, priced.length);
 
     // Backfill tier into the trace entry so debug consumers see it.
-    const traceRow = trace.find((t) => t.player_id === String(row.player_id) && !t.reason_excluded);
+    const traceRow = trace.find((t) => t.player_id === row.player_id && !t.reason_excluded);
     if (traceRow) traceRow.tier = tier;
 
     return {
-      player_id:        String(row.player_id),
+      player_id:        row.player_id,
       tier,
-      salary,
-      projected_points: Math.round(projected * 100) / 100,
-      last_5_avg_fp:    Math.round(last5 * 100) / 100,
-      season_avg_fp:    Math.round(seasonAvg * 100) / 100,
-      injury_status:    row.injury,
+      salary:           row.salary,
+      projected_points: Math.round(row.projected * 100) / 100,
+      last_5_avg_fp:    Math.round(row.last5 * 100) / 100,
+      season_avg_fp:    Math.round(row.seasonAvg * 100) / 100,
+      injury_status:    row.injury_status,
       is_available:     true,
     };
   });
