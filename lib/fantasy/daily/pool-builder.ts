@@ -34,6 +34,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcProjectedPoints, calcSalary } from "./salary";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
+import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 import type { CurrentRosterEntry } from "@/lib/nba/current-roster";
 
 export type PoolRow = {
@@ -45,6 +46,15 @@ export type PoolRow = {
   season_avg_fp:    number;
   injury_status:    string | null;
   is_available:     boolean;
+  // ── Contest snapshot (migration 043) ──────────────────────────
+  // Frozen at build time so every read endpoint shares ONE source of
+  // truth. `team` is the authoritative current-roster team, NOT the
+  // (possibly stale) player_stats_cache.team.
+  display_name:        string;
+  team:                string;
+  position:            string;
+  roster_source:       string | null;
+  roster_validated_at: string | null;
 };
 
 export type ExcludedReason =
@@ -280,7 +290,7 @@ export async function buildContestPool(
 
   const { data: cacheRows, error } = await supabase
     .from("player_stats_cache")
-    .select("player_id, name, fpts_avg, injury, team")
+    .select("player_id, name, fpts_avg, injury, team, position")
     .in("player_id", allowlistPlayerIds.length > 0 ? allowlistPlayerIds : [-1])
     .order("fpts_avg", { ascending: false });
 
@@ -294,7 +304,14 @@ export async function buildContestPool(
 
   // ── Build per-player trace + filter ─────────────────────────────────
   const trace: PerPlayerTrace[] = [];
-  const eligible: { player_id: number; name: string; current_team: string; injury: string | null; fpts_avg: number }[] = [];
+  const eligible: {
+    player_id:    number;
+    name:         string;
+    current_team: string;
+    position:     string;
+    injury:       string | null;
+    fpts_avg:     number;
+  }[] = [];
 
   // Track which roster-allowlist players don't show up in the stats cache
   // — they're excluded as "missing_projection" so operators can see them.
@@ -365,10 +382,15 @@ export async function buildContestPool(
     });
 
     if (!reason_excluded) {
+      // display_name: prefer the stats-cache name (what the build page has
+      // always shown) so the persisted snapshot matches the existing
+      // baseline; fall back to the current-roster name.
+      const displayName = r.name || rosterEntry?.player_name || "";
       eligible.push({
         player_id:    r.player_id,
-        name:         rosterEntry?.player_name ?? r.name ?? "",
+        name:         displayName,
         current_team: rosterEntry!.current_team,
+        position:     getCanonicalPlayerPosition(displayName, r.position ?? "N/A"),
         injury:       r.injury ?? null,
         fpts_avg:     fptsAvg,
       });
@@ -419,6 +441,9 @@ export async function buildContestPool(
       projected,
       salary:           calcSalary(projected),
       injury_status:    row.injury,
+      display_name:     row.name,
+      team:             row.current_team,
+      position:         row.position,
     };
   });
 
@@ -443,6 +468,12 @@ export async function buildContestPool(
       season_avg_fp:    Math.round(row.seasonAvg * 100) / 100,
       injury_status:    row.injury_status,
       is_available:     true,
+      // ── Contest snapshot (migration 043) ──────────────────────
+      display_name:        row.display_name,
+      team:                row.team,
+      position:            row.position,
+      roster_source:       rosterMeta?.roster_source_used ?? null,
+      roster_validated_at: rosterMeta?.source_updated_at  ?? null,
     };
   });
 

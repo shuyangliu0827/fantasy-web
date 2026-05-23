@@ -80,6 +80,8 @@ import { getAuthUserId } from "@/lib/fantasy/daily/auth";
 import { isEligibleForContestSlot, SLOT_LABEL } from "@/lib/fantasy/daily/positions";
 import { getCanonicalPlayerPosition } from "@/lib/players/metadata";
 import { SALARY_CAP, ROSTER_SIZE } from "@/lib/fantasy/daily/salary";
+import { getContestSnapshot, buildSnapshotDebugRow } from "@/lib/fantasy/daily/contest-snapshot";
+import { normalizeTeamCode } from "@/lib/shared/i18n";
 
 function db() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -155,44 +157,63 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const playerIds = (lineupPlayers ?? []).map((p: any) => String(p.player_id));
+  const debug = new URL(req.url).searchParams.get("debug") === "1";
 
-  // Fetch salary from contest_players and name/team/position from player_stats_cache.
-  const [cpRes, pscRes] = await Promise.all([
-    playerIds.length
-      ? supabase
-          .from("contest_players")
-          .select("player_id, salary")
-          .eq("contest_id", id)
-          .in("player_id", playerIds)
-      : Promise.resolve({ data: [], error: null }),
-    playerIds.length
-      ? supabase
-          .from("player_stats_cache")
-          .select("player_id, name, team, position")
-          .in("player_id", playerIds.map((p) => parseInt(p, 10)))
-      : Promise.resolve({ data: [], error: null }),
-  ]);
+  // ── Read the contest snapshot — the ONE source of truth for team / name /
+  // position / tier / salary. player_stats_cache is NOT consulted for any of
+  // these (its team is the season-stats team and can be stale post-trade).
+  const { map: snapshotMap, snapshot_available } = await getContestSnapshot(supabase, id);
 
-  const salaryMap = new Map<string, number>(
-    ((cpRes.data as any[]) ?? []).map((r) => [String(r.player_id), r.salary]),
-  );
-  const metaMap = new Map<string, { name: string; team: string; position: string }>(
-    ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
-  );
+  // stats_cache_team is fetched only for the debug comparison view so an
+  // operator can confirm the snapshot diverges from the stale source.
+  const statsCacheTeamMap = new Map<string, string>();
+  if (debug && playerIds.length) {
+    const { data: pscRows } = await supabase
+      .from("player_stats_cache")
+      .select("player_id, team")
+      .in("player_id", playerIds.map((p) => parseInt(p, 10)).filter(Number.isFinite));
+    for (const r of (pscRows as any[]) ?? []) {
+      statsCacheTeamMap.set(String(r.player_id), normalizeTeamCode(r.team));
+    }
+  }
 
+  let anyInvalid = false;
   const enrichedPlayers = (lineupPlayers ?? []).map((p: any) => {
-    const meta = metaMap.get(String(p.player_id));
+    const snap = snapshotMap.get(String(p.player_id));
+    // A lineup player missing from contest_players is invalid for this
+    // contest — the pool was rebuilt and no longer contains them.
+    const invalid = !snap;
+    if (invalid) anyInvalid = true;
     return {
       slot:                   p.slot,
       slot_label:             SLOT_LABEL[p.slot as number] ?? String(p.slot),
       player_id:              p.player_id,
-      name:                   meta?.name    ?? "",
-      team:                   meta?.team    ?? "",
-      position:               meta?.position ?? "",
-      salary:                 salaryMap.get(String(p.player_id)) ?? 0,
+      name:                   snap?.display_name ?? "",
+      team:                   snap?.team         ?? "",
+      position:               snap?.position     ?? "",
+      tier:                   snap?.tier         ?? null,
+      salary:                 snap?.salary       ?? 0,
+      projected_points:       snap?.projected_points ?? 0,
       actual_fantasy_points:  p.actual_fantasy_points ?? null,
+      invalid,
     };
   });
+
+  const debugBlock = debug
+    ? {
+        snapshot_available,
+        lineup_valid: !anyInvalid,
+        players: enrichedPlayers.map((p: any) => {
+          const snap = snapshotMap.get(String(p.player_id));
+          if (!snap) {
+            return { player_id: p.player_id, name: p.name, display_team_source: "not_in_contest_players" };
+          }
+          return buildSnapshotDebugRow(snap, {
+            stats_cache_team: statsCacheTeamMap.get(p.player_id) ?? null,
+          });
+        }),
+      }
+    : undefined;
 
   return NextResponse.json({
     lineup_id:      lineup.id,
@@ -205,7 +226,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     rank:           lineup.rank          ?? null,
     points_awarded: lineup.points_awarded ?? 0,
     submitted_at:   lineup.submitted_at  ?? null,
+    lineup_valid:   !anyInvalid,
     players:        enrichedPlayers,
+    ...(debugBlock ? { debug: debugBlock } : {}),
   });
 }
 
@@ -302,26 +325,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   // ── Position-slot eligibility ─────────────────────────────
-  // Fetch position strings from player_stats_cache.
-  // contest_players.player_id is TEXT = String(bdl_int); cast to integer for this join.
-  const intIds = playerIds.map((id) => parseInt(id, 10));
-  const { data: posRows, error: posErr } = await supabase
-    .from("player_stats_cache")
-    .select("player_id, name, position")
-    .in("player_id", intIds);
+  // Position comes from the contest snapshot (contest_players.position, the
+  // canonical position frozen at build time) so slot-eligibility matches what
+  // the build/my-lineup pages display. player_stats_cache is only a fallback
+  // for legacy rows whose snapshot predates migration 043.
+  const { map: snapshotMap } = await getContestSnapshot(supabase, id);
+  const posMap = new Map<string, string>();
+  for (const pid of playerIds) {
+    const snap = snapshotMap.get(pid);
+    if (snap?.position) posMap.set(pid, snap.position);
+  }
 
-  if (posErr) return NextResponse.json({ error: posErr.message }, { status: 500 });
-
-  // Build TEXT-keyed map so lookup matches contest_players.player_id format.
-  // Normalize via getCanonicalPlayerPosition — same as nba-stats read path — so
-  // raw BDL values in the DB ("G", "F-G", etc.) resolve to canonical before
-  // being passed to isEligibleForContestSlot.
-  const posMap = new Map<string, string>(
-    (posRows ?? []).map((r) => [
-      String(r.player_id),
-      getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
-    ]),
-  );
+  const missingPos = playerIds.filter((pid) => !posMap.has(pid));
+  if (missingPos.length > 0) {
+    const { data: posRows, error: posErr } = await supabase
+      .from("player_stats_cache")
+      .select("player_id, name, position")
+      .in("player_id", missingPos.map((id) => parseInt(id, 10)).filter(Number.isFinite));
+    if (posErr) return NextResponse.json({ error: posErr.message }, { status: 500 });
+    for (const r of posRows ?? []) {
+      posMap.set(String(r.player_id), getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"));
+    }
+  }
 
   for (const pick of players) {
     const position = posMap.get(pick.player_id) ?? "N/A";
