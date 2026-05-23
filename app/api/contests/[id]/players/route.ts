@@ -54,6 +54,7 @@ import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 import { getCurrentRosterForTeams } from "@/lib/nba/current-roster";
 import { isOutOrInactive } from "@/lib/fantasy/daily/pool-builder";
+import { getContestSnapshot } from "@/lib/fantasy/daily/contest-snapshot";
 
 function db() {
   return createClient(
@@ -79,22 +80,20 @@ export async function GET(
   if (contestErr) return NextResponse.json({ error: contestErr.message }, { status: 500 });
   if (!contest)   return NextResponse.json({ error: "contest_not_found" }, { status: 404 });
 
-  // Fetch pool rows. Salary-related fields come from migration 025; tier
-  // is retained as a display/filter aid (no longer enforced).
-  const { data: pool, error: poolErr } = await supabase
-    .from("contest_players")
-    .select("player_id, tier, fpts_scored, salary, projected_points, last_5_avg_fp, season_avg_fp, injury_status, is_available")
-    .eq("contest_id", id)
-    .order("salary", { ascending: false });
+  // Read the contest snapshot — the ONE source of truth for team / name /
+  // position / tier / salary / projection (migration 043). Reads through the
+  // shared helper so a stale deploy (migration not yet applied) degrades
+  // gracefully instead of 500-ing this baseline page.
+  const { rows: pool, snapshot_available, error: poolErr } = await getContestSnapshot(supabase, id);
 
-  if (poolErr) return NextResponse.json({ error: poolErr.message }, { status: 500 });
+  if (poolErr) return NextResponse.json({ error: poolErr }, { status: 500 });
   if (!pool || pool.length === 0) {
     return NextResponse.json({ contest_id: id, status: contest.status, players: [] });
   }
 
-  // Enrich with display metadata from player_stats_cache.
-  // contest_players.player_id is TEXT ("123"); player_stats_cache.player_id is INTEGER.
-  // Cast TEXT → integer for the IN query.
+  // player_stats_cache is consulted ONLY for stats (fpts_avg) and live injury —
+  // never for the current team. contest_players.player_id is TEXT ("123");
+  // player_stats_cache.player_id is INTEGER. Cast TEXT → integer for the IN query.
   const intIds = pool.map((r) => parseInt(r.player_id, 10)).filter(Number.isFinite);
 
   // Select all 11 per-game average columns so fpts_avg is computed at
@@ -114,15 +113,18 @@ export async function GET(
   const players = pool.map((cp) => {
     const intId = parseInt(cp.player_id, 10);
     const meta  = statsMap.get(intId);
-    const projected = Number(cp.projected_points) || 0;
-    const salary    = Number(cp.salary) || 0;
+    const projected = cp.projected_points;
+    const salary    = cp.salary;
     return {
       player_id:        cp.player_id,           // TEXT — consistent with rest of contest system
       tier:             cp.tier,
       fpts_scored:      cp.fpts_scored ?? null, // null until scoring job runs
-      name:             meta?.name     ?? "",
-      team:             meta?.team     ?? "",
-      position:         getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
+      // Display fields from the contest snapshot. player_stats_cache is a
+      // legacy fallback only (pre-043 rows), and its team is NEVER used —
+      // the current-roster override below is the authoritative team source.
+      name:             cp.display_name || meta?.name || "",
+      team:             cp.team || meta?.team || "",
+      position:         cp.position || getCanonicalPlayerPosition(meta?.name ?? "", meta?.position ?? "N/A"),
       // Compute fpts_avg from the 11 avg stat fields, matching the nba-stats
       // read path exactly (same calcFantasyPoints call, same ESPN_DEFAULT_WEIGHTS).
       fpts_avg: meta ? Math.round(calcFantasyPoints({
@@ -137,13 +139,13 @@ export async function GET(
         stl:  meta.stl_avg  || 0,
         blk:  meta.blk_avg  || 0,
         tov:  meta.tov_avg  || 0,
-      }) * 10) / 10 : 0,
+      }) * 10) / 10 : (cp.season_avg_fp || 0),
       injury:           meta?.injury ?? null,
       // Salary-cap fields populated by migration 025 + contest-pool-builder.
       salary,
       projected_points: projected,
-      last_5_avg_fp:    Number(cp.last_5_avg_fp) || 0,
-      season_avg_fp:    Number(cp.season_avg_fp) || 0,
+      last_5_avg_fp:    cp.last_5_avg_fp,
+      season_avg_fp:    cp.season_avg_fp,
       value:            Math.round(calcValue(projected, salary) * 100) / 100,
       injury_status:    meta?.injury ?? cp.injury_status ?? null,
       // is_available: override the frozen seed-time snapshot with the live
@@ -152,6 +154,10 @@ export async function GET(
       // read time.  A player whose injury starts with "out"/"inactive"
       // (case-insensitive) is marked unavailable regardless of what was seeded.
       is_available: !isOutOrInactive(meta?.injury),
+      // Snapshot provenance — surfaced in ?debug=1 output only.
+      roster_source:       cp.roster_source,
+      roster_validated_at: cp.roster_validated_at,
+      contest_snapshot_team: cp.team || null,
     };
   });
 
@@ -235,6 +241,7 @@ export async function GET(
               const fpts      = Number(r.fpts_avg) || 0;
               const projected = calcProjectedPoints(fpts, fpts);
               const salary    = calcSalary(projected);
+              const rosterEntry = rosterResult.map.get(String(r.player_id));
               return {
                 contest_id:       id,
                 player_id:        String(r.player_id),
@@ -245,6 +252,13 @@ export async function GET(
                 season_avg_fp:    Math.round(fpts * 100) / 100,
                 injury_status:    null,
                 is_available:     true,
+                // Persist the snapshot so other endpoints read the same team —
+                // team is the authoritative current-roster team, never psc.team.
+                display_name:        r.name || rosterEntry?.player_name || "",
+                team:                rosterEntry?.current_team ?? "",
+                position:            getCanonicalPlayerPosition(r.name ?? "", r.position ?? "N/A"),
+                roster_source:       rosterResult.roster_source_used,
+                roster_validated_at: rosterResult.source_updated_at,
               };
             });
 
@@ -289,6 +303,9 @@ export async function GET(
                 value:            Math.round(calcValue(projected, salary) * 100) / 100,
                 injury_status:    r.injury ?? null,
                 is_available:     true,
+                roster_source:       rosterResult.roster_source_used,
+                roster_validated_at: rosterResult.source_updated_at,
+                contest_snapshot_team: rosterEntry.current_team,
               });
               stalePlayersByPid.set(String(r.player_id), normalizeTeamCode(r.team));
             }
@@ -334,10 +351,20 @@ export async function GET(
       type Trace = {
         player_id:                 string;
         name:                      string;
+        // ── Source-comparison fields (daily-contest consistency spec) ──
+        contest_snapshot_team:     string | null;
+        display_team:              string | null;
+        display_team_source:       string;
         stats_cache_team:          string | null;
+        player_profile_team:       string | null;
+        contest_snapshot_tier:     number | null;
+        display_tier:              number | null;
+        display_tier_source:       string;
+        roster_source:             string | null;
+        roster_validated_at:       string | null;
+        // ── Eligibility trace ──────────────────────────────────────────
         current_roster_team:       string | null;
         team_used_for_eligibility: string | null;
-        display_team:              string | null;
         position:                  string | null;
         team_normalized:           string | null;
         game_today:                boolean;
@@ -380,13 +407,26 @@ export async function GET(
             else if (stalePid && currentTeam && stalePid !== currentTeam) reason_included = "current_roster_overrides_stale_stats_cache_team";
             else                                               reason_included = "current_roster_match";
 
+            const snapshotTeam = (p as any).contest_snapshot_team ?? null;
             return {
               player_id:                 p.player_id,
               name:                      p.name,
+              contest_snapshot_team:     snapshotTeam,
+              display_team:              p.team,
+              // The displayed team comes from the snapshot when present; the
+              // current-roster override is the authoritative live correction.
+              display_team_source:       snapshotTeam
+                                           ? "contest_players"
+                                           : (currentTeam ? "current_roster_override" : "missing_snapshot"),
               stats_cache_team:          stalePid,
+              player_profile_team:       null, // no separate NBA profile table
+              contest_snapshot_tier:     p.tier ?? null,
+              display_tier:              p.tier ?? null,
+              display_tier_source:       p.tier != null ? "contest_players" : "missing_snapshot",
+              roster_source:             (p as any).roster_source ?? rosterResult.roster_source_used,
+              roster_validated_at:       (p as any).roster_validated_at ?? rosterResult.source_updated_at,
               current_roster_team:       currentTeam,
               team_used_for_eligibility: teamUsed,
-              display_team:              p.team,
               position:                  p.position,
               team_normalized:           teamUsed,
               game_today:                inActive,
@@ -405,6 +445,7 @@ export async function GET(
 
       const debug = {
         contestDate,
+        snapshot_available,
         roster_source_used:         rosterResult.roster_source_used,
         roster_source_updated_at:   rosterResult.source_updated_at,
         roster_sync_attempted:      rosterResult.sync_attempted,

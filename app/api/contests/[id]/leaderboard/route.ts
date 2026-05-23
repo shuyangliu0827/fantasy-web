@@ -51,6 +51,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getContestSnapshot } from "@/lib/fantasy/daily/contest-snapshot";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT     = 100;
@@ -120,43 +121,37 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   // After lock: enrich each entry with player details so the UI can show lineups.
+  // All display fields (team / name / position / tier / salary) come from the
+  // contest snapshot (contest_players) — never player_stats_cache, whose team
+  // is the stale season-stats team.
   let playersByLineup: Map<string, any[]> = new Map();
   if (isLocked && entries && entries.length > 0) {
     const lineupIds = (entries as any[]).map((e) => e.id);
 
-    const [lpRes, cpRes, pscRes] = await Promise.all([
+    const [lpRes, snapshot] = await Promise.all([
       supabase
         .from("user_lineup_players")
         .select("lineup_id, slot, player_id, actual_fantasy_points")
         .in("lineup_id", lineupIds),
-      supabase
-        .from("contest_players")
-        .select("player_id, salary")
-        .eq("contest_id", id),
-      // player_stats_cache uses integer player_id; contest_players uses text.
-      supabase
-        .from("player_stats_cache")
-        .select("player_id, name, position"),
+      getContestSnapshot(supabase, id),
     ]);
 
-    const salaryMap = new Map<string, number>(
-      ((cpRes.data as any[]) ?? []).map((r) => [String(r.player_id), r.salary]),
-    );
-    const nameMap = new Map<string, { name: string; position: string }>(
-      ((pscRes.data as any[]) ?? []).map((r) => [String(r.player_id), r]),
-    );
+    const snapshotMap = snapshot.map;
 
     for (const lp of (lpRes.data as any[] ?? [])) {
-      const meta = nameMap.get(String(lp.player_id));
+      const snap = snapshotMap.get(String(lp.player_id));
       const slot_labels: Record<number, string> = { 1: "PG", 2: "SG", 3: "SF", 4: "PF", 5: "C" };
       const row = {
         slot:                  lp.slot,
         slot_label:            slot_labels[lp.slot as number] ?? String(lp.slot),
         player_id:             lp.player_id,
-        name:                  meta?.name     ?? "",
-        position:              meta?.position ?? "",
-        salary:                salaryMap.get(String(lp.player_id)) ?? 0,
+        name:                  snap?.display_name ?? "",
+        team:                  snap?.team         ?? "",
+        position:              snap?.position     ?? "",
+        tier:                  snap?.tier         ?? null,
+        salary:                snap?.salary       ?? 0,
         actual_fantasy_points: lp.actual_fantasy_points ?? null,
+        invalid:               !snap,
       };
       if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
       playersByLineup.get(lp.lineup_id)!.push(row);

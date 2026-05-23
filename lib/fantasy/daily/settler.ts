@@ -131,6 +131,22 @@ export async function settleContest(
 
   const allPlayerIds = [...new Set((lineupPlayers as any[] ?? []).map((p) => String(p.player_id)))];
 
+  // ── 4b. Validity gate: only score players that are in this contest's pool ──
+  // A lineup player missing from contest_players (e.g. the pool was rebuilt and
+  // no longer contains them) is invalid for this contest and must not
+  // contribute fantasy points. This keeps settlement aligned with the contest
+  // snapshot that build / my-lineup / leaderboard display.
+  const validPlayerIds = new Set<string>();
+  if (allPlayerIds.length > 0) {
+    const { data: cpRows, error: cpErr } = await svcDb
+      .from("contest_players")
+      .select("player_id")
+      .eq("contest_id", contestId)
+      .in("player_id", allPlayerIds);
+    if (cpErr) { result.errors.push(`contest_players: ${cpErr.message}`); return result; }
+    for (const r of (cpRows as any[] ?? [])) validPlayerIds.add(String(r.player_id));
+  }
+
   // ── 5. Read fpts from player_day_stats ────────────────────────────────
   const { data: dayStats, error: dsErr } = await svcDb
     .from("player_day_stats")
@@ -149,12 +165,14 @@ export async function settleContest(
   type LPRow = { id: string; player_id: string; actual_fpts: number | null; fpts_for_total: number };
   const playersByLineup = new Map<string, LPRow[]>();
   for (const lp of (lineupPlayers as any[] ?? [])) {
-    const actual_fpts = fptsMap.has(String(lp.player_id))
-      ? fptsMap.get(String(lp.player_id))!
-      : null;
+    const pid = String(lp.player_id);
+    // Invalid players (not in contest_players for this contest) score null and
+    // contribute 0 to the lineup total.
+    const isValid = validPlayerIds.has(pid);
+    const actual_fpts = isValid && fptsMap.has(pid) ? fptsMap.get(pid)! : null;
     if (!playersByLineup.has(lp.lineup_id)) playersByLineup.set(lp.lineup_id, []);
     playersByLineup.get(lp.lineup_id)!.push({
-      id: lp.id, player_id: lp.player_id,
+      id: lp.id, player_id: pid,
       actual_fpts,
       fpts_for_total: actual_fpts ?? 0,
     });

@@ -50,12 +50,14 @@ type Player = {
   name: string;
   position: string;
   team: string;
+  tier?: number | null;
   salary: number;
   actual_fantasy_points: number | null;
   live_fpts: number | null;
   box_score: BoxScore | null;
   opponent: string | null;
   game_status: string | null;
+  invalid?: boolean;
 };
 
 type LineupEntry = {
@@ -619,8 +621,10 @@ function MyLineupContent() {
                                         }}>
                                           {getPlayerDisplayName({ name: p.name || p.player_id }, lang) || p.player_id}
                                         </div>
-                                        <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                                          {p.position}{p.team ? ` · ${p.team}` : ""}
+                                        <div style={{ fontSize: 10, color: p.invalid ? "#dc2626" : "#9ca3af" }}>
+                                          {p.invalid
+                                            ? t("阵容已过期，请重新提交", "Lineup outdated — please resubmit")
+                                            : `${p.position}${p.team ? ` · ${p.team}` : ""}`}
                                         </div>
                                       </div>
                                     </div>

@@ -26,7 +26,9 @@ function fmtFpts(n: number | null) { return n != null ? n.toFixed(1) : "—"; }
 type Player = {
   slot: number; slot_label: string; player_id: string;
   name: string; position: string; salary: number;
+  team?: string; tier?: number | null;
   actual_fantasy_points: number | null;
+  invalid?: boolean;
 };
 type Entry = {
   rank: number | null; user_id: string; username: string;
@@ -245,7 +247,7 @@ function PlayerDetailPanel({
                 {getPlayerDisplayName(p, lang as "zh" | "en")}
               </div>
               <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 6 }}>
-                ${(p.salary / 1000).toFixed(0)}K
+                {p.team ? `${p.team} · ` : ""}${(p.salary / 1000).toFixed(0)}K
               </div>
               <div style={{ fontSize: 15, fontWeight: 800, color: fptsColor }}>
                 {scored ? fmtFpts(fpts) : "—"}
@@ -689,7 +691,7 @@ function LeaderboardContent() {
               players: (myEntry.players ?? []).map((p: Player) => ({
                 slotLabel: p.slot_label,
                 name: p.name,
-                team: "",
+                team: p.team ?? "",
                 position: p.position ?? "",
                 actualPoints: p.actual_fantasy_points,
               })),
