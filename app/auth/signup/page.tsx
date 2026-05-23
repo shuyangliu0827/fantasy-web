@@ -334,9 +334,11 @@ export default function SignupPage() {
               <div style={{ flex: 1, height: 1, background: "#e5e7eb" }} />
             </div>
 
-            {/* WeChat */}
+            {/* WeChat (coming soon) */}
             <button
               type="button"
+              disabled
+              aria-disabled="true"
               style={{
                 width: "100%",
                 padding: "12px",
@@ -346,19 +348,20 @@ export default function SignupPage() {
                 background: "#fff",
                 border: "1.5px solid #e5e7eb",
                 borderRadius: 10,
-                cursor: "pointer",
+                cursor: "not-allowed",
+                opacity: 0.6,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
-                transition: "border-color 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#d1d5db")}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e5e7eb")}
             >
               <span style={{ fontSize: 18 }}></span>
-              {t("使用微信快速注册", "Sign up with WeChat")}
+              {t("微信一键登录即将上线", "WeChat login coming soon")}
             </button>
+            <p style={{ textAlign: "center", fontSize: 12, color: "#9ca3af", margin: "-4px 0 0" }}>
+              {t("目前请先使用邮箱注册/登录", "Please use email sign-up/login for now.")}
+            </p>
 
             {/* Login link */}
             <p style={{ textAlign: "center", fontSize: 14, color: "#6b7280", margin: 0 }}>
