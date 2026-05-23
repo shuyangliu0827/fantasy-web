@@ -1,0 +1,38 @@
+name: Deploy Preview to Tencent Cloud
+
+on:
+  push:
+    branches:
+      - PREVIEW
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy preview via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.TENCENT_HOST }}
+          username: ${{ secrets.TENCENT_USER }}
+          key: ${{ secrets.TENCENT_SSH_KEY }}
+          port: ${{ secrets.TENCENT_PORT }}
+          script: |
+            set -e
+
+            cd ~/fantasy-web-preview
+
+            echo "Fetching latest PREVIEW branch..."
+            git fetch origin PREVIEW
+            git reset --hard origin/PREVIEW
+
+            echo "Installing dependencies..."
+            npm install
+
+            echo "Building Next.js preview..."
+            npm run build
+
+            echo "Reloading PM2 preview app..."
+            PORT=3001 pm2 reload blueprint-fantasy-preview --update-env
+
+            echo "Preview deployment completed."
