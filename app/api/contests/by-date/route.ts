@@ -32,6 +32,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 import { buildContestPool } from "@/lib/fantasy/daily/pool-builder";
+import { getCurrentRosterForTeams } from "@/lib/nba/current-roster";
 
 const FALLBACK_LOCK_SUFFIX = "T23:00:00Z";
 const MAX_DAYS_AHEAD = 14;
@@ -114,23 +115,60 @@ export async function GET(req: Request) {
   }
 
   // 4. Build a fully-priced provisional player pool via the shared builder
-  //    (last-5 fpts averages → projected_points → salary curve + tier).
-  const poolRows = await buildContestPool(supabase, date, playingTeams);
-  if (poolRows && poolRows.length > 0) {
+  //    (last-5 fpts averages → projected_points → salary curve + tier),
+  //    gated by the authoritative current-roster source.
+  const rosterResult = await getCurrentRosterForTeams(supabase, playingTeams);
+  if (rosterResult.roster_source_used === "unavailable") {
+    return NextResponse.json(
+      {
+        error:               "Current roster validation failed; contest pool not rebuilt.",
+        contest:             created,
+        roster_source_used:  rosterResult.roster_source_used,
+        sync_error:          rosterResult.sync_error,
+      },
+      { status: 503 },
+    );
+  }
+
+  const { rows: poolRows, diagnostics } = await buildContestPool(supabase, date, playingTeams, {
+    currentRosterMap: rosterResult.map,
+    rosterMeta: {
+      roster_source_used: rosterResult.roster_source_used,
+      source_updated_at:  rosterResult.source_updated_at,
+      sync_attempted:     rosterResult.sync_attempted,
+      sync_error:         rosterResult.sync_error,
+      rows_by_team:       rosterResult.rows_by_team,
+    },
+  });
+
+  if (poolRows.length > 0) {
     const { error: cpErr } = await supabase
       .from("contest_players")
       .insert(poolRows.map((row) => ({ ...row, contest_id: created.id })));
 
-    // Surface insert failures so a schema mismatch / missing migration
-    // doesn't silently leave a contest with an empty pool. The contest row
-    // already exists at this point — caller can retry or rebuild.
     if (cpErr) {
       return NextResponse.json(
-        { error: `pool_insert_failed: ${cpErr.message}`, contest: created },
+        { error: `pool_insert_failed: ${cpErr.message}`, contest: created, diagnostics },
         { status: 500 },
       );
     }
   }
 
-  return NextResponse.json({ contest: created });
+  // per_player_trace is omitted from this endpoint's response (no debug flag).
+  const { per_player_trace: _omit, ...diagSummary } = diagnostics;
+  void _omit;
+
+  return NextResponse.json({
+    contest:                          created,
+    contest_date:                     date,
+    games_found:                      playingTeams.size,
+    teams_playing_today:              [...playingTeams].sort(),
+    roster_source_used:               diagnostics.roster_source_used,
+    roster_players_loaded_total:      diagnostics.roster_players_loaded_total,
+    included_players_count:           diagnostics.included_players_count,
+    excluded_stale_team_count:        diagnostics.excluded_stale_team_count,
+    excluded_no_current_roster_count: diagnostics.excluded_no_current_roster_count,
+    contest_players_inserted:         poolRows.length,
+    diagnostics:                      diagSummary,
+  });
 }
