@@ -189,16 +189,43 @@ async function handler(req: Request) {
   }
 
   // ── 3. Build a fully-priced pool via the shared builder ──────
-  const poolRows = await buildContestPool(supabase, today, playingTeams);
-  if (poolRows === null) {
-    return NextResponse.json({ error: "failed to read player_stats_cache" }, { status: 500 });
+  const { rows: poolRows, diagnostics } = await buildContestPool(supabase, today, playingTeams);
+  if (diagnostics.cache_query_error) {
+    return NextResponse.json(
+      { error: "failed to read player_stats_cache", details: diagnostics.cache_query_error, diagnostics },
+      { status: 500 },
+    );
   }
   if (poolRows.length === 0) {
     return NextResponse.json(
-      { error: "player pool is empty — run /api/nba-stats first to populate player_stats_cache" },
+      {
+        error:       "player pool is empty — no eligible players for today's slate",
+        contest_date: today,
+        diagnostics,
+      },
       { status: 422 },
     );
   }
+
+  // Defensive minimum: a daily lineup is 5 players; warn (but don't fail)
+  // when fewer than 10 are eligible so an operator can spot the issue.
+  const MIN_POOL = 10;
+  const warning  = poolRows.length < MIN_POOL
+    ? `only ${poolRows.length} eligible players — below the recommended minimum of ${MIN_POOL}`
+    : null;
+
+  const baseResponse = {
+    contest_date: today,
+    games_found:  playingTeams.size,
+    teams_playing_today: [...playingTeams].sort(),
+    eligible_players_before_filter: diagnostics.cache_rows_total,
+    eligible_players_after_team_filter:   diagnostics.eligible_after_team_filter,
+    eligible_players_after_injury_filter: diagnostics.eligible_after_injury_filter,
+    contest_players_inserted: poolRows.length,
+    lock_source:  lockSource,
+    diagnostics,
+    warning,
+  };
 
   // ── Force-rebuild path ────────────────────────────────────────
   // Drop existing contest_players and replace them. The contest header
@@ -210,13 +237,13 @@ async function handler(req: Request) {
       .delete()
       .eq("contest_id", existing.id);
 
-    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+    if (delErr) return NextResponse.json({ error: delErr.message, diagnostics }, { status: 500 });
 
     const { error: insErr } = await supabase
       .from("contest_players")
       .insert(poolRows.map((row) => ({ ...row, contest_id: existing.id })));
 
-    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+    if (insErr) return NextResponse.json({ error: insErr.message, diagnostics }, { status: 500 });
 
     // Update lineup_lock_at with the real BDL tip-off time.
     // Also flip status to "open" when upgrading a seed-upcoming pending stub.
@@ -227,12 +254,17 @@ async function handler(req: Request) {
       .update(headerUpdate)
       .eq("id", existing.id);
 
+    console.log("[create-today] rebuilt", {
+      contest_id: existing.id,
+      ...baseResponse,
+    });
+
     return NextResponse.json({
+      ...baseResponse,
       rebuilt:       true,
       contest:       { ...existing, lineup_lock_at: lineupLockAt },
       pool_size:     poolRows.length,
       playing_teams: playingTeams.size,
-      lock_source:   lockSource,
     });
   }
 
@@ -243,20 +275,25 @@ async function handler(req: Request) {
     .select("id, date, status, lineup_lock_at")
     .single();
 
-  if (contestErr) return NextResponse.json({ error: contestErr.message }, { status: 500 });
+  if (contestErr) return NextResponse.json({ error: contestErr.message, diagnostics }, { status: 500 });
 
   const { error: cpErr } = await supabase
     .from("contest_players")
     .insert(poolRows.map((row) => ({ ...row, contest_id: contest.id })));
 
-  if (cpErr) return NextResponse.json({ error: cpErr.message }, { status: 500 });
+  if (cpErr) return NextResponse.json({ error: cpErr.message, diagnostics }, { status: 500 });
+
+  console.log("[create-today] created", {
+    contest_id: contest.id,
+    ...baseResponse,
+  });
 
   return NextResponse.json({
+    ...baseResponse,
     created:       true,
     contest,
     pool_size:     poolRows.length,
     playing_teams: playingTeams.size,
-    lock_source:   lockSource,
   });
 }
 

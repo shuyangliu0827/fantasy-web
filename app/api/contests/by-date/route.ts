@@ -115,8 +115,8 @@ export async function GET(req: Request) {
 
   // 4. Build a fully-priced provisional player pool via the shared builder
   //    (last-5 fpts averages → projected_points → salary curve + tier).
-  const poolRows = await buildContestPool(supabase, date, playingTeams);
-  if (poolRows && poolRows.length > 0) {
+  const { rows: poolRows, diagnostics } = await buildContestPool(supabase, date, playingTeams);
+  if (poolRows.length > 0) {
     const { error: cpErr } = await supabase
       .from("contest_players")
       .insert(poolRows.map((row) => ({ ...row, contest_id: created.id })));
@@ -126,11 +126,21 @@ export async function GET(req: Request) {
     // already exists at this point — caller can retry or rebuild.
     if (cpErr) {
       return NextResponse.json(
-        { error: `pool_insert_failed: ${cpErr.message}`, contest: created },
+        { error: `pool_insert_failed: ${cpErr.message}`, contest: created, diagnostics },
         { status: 500 },
       );
     }
   }
 
-  return NextResponse.json({ contest: created });
+  return NextResponse.json({
+    contest:                              created,
+    contest_date:                         date,
+    games_found:                          playingTeams.size,
+    teams_playing_today:                  [...playingTeams].sort(),
+    eligible_players_before_filter:       diagnostics.cache_rows_total,
+    eligible_players_after_team_filter:   diagnostics.eligible_after_team_filter,
+    eligible_players_after_injury_filter: diagnostics.eligible_after_injury_filter,
+    contest_players_inserted:             poolRows.length,
+    diagnostics,
+  });
 }

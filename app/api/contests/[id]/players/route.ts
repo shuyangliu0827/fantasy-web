@@ -53,6 +53,14 @@ import { calcProjectedPoints, calcSalary, calcValue } from "@/lib/fantasy/daily/
 import { getGames } from "@/lib/nba/balldontlie";
 import { normalizeTeamCode } from "@/lib/shared/i18n";
 
+// Mirrors lib/fantasy/daily/pool-builder.ts so the players route uses the
+// exact same injury-eligibility predicate as the pool builder.
+function isOutOrInactive(injury: string | null | undefined): boolean {
+  if (!injury) return false;
+  const lc = injury.toLowerCase().trim();
+  return lc.startsWith("out") || lc.startsWith("inactive");
+}
+
 function db() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,7 +69,7 @@ function db() {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -147,9 +155,9 @@ export async function GET(
       // is_available: override the frozen seed-time snapshot with the live
       // player_stats_cache.injury value.  contest_players.is_available is
       // always written as `true` at seed time so cannot be trusted at
-      // read time.  A player whose injury starts with "out" (case-insensitive)
-      // is marked unavailable regardless of what was seeded.
-      is_available: !(meta?.injury?.toLowerCase().startsWith("out") ?? false),
+      // read time.  A player whose injury starts with "out"/"inactive"
+      // (case-insensitive) is marked unavailable regardless of what was seeded.
+      is_available: !isOutOrInactive(meta?.injury),
     };
   });
 
@@ -193,11 +201,19 @@ export async function GET(
           .in("team", [...latestActiveTeams])
           .gt("fpts_avg", 0);
 
-        const missing = (gapCandidates ?? []).filter(
-          (r) =>
-            !poolPlayerIds.has(String(r.player_id)) &&
-            !(r.injury?.toLowerCase().startsWith("out") ?? false),
-        );
+        // Strict gap-fill: only add players whose normalized team is in
+        // latestActiveTeams AND who aren't already in the pool AND who
+        // aren't flagged Out/Inactive. This must mirror the builder's
+        // eligibility check exactly so the gap fill doesn't re-introduce
+        // anything the builder deliberately excluded.
+        const missing = (gapCandidates ?? []).filter((r) => {
+          const norm = normalizeTeamCode(r.team);
+          if (!norm || norm === "N/A") return false;
+          if (!latestActiveTeams!.has(norm)) return false;
+          if (poolPlayerIds.has(String(r.player_id))) return false;
+          if (isOutOrInactive(r.injury)) return false;
+          return true;
+        });
 
         if (missing.length > 0) {
           const newRows = missing.map((r) => {
@@ -263,22 +279,56 @@ export async function GET(
       const seededTeams = [...new Set(players.map((p) => p.team).filter(Boolean))];
       const noConfirmedGames = latestActiveTeams.size === 0;
 
+      // STRICT game-day eligibility: a player is shown only when their
+      // (normalized) team is in latestActiveTeams. Empty/unknown teams are
+      // dropped — better to omit a name than to leak a stale roster row.
+      // Out/Inactive players are also filtered here so the UI never sees
+      // them even if the seeded snapshot pre-dates the injury.
       const filteredPlayers = noConfirmedGames
         ? []
-        : players.filter((p) => !p.team || latestActiveTeams!.has(p.team));
+        : players.filter((p) => {
+            const norm = normalizeTeamCode(p.team);
+            if (!norm || norm === "N/A") return false;
+            if (!latestActiveTeams!.has(norm)) return false;
+            if (isOutOrInactive(p.injury_status ?? p.injury)) return false;
+            return true;
+          });
 
-      const removedStaleTeams = seededTeams.filter((t) => t && !latestActiveTeams!.has(t));
+      const removedStaleTeams = seededTeams.filter((t) => t && !latestActiveTeams!.has(normalizeTeamCode(t)));
+
+      // Per-player diagnostics — surfaced on ?debug=1 so operators can see
+      // exactly why each player was kept or removed without leaking the
+      // verbose payload to every client.
+      const url     = new URL(req.url);
+      const verbose = url.searchParams.get("debug") === "1";
+      const perPlayerTrace = verbose
+        ? players.map((p) => {
+            const norm = normalizeTeamCode(p.team);
+            return {
+              player_id:       p.player_id,
+              name:            p.name,
+              team:            p.team,
+              team_normalized: norm,
+              game_today:      latestActiveTeams!.has(norm),
+              injury_status:   p.injury_status ?? p.injury ?? null,
+              fpts_avg:        p.fpts_avg,
+              tier:            p.tier,
+            };
+          })
+        : undefined;
 
       const debug = {
         contestDate,
         seededTeams,
-        latestActiveTeams: [...latestActiveTeams],
+        latestActiveTeams: [...latestActiveTeams].sort(),
+        teams_playing_today: [...latestActiveTeams].sort(),
         removedStaleTeams,
         playersBeforeFilter: players.length,
         playersAfterFilter:  filteredPlayers.length,
         staleRowsFound:      players.length - filteredPlayers.length,
         noConfirmedGames,
         bdlAvailable,
+        ...(perPlayerTrace ? { perPlayerTrace } : {}),
       };
 
       return NextResponse.json({

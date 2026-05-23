@@ -189,7 +189,7 @@ export async function GET(req: Request) {
 
     // 4. Build a fully-priced provisional player pool via the shared builder.
     //    Computes last-5 fpts averages → projected_points → salary + tier.
-    const poolRows = (await buildContestPool(supabase, dateStr, playingTeams)) ?? [];
+    const { rows: poolRows } = await buildContestPool(supabase, dateStr, playingTeams);
     if (poolRows.length > 0) {
       const { error: cpErr } = await supabase
         .from("contest_players")
