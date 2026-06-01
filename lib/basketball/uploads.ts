@@ -80,13 +80,8 @@ export async function uploadBasketballPlayerAvatar(
   return postFile(`/api/basketball-players/${playerId}/avatar`, file);
 }
 
-/**
- * Upload a highlight image for a player. Returns the public URL plus the
- * underlying storage path so the caller can pass both to the highlights
- * POST endpoint (the path is kept on the row for cascading deletes).
- */
-export async function uploadBasketballPlayerHighlightImage(
-  playerId: string,
+async function postHighlightFile(
+  url: string,
   file: File,
 ): Promise<{ url: string; storage_path: string }> {
   const {
@@ -97,14 +92,11 @@ export async function uploadBasketballPlayerHighlightImage(
   const formData = new FormData();
   formData.append("file", file, file.name);
 
-  const res = await fetch(
-    `/api/basketball-players/${playerId}/highlights/image`,
-    {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    },
-  );
+  const res = await fetch(url, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
   if (!res.ok) {
     let code = `HTTP ${res.status}`;
     let details: string | undefined;
@@ -125,6 +117,36 @@ export async function uploadBasketballPlayerHighlightImage(
     throw new Error("missing_url_in_response");
   }
   return { url: body.url, storage_path: body.storage_path };
+}
+
+/**
+ * Upload a highlight image for a player. Returns the public URL plus the
+ * underlying storage path so the caller can pass both to the highlights
+ * POST endpoint (the path is kept on the row for cascading deletes).
+ */
+export async function uploadBasketballPlayerHighlightImage(
+  playerId: string,
+  file: File,
+): Promise<{ url: string; storage_path: string }> {
+  return postHighlightFile(
+    `/api/basketball-players/${playerId}/highlights/image`,
+    file,
+  );
+}
+
+/**
+ * Upload a highlight video file. Server enforces size (100MB) and MIME
+ * type validation. Returns the public URL + storage path the caller
+ * persists onto the highlights row.
+ */
+export async function uploadBasketballPlayerHighlightVideo(
+  playerId: string,
+  file: File,
+): Promise<{ url: string; storage_path: string }> {
+  return postHighlightFile(
+    `/api/basketball-players/${playerId}/highlights/video`,
+    file,
+  );
 }
 
 export async function uploadBasketballLeagueLogo(

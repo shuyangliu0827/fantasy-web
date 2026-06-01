@@ -18,7 +18,7 @@ import {
   isPlatformAdmin,
 } from "@/lib/basketball/access";
 
-export type HighlightMediaType = "image" | "video_link";
+export type HighlightMediaType = "image" | "video_file" | "video_link";
 export type HighlightVisibility = "public" | "members_only";
 
 export type PlayerHighlight = {
@@ -27,7 +27,9 @@ export type PlayerHighlight = {
   player_id: string;
   created_by: string;
   media_type: HighlightMediaType;
-  media_url: string;
+  media_url: string | null;
+  external_url: string | null;
+  thumbnail_url: string | null;
   storage_path: string | null;
   title: string;
   description: string | null;
