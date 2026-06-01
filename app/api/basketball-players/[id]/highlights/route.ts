@@ -92,9 +92,9 @@ export async function GET(
   }
 }
 
-const MEDIA_TYPES: HighlightMediaType[] = ["image", "video_link"];
+const MEDIA_TYPES: HighlightMediaType[] = ["image", "video_file", "video_link"];
 const VISIBILITIES: HighlightVisibility[] = ["public", "members_only"];
-const VIDEO_URL_RE = /^https?:\/\/[^\s]+$/i;
+const URL_RE = /^https?:\/\/[^\s]+$/i;
 
 function sanitizeText(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -134,9 +134,17 @@ export async function POST(
     }
 
     const mediaUrl = sanitizeText(body.media_url, 2000);
-    if (!mediaUrl) throw new AccessError("missing_media_url", 400);
-    if (mediaType === "video_link" && !VIDEO_URL_RE.test(mediaUrl)) {
-      throw new AccessError("invalid_video_url", 400);
+    const externalUrl = sanitizeText(body.external_url, 2000);
+    const thumbnailUrl = sanitizeText(body.thumbnail_url, 2000);
+
+    if (mediaType === "video_link") {
+      if (!externalUrl) throw new AccessError("missing_external_url", 400);
+      if (!URL_RE.test(externalUrl)) {
+        throw new AccessError("invalid_video_url", 400);
+      }
+    } else {
+      // image or video_file → uploaded asset; media_url must be set.
+      if (!mediaUrl) throw new AccessError("missing_media_url", 400);
     }
 
     let visibility: HighlightVisibility = "public";
@@ -168,7 +176,9 @@ export async function POST(
       player_id: player.id,
       created_by: userId,
       media_type: mediaType,
-      media_url: mediaUrl,
+      media_url: mediaType === "video_link" ? null : mediaUrl,
+      external_url: mediaType === "video_link" ? externalUrl : null,
+      thumbnail_url: thumbnailUrl,
       storage_path: storagePath,
       title,
       description: sanitizeText(body.description, 2000),

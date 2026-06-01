@@ -12,10 +12,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
-import { uploadBasketballPlayerHighlightImage } from "@/lib/basketball/uploads";
+import {
+  uploadBasketballPlayerHighlightImage,
+  uploadBasketballPlayerHighlightVideo,
+} from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
 
-type MediaType = "image" | "video_link";
+type MediaType = "image" | "video_file" | "video_link";
 type Visibility = "public" | "members_only";
 
 type Highlight = {
@@ -24,7 +27,9 @@ type Highlight = {
   player_id: string;
   created_by: string;
   media_type: MediaType;
-  media_url: string;
+  media_url: string | null;
+  external_url: string | null;
+  thumbnail_url: string | null;
   storage_path: string | null;
   title: string;
   description: string | null;
@@ -36,6 +41,12 @@ type Highlight = {
   created_at: string;
   updated_at: string;
 };
+
+function playableUrl(h: Highlight): string {
+  return h.media_type === "video_link"
+    ? (h.external_url ?? "")
+    : (h.media_url ?? "");
+}
 
 type Permissions = {
   canCreate: boolean;
@@ -500,8 +511,13 @@ function Thumbnail({
   highlight: Highlight;
   large?: boolean;
 }) {
-  const aspect = large ? "16 / 10" : "16 / 10";
+  const aspect = "16 / 10";
   const isImage = highlight.media_type === "image";
+  const isVideoFile = highlight.media_type === "video_file";
+  // Prefer thumbnail_url when set; fall back to the image itself for image
+  // highlights. Video files render an inline <video> with controls so the
+  // viewer can preview without leaving the page.
+  const showImage = isImage || highlight.thumbnail_url;
   return (
     <div
       style={{
@@ -512,10 +528,26 @@ function Thumbnail({
         overflow: "hidden",
       }}
     >
-      {isImage ? (
+      {isVideoFile && !highlight.thumbnail_url ? (
+        <video
+          src={highlight.media_url ?? undefined}
+          controls
+          preload="metadata"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+            background: "#000",
+          }}
+        />
+      ) : showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={highlight.media_url}
+          src={
+            (isImage ? highlight.media_url : highlight.thumbnail_url) ??
+            undefined
+          }
           alt={highlight.title}
           style={{
             width: "100%",
@@ -533,9 +565,6 @@ function Thumbnail({
             alignItems: "center",
             justifyContent: "center",
             color: "#fff",
-            fontWeight: 900,
-            fontSize: large ? 36 : 24,
-            letterSpacing: "-0.02em",
           }}
         >
           <PlayIcon size={large ? 56 : 40} />
@@ -631,12 +660,12 @@ function ViewButton({
 }) {
   const { t } = useLang();
   const label =
-    highlight.media_type === "video_link"
-      ? t("观看", "Watch")
-      : t("查看", "View");
+    highlight.media_type === "image"
+      ? t("查看", "View")
+      : t("观看", "Watch");
   return (
     <a
-      href={highlight.media_url}
+      href={playableUrl(highlight)}
       target="_blank"
       rel="noopener noreferrer"
       style={
@@ -803,11 +832,17 @@ function HighlightForm({
     existing?.media_type ?? "video_link",
   );
   const [videoUrl, setVideoUrl] = useState(
-    existing?.media_type === "video_link" ? existing.media_url : "",
+    existing?.media_type === "video_link"
+      ? (existing.external_url ?? "")
+      : "",
   );
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(
     existing?.media_type === "image" ? existing.media_url : null,
+  );
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoFilePreview, setVideoFilePreview] = useState<string | null>(
+    existing?.media_type === "video_file" ? existing.media_url : null,
   );
   const [description, setDescription] = useState(existing?.description ?? "");
   const [gameOpponent, setGameOpponent] = useState(
@@ -824,7 +859,7 @@ function HighlightForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const onFileChange = (file: File | null) => {
+  const onImageChange = (file: File | null) => {
     setImageFile(file);
     if (file) {
       const reader = new FileReader();
@@ -834,6 +869,18 @@ function HighlightForm({
       setImagePreview(existing.media_url);
     } else {
       setImagePreview(null);
+    }
+  };
+
+  const onVideoChange = (file: File | null) => {
+    setVideoFile(file);
+    if (file) {
+      const objectUrl = URL.createObjectURL(file);
+      setVideoFilePreview(objectUrl);
+    } else if (existing?.media_type === "video_file") {
+      setVideoFilePreview(existing.media_url);
+    } else {
+      setVideoFilePreview(null);
     }
   };
 
@@ -853,10 +900,15 @@ function HighlightForm({
       setErr(t("请选择一张图片。", "Please choose an image."));
       return;
     }
+    if (mediaType === "video_file" && !videoFile && !existing) {
+      setErr(t("请选择一个视频文件。", "Please choose a video file."));
+      return;
+    }
 
     setBusy(true);
     try {
       let mediaUrl: string | null = null;
+      let externalUrl: string | null = null;
       let storagePath: string | null = null;
 
       if (mediaType === "image") {
@@ -878,14 +930,35 @@ function HighlightForm({
           mediaUrl = existing.media_url;
           storagePath = existing.storage_path;
         }
+      } else if (mediaType === "video_file") {
+        if (videoFile) {
+          try {
+            const uploaded = await uploadBasketballPlayerHighlightVideo(
+              playerId,
+              videoFile,
+            );
+            mediaUrl = uploaded.url;
+            storagePath = uploaded.storage_path;
+          } catch (e) {
+            setErr(
+              e instanceof Error ? e.message : t("上传失败", "Upload failed"),
+            );
+            return;
+          }
+        } else if (existing?.media_type === "video_file") {
+          mediaUrl = existing.media_url;
+          storagePath = existing.storage_path;
+        }
       } else {
-        mediaUrl = videoUrl.trim();
+        // video_link
+        externalUrl = videoUrl.trim();
       }
 
       const payload: Record<string, unknown> = {
         title: title.trim(),
         media_type: mediaType,
         media_url: mediaUrl,
+        external_url: externalUrl,
         description: description.trim() || null,
         game_opponent: gameOpponent.trim() || null,
         highlight_date: highlightDate || null,
@@ -959,23 +1032,32 @@ function HighlightForm({
           <input
             type="radio"
             name="media-type"
-            checked={mediaType === "video_link"}
-            onChange={() => setMediaType("video_link")}
+            checked={mediaType === "image"}
+            onChange={() => setMediaType("image")}
           />
-          {t("视频链接", "Video link")}
+          {t("图片上传", "Image upload")}
         </label>
         <label style={radioLabel()}>
           <input
             type="radio"
             name="media-type"
-            checked={mediaType === "image"}
-            onChange={() => setMediaType("image")}
+            checked={mediaType === "video_file"}
+            onChange={() => setMediaType("video_file")}
           />
-          {t("图片", "Image")}
+          {t("视频文件上传", "Video file upload")}
+        </label>
+        <label style={radioLabel()}>
+          <input
+            type="radio"
+            name="media-type"
+            checked={mediaType === "video_link"}
+            onChange={() => setMediaType("video_link")}
+          />
+          {t("外部视频链接", "External video link")}
         </label>
       </div>
 
-      {mediaType === "video_link" ? (
+      {mediaType === "video_link" && (
         <input
           value={videoUrl}
           onChange={(e) => setVideoUrl(e.target.value)}
@@ -986,12 +1068,14 @@ function HighlightForm({
           style={inputStyle()}
           maxLength={2000}
         />
-      ) : (
+      )}
+
+      {mediaType === "image" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <input
             type="file"
             accept="image/*"
-            onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+            onChange={(e) => onImageChange(e.target.files?.[0] ?? null)}
             style={{ fontSize: 13 }}
           />
           {imagePreview && (
@@ -1005,6 +1089,39 @@ function HighlightForm({
                 objectFit: "cover",
                 border: "1px solid #e2e8f0",
                 alignSelf: "flex-start",
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {mediaType === "video_file" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <input
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime,video/x-m4v"
+            onChange={(e) => onVideoChange(e.target.files?.[0] ?? null)}
+            style={{ fontSize: 13 }}
+          />
+          <div style={{ fontSize: 11, color: "#94a3b8" }}>
+            {t(
+              "最大 100MB · 支持 MP4 / WebM / MOV",
+              "Max 100 MB · MP4 / WebM / MOV supported",
+            )}
+          </div>
+          {videoFilePreview && (
+            <video
+              src={videoFilePreview}
+              controls
+              preload="metadata"
+              style={{
+                maxHeight: 220,
+                borderRadius: 10,
+                background: "#000",
+                border: "1px solid #e2e8f0",
+                alignSelf: "flex-start",
+                width: "100%",
+                maxWidth: 360,
               }}
             />
           )}

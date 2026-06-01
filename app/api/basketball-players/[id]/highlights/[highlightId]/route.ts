@@ -29,9 +29,9 @@ type PlayerRow = {
   claim_status: string;
 };
 
-const MEDIA_TYPES: HighlightMediaType[] = ["image", "video_link"];
+const MEDIA_TYPES: HighlightMediaType[] = ["image", "video_file", "video_link"];
 const VISIBILITIES: HighlightVisibility[] = ["public", "members_only"];
-const VIDEO_URL_RE = /^https?:\/\/[^\s]+$/i;
+const URL_RE = /^https?:\/\/[^\s]+$/i;
 
 function sanitizeText(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
@@ -135,18 +135,42 @@ export async function PATCH(
       patch.media_type = body.media_type;
     }
     if ("media_url" in body) {
-      const url = sanitizeText(body.media_url, 2000);
-      if (!url) throw new AccessError("missing_media_url", 400);
-      const effectiveType = (patch.media_type ?? highlight.media_type) as
-        | HighlightMediaType
-        | undefined;
-      if (effectiveType === "video_link" && !VIDEO_URL_RE.test(url)) {
+      const url = body.media_url == null ? null : sanitizeText(body.media_url, 2000);
+      patch.media_url = url;
+    }
+    if ("external_url" in body) {
+      const url =
+        body.external_url == null ? null : sanitizeText(body.external_url, 2000);
+      if (url != null && !URL_RE.test(url)) {
         throw new AccessError("invalid_video_url", 400);
       }
-      patch.media_url = url;
+      patch.external_url = url;
+    }
+    if ("thumbnail_url" in body) {
+      patch.thumbnail_url =
+        body.thumbnail_url == null
+          ? null
+          : sanitizeText(body.thumbnail_url, 2000);
     }
     if ("storage_path" in body) {
       patch.storage_path = sanitizeText(body.storage_path, 500);
+    }
+
+    // Enforce URL-present invariant across the merged row.
+    const effectiveType = (patch.media_type ?? highlight.media_type) as
+      | HighlightMediaType
+      | undefined;
+    if (effectiveType === "video_link") {
+      const mergedExternal =
+        "external_url" in patch ? patch.external_url : highlight.external_url;
+      if (!mergedExternal) throw new AccessError("missing_external_url", 400);
+    } else if (
+      effectiveType === "image" ||
+      effectiveType === "video_file"
+    ) {
+      const mergedMedia =
+        "media_url" in patch ? patch.media_url : highlight.media_url;
+      if (!mergedMedia) throw new AccessError("missing_media_url", 400);
     }
     if ("visibility" in body) {
       if (
