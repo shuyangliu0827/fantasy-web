@@ -80,6 +80,53 @@ export async function uploadBasketballPlayerAvatar(
   return postFile(`/api/basketball-players/${playerId}/avatar`, file);
 }
 
+/**
+ * Upload a highlight image for a player. Returns the public URL plus the
+ * underlying storage path so the caller can pass both to the highlights
+ * POST endpoint (the path is kept on the row for cascading deletes).
+ */
+export async function uploadBasketballPlayerHighlightImage(
+  playerId: string,
+  file: File,
+): Promise<{ url: string; storage_path: string }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+
+  const formData = new FormData();
+  formData.append("file", file, file.name);
+
+  const res = await fetch(
+    `/api/basketball-players/${playerId}/highlights/image`,
+    {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    },
+  );
+  if (!res.ok) {
+    let code = `HTTP ${res.status}`;
+    let details: string | undefined;
+    try {
+      const body = (await res.json()) as { error?: string; details?: string };
+      if (body?.error) code = body.error;
+      if (body?.details) details = body.details;
+    } catch {
+      /* ignore */
+    }
+    const message = details ? `${code}: ${details}` : code;
+    const err = new Error(message) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  const body = (await res.json()) as { url?: string; storage_path?: string };
+  if (!body?.url || !body?.storage_path) {
+    throw new Error("missing_url_in_response");
+  }
+  return { url: body.url, storage_path: body.storage_path };
+}
+
 export async function uploadBasketballLeagueLogo(
   leagueId: string,
   file: File,

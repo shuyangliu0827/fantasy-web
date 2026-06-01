@@ -7,6 +7,7 @@ import LeagueVisibilityBadge from "@/components/basketball/LeagueVisibilityBadge
 import PrivateLeagueWall from "@/components/basketball/PrivateLeagueWall";
 import InviteOnlyLeagueWall from "@/components/basketball/InviteOnlyLeagueWall";
 import ShareButton from "@/components/basketball/ShareButton";
+import PlayerHighlights from "@/components/basketball/PlayerHighlights";
 import { basketballFetch, basketballJson } from "@/lib/basketball/client";
 import { uploadBasketballPlayerAvatar } from "@/lib/basketball/uploads";
 import { useLang } from "@/lib/lang";
@@ -470,6 +471,8 @@ export default function PlayerDetailPage({
             </table>
           </div>
         )}
+
+        <PlayerHighlights playerId={player.id} />
 
         <section style={{ marginTop: 24 }}>
           <h2 style={sectionTitle()}>{t("AI 技术画像", "AI Scouting Snapshot")}</h2>
