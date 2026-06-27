@@ -1,0 +1,47 @@
+{
+  "name": "blueprint-basketball-miniprogram",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Youth Basketball League Management Mini Program",
+  "templateInfo": {
+    "name": "default",
+    "typescript": true,
+    "css": "sass"
+  },
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp",
+    "build:weapp:ci": "cross-env NODE_ENV=production taro build --type weapp"
+  },
+  "browserslist": [
+    "last 3 ChromeAndroid versions",
+    "last 3 iOS versions"
+  ],
+  "dependencies": {
+    "@tarojs/components": "4.2.0",
+    "@tarojs/react": "4.2.0",
+    "@tarojs/runtime": "4.2.0",
+    "@tarojs/shared": "4.2.0",
+    "@tarojs/taro": "4.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "7.26.10",
+    "@babel/preset-env": "^8.0.2",
+    "@babel/preset-react": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
+    "@tarojs/cli": "4.2.0",
+    "@tarojs/helper": "4.2.0",
+    "@tarojs/plugin-framework-react": "4.2.0",
+    "@tarojs/plugin-platform-weapp": "4.2.0",
+    "@tarojs/webpack5-runner": "4.2.0",
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.5",
+    "babel-preset-taro": "4.2.0",
+    "cross-env": "7.0.3",
+    "sass": "1.89.2",
+    "typescript": "5.8.3",
+    "webpack": "^5.91.0"
+  }
+}
