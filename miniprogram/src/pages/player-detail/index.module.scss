@@ -1,0 +1,166 @@
+.page {
+  min-height: 100vh;
+  padding-bottom: 48px;
+}
+
+.header {
+  background: linear-gradient(135deg, var(--color-navy), var(--color-navy-light));
+  padding: 40px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.avatarWrap {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 16px;
+}
+
+.avatarText {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 48px;
+  font-weight: 800;
+  color: #fff;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.numberBadge {
+  position: absolute;
+  bottom: -8px;
+  right: -8px;
+  background: var(--color-primary);
+  border-radius: 16px;
+  padding: 4px 10px;
+}
+
+.number {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.name {
+  display: block;
+  font-size: 40px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.team {
+  display: block;
+  font-size: 26px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 16px;
+}
+
+.badges {
+  display: flex;
+  gap: 12px;
+}
+
+.posBadge {
+  font-size: 22px;
+  padding: 6px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.ageBadge {
+  font-size: 22px;
+  padding: 6px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.section {
+  padding: 24px;
+}
+
+.physicalRow {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  box-shadow: var(--shadow-card);
+}
+
+.physicalItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.physicalValue {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.physicalLabel {
+  font-size: 22px;
+  color: var(--color-text-secondary);
+}
+
+.divider {
+  width: 1px;
+  height: 48px;
+  background: var(--color-border);
+}
+
+.sectionTitle {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 16px;
+}
+
+.statsCard {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.statRow:last-child {
+  border-bottom: none;
+}
+
+.statLabel {
+  font-size: 26px;
+  color: var(--color-text-secondary);
+}
+
+.statValue {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.statUnit {
+  font-size: 22px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}

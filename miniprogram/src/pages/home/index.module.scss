@@ -1,0 +1,128 @@
+.page {
+  min-height: 100vh;
+}
+
+.hero {
+  background: linear-gradient(135deg, var(--color-navy), var(--color-navy-light));
+  padding: 48px 32px 40px;
+}
+
+.heroTitle {
+  display: block;
+  font-size: 38px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.heroSub {
+  display: block;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.swiperWrap {
+  padding: 20px 24px 0;
+}
+
+.swiper {
+  height: 100px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.swiperItem {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-dark));
+  height: 100%;
+  padding: 0 24px;
+}
+
+.swiperText {
+  font-size: 26px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.section {
+  padding: 32px 24px 0;
+}
+
+.quickLinks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.quickLink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  padding: 24px 0;
+  box-shadow: var(--shadow-card);
+}
+
+.quickIcon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+.quickLabel {
+  font-size: 22px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.empty {
+  font-size: 26px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  padding: 32px 0;
+}
+
+.infoCard {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-md);
+  padding: 8px 24px;
+  box-shadow: var(--shadow-card);
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.infoRow:last-child {
+  border-bottom: none;
+}
+
+.infoLabel {
+  width: 120px;
+  font-size: 26px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.infoValue {
+  flex: 1;
+  font-size: 26px;
+  color: var(--color-text);
+}
+
+.footer {
+  padding: 40px 24px 48px;
+  text-align: center;
+}
+
+.footerText {
+  display: block;
+  font-size: 22px;
+  color: var(--color-text-light);
+  margin-bottom: 6px;
+}

@@ -1,0 +1,47 @@
+.page {
+  min-height: 100vh;
+  padding: 0 0 40px;
+}
+
+.filters {
+  display: flex;
+  padding: 20px 24px;
+  gap: 16px;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 16px;
+}
+
+.filterBtn {
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 24px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+
+.filterActive {
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.dateGroup {
+  padding: 0 24px;
+  margin-bottom: 16px;
+}
+
+.dateBadge {
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.dateText {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-card);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+}

@@ -1,0 +1,127 @@
+.page {
+  min-height: 100vh;
+  padding-bottom: 40px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  background: var(--color-navy);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header .col {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 22px;
+  font-weight: 600;
+  text-align: center;
+  flex: 0 0 80px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+}
+
+.qualified {
+  background: #fffbeb;
+}
+
+.rankCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.medal {
+  font-size: 30px;
+}
+
+.rankNum {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  width: 40px;
+  text-align: center;
+}
+
+.rankTop {
+  color: var(--color-primary);
+}
+
+.col {
+  flex: 0 0 80px;
+  font-size: 24px;
+  color: var(--color-text);
+  text-align: center;
+}
+
+.teamName {
+  text-align: left;
+  font-weight: 600;
+  font-size: 26px;
+}
+
+.wins {
+  color: var(--color-success);
+  font-weight: 700;
+}
+
+.losses {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.last5 {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 100px;
+  justify-content: flex-end;
+}
+
+.dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dotW {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.dotL {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px;
+  gap: 10px;
+}
+
+.legendDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+}
+
+.legendText {
+  font-size: 22px;
+  color: var(--color-text-secondary);
+}
