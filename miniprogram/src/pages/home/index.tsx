@@ -131,6 +131,19 @@ export default function HomePage() {
       <View className={styles.footer}>
         <Text className={styles.footerText}>© 2026 {league?.organizer}</Text>
         <Text className={styles.footerText}>联系电话：{league?.contactPhone}</Text>
+        <View className={styles.footerDivider} />
+        <Text className={styles.footerPlatform}>管理员及教练请访问完整平台</Text>
+        <Text
+          className={styles.footerLink}
+          onTap={() =>
+            Taro.setClipboardData({
+              data: 'https://blueprintfantasy.com',
+              success: () => Taro.showToast({ title: '链接已复制', icon: 'success' }),
+            })
+          }
+        >
+          blueprintfantasy.com（点击复制）
+        </Text>
       </View>
     </ScrollView>
   )

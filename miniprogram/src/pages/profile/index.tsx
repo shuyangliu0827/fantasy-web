@@ -159,6 +159,32 @@ export default function ProfilePage() {
         </View>
       </View>
 
+      {/* Full platform link */}
+      <View className={styles.section}>
+        <Text className={styles.sectionTitle}>完整平台</Text>
+        <View className={styles.platformCard}>
+          <Text className={styles.platformDesc}>
+            本小程序为家长和球员提供核心信息浏览功能。
+          </Text>
+          <Text className={styles.platformDesc}>
+            联赛管理、赛事配置、成绩录入等管理员功能请访问完整平台：
+          </Text>
+          <View
+            className={styles.platformLink}
+            onTap={() =>
+              Taro.setClipboardData({
+                data: 'https://blueprintfantasy.com',
+                success: () =>
+                  Taro.showToast({ title: '链接已复制到剪贴板', icon: 'success' }),
+              })
+            }
+          >
+            <Text className={styles.platformLinkText}>blueprintfantasy.com</Text>
+            <Text className={styles.platformLinkHint}>（点击复制链接）</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Login / Logout */}
       <View className={styles.section}>
         {!isLoggedIn ? (
@@ -179,8 +205,8 @@ export default function ProfilePage() {
       </View>
 
       <View className={styles.footer}>
-        <Text className={styles.footerText}>Blueprint 青少年篮球联赛</Text>
-        <Text className={styles.footerText}>版本 1.0.0 · AppID wx3bd939a6658ed9c1</Text>
+        <Text className={styles.footerText}>Blueprint 青少年篮球联赛 · 小程序客户端</Text>
+        <Text className={styles.footerText}>版本 1.0.0 — 数据来源：blueprintfantasy.com</Text>
       </View>
     </ScrollView>
   )

@@ -1,10 +1,40 @@
 # Blueprint 青少年篮球联赛 — WeChat Mini Program
 
-Youth basketball league management mini program for parents, players, coaches, and organizers.
+WeChat mini program companion for the Blueprint youth basketball league platform.
 
 AppID: `wx3bd939a6658ed9c1`  
 Framework: Taro 4.2.0 + React 18 + TypeScript + SCSS  
 Target: WeChat Mini Program (weapp)
+
+---
+
+## Architecture: Web App + Mini Program
+
+**This mini program is a lightweight parent/player-facing client that mirrors core read flows from the existing Blueprint web platform. It is not a standalone product.**
+
+| Concern | Where it lives |
+|---|---|
+| Full admin dashboard | [blueprintfantasy.com](https://blueprintfantasy.com) (web app) |
+| League settings, season config | Web app only |
+| Data entry, score reporting | Web app only |
+| Complex community management | Web app only |
+| Viewing schedule, results, standings | Mini program + web app |
+| Player & team profiles | Mini program + web app |
+| Announcements (read-only) | Mini program + web app |
+| Community feed (read + post) | Mini program + web app |
+| My profile / WeChat login | Mini program |
+
+### The web app remains the full admin and product experience
+
+The web app at **blueprintfantasy.com** is the source of truth for all data and functionality. League commissioners, coaches, and organizers manage everything there: creating seasons, entering scores, managing rosters, publishing announcements, and accessing detailed analytics. Nothing in the mini program can replace or bypass the web app's admin capabilities.
+
+### The mini program is the lightweight parent/player client
+
+The mini program surfaces the information that parents and players need on-the-go — upcoming games, live scores, standings, team rosters, and community posts — without requiring them to log into a full web browser. It is intentionally scoped to read-only core flows plus basic community participation. Admin features, league settings, and complex management remain on the web app.
+
+### Real backend integration will use `/api/mp/...` endpoints on blueprintfantasy.com
+
+When `USE_MOCK = false` in `src/services/api.ts`, all real calls go to **`https://blueprintfantasy.com/api/mp/...`**. This namespace is dedicated to mini program endpoints on the Next.js backend, isolated from the web app's own routes. The mini program never calls internal web app routes directly.
 
 ---
 
@@ -123,17 +153,17 @@ miniprogram/
     │   ├── SectionHeader/
     │   └── PrimaryButton/
     ├── pages/                   # 11 pages
-    │   ├── home/                # Tab 1
-    │   ├── schedule/            # Tab 2
-    │   ├── standings/           # Tab 3
-    │   ├── community/           # Tab 4
-    │   ├── profile/             # Tab 5
-    │   ├── teams/
-    │   ├── team-detail/         # receives ?id=
-    │   ├── player-detail/       # receives ?id=
-    │   ├── announcements/
-    │   ├── post-detail/         # receives ?id=
-    │   └── create-post/
+    │   ├── home/                # Tab 1 — upcoming games, announcements ticker, league info
+    │   ├── schedule/            # Tab 2 — all games grouped by date, filterable
+    │   ├── standings/           # Tab 3 — ranked teams, W/L/pct, last-5
+    │   ├── community/           # Tab 4 — parent/player community feed
+    │   ├── profile/             # Tab 5 — WeChat login + bound team/player
+    │   ├── teams/               # All teams list
+    │   ├── team-detail/         # receives ?id= — overview/roster/games tabs
+    │   ├── player-detail/       # receives ?id= — stats + physical info
+    │   ├── announcements/       # Full announcements list (pinned first)
+    │   ├── post-detail/         # receives ?id= — post + comments
+    │   └── create-post/         # Gated behind login
     └── assets/icons/            # Tab bar PNG icons (placeholder 1×1)
 ```
 
@@ -143,8 +173,32 @@ miniprogram/
 
 1. Open `src/services/api.ts`
 2. Change `const USE_MOCK = true` to `const USE_MOCK = false`
-3. Ensure `https://blueprintfantasy.com` is in your WeChat legal domains
-4. Implement the API routes listed in `api.ts` on the Next.js backend
+3. Ensure `https://blueprintfantasy.com` is in your WeChat legal domains (see above)
+4. Implement the `/api/mp/...` routes on the Next.js backend
+
+All API calls target `https://blueprintfantasy.com/api/mp/...`. This namespace is reserved for mini program endpoints and kept separate from the web app's own routes.
+
+---
+
+## API Endpoint Plan (`/api/mp/...`)
+
+These endpoints need to be built on the Next.js backend when switching off mock data:
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/mp/league` | League metadata, current season |
+| GET | `/api/mp/games` | All games (filterable by status/date/week) |
+| GET | `/api/mp/teams` | All teams with W/L record |
+| GET | `/api/mp/teams/:id` | Team detail + roster + game list |
+| GET | `/api/mp/players/:id` | Player profile + season stats |
+| GET | `/api/mp/standings` | Full standings from matchup results |
+| GET | `/api/mp/announcements` | Announcements, pinned first |
+| GET | `/api/mp/community/posts` | Community feed |
+| GET | `/api/mp/community/posts/:id` | Post + comments |
+| POST | `/api/mp/community/posts` | Create post (auth required) |
+| POST | `/api/mp/auth/wechat-login` | Exchange WeChat code → session token |
+
+Source tables: `basketball_leagues`, `basketball_games`, `basketball_teams`, `basketball_players`, `basketball_player_game_stats`, `insights` (community/news), `comments`, `users`.
 
 ---
 
@@ -174,6 +228,25 @@ Profile picture and nickname require `Button openType="getUserInfo"` (user must 
 
 ---
 
-## No Fantasy / Gambling Language
+## Out of Scope for Mini Program
 
-This mini program is positioned as a **youth basketball league management** platform. Do not use words like: fantasy, betting, odds, prize, cash reward, contest, salary cap, gambling, wager, or prediction game anywhere in the UI, page titles, or API responses.
+The following features belong on the web app (blueprintfantasy.com) only:
+
+- League creation and season configuration
+- Score entry and box score editing
+- Roster management (add/remove players)
+- Admin dashboard and analytics
+- Trade proposals and advanced team management
+- Payment and registration flows
+- Community moderation tools
+
+Parents and coaches who need any of the above should be directed to **blueprintfantasy.com**.
+
+---
+
+## Language Policy
+
+This mini program serves youth basketball league participants (parents, players, coaches). Do not use words associated with sports gambling, daily fantasy sports, or prediction games anywhere in the UI, page titles, API responses, or mock data.
+
+**Banned**: fantasy, betting, odds, prize, cash reward, contest, salary cap, gambling, wager, prediction game  
+**Banned (Chinese)**: 竞猜, 下注, 奖金, 赔率, 彩票
