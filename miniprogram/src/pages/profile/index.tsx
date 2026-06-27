@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { View, Text, ScrollView, Button } from '@tarojs/components'
-import Taro, { useLoad, useShow } from '@tarojs/taro'
+import Taro, { useLoad } from '@tarojs/taro'
+
+// useShow is mini program-only; import it dynamically so H5 doesn't crash
+const useShow: ((fn: () => void) => void) | undefined =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Taro as any).useShow
 import type { User } from '../../types/league'
 import { loginWithWeChatMock, getCurrentUserMock, logoutMock } from '../../services/auth'
 import PrimaryButton from '../../components/PrimaryButton'
@@ -28,9 +33,14 @@ export default function ProfilePage() {
     loadUser()
   })
 
-  useShow(() => {
-    loadUser()
-  })
+  // useShow is mini program-only; fall back to useEffect on H5 so the page still renders
+  if (useShow) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useShow(() => { loadUser() })
+  } else {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useEffect(() => { loadUser() }, [])
+  }
 
   async function handleLogin() {
     setLogging(true)
