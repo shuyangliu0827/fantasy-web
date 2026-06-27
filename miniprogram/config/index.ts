@@ -14,7 +14,7 @@ export default defineConfig(async (merge, { command, mode }) => {
     },
     sourceRoot: 'src',
     outputRoot: 'dist',
-    plugins: [],
+    plugins: ['@tarojs/plugin-platform-h5'],
     defineConstants: {},
     copy: {
       patterns: [],
@@ -55,7 +55,7 @@ export default defineConfig(async (merge, { command, mode }) => {
           config: {},
         },
         cssModules: {
-          enable: false,
+          enable: true,
           config: {
             namingPattern: 'module',
             generateScopedName: '[name]__[local]___[hash:base64:5]',
